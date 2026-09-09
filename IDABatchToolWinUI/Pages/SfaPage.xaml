@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="IDABatchToolWinUI.Pages.SfaPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:IDABatchToolWinUI.Pages"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <Style x:Key="GroupBoxStyle" TargetType="Border">
+            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="16" />
+        </Style>
+
+        <Style x:Key="GroupHeaderStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,0,0,12" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+        </Style>
+    </Page.Resources>
+
+    <ScrollViewer>
+        <Grid Padding="20,20,20,20" RowSpacing="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Источник файлов -->
+            <Border Grid.Row="0" Style="{StaticResource GroupBoxStyle}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Источник файлов" Style="{StaticResource GroupHeaderStyle}" />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="SfaInputDirTextBox" Grid.Column="0"
+                                 PlaceholderText="Путь к папке с бинарными файлами или к архиву..." />
+                        <Button x:Name="SfaBrowseDirButton" Grid.Column="1" Content="Обзор..." MinWidth="100" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Параметры сканирования -->
+            <Border Grid.Row="1" Style="{StaticResource GroupBoxStyle}">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Параметры сканирования" Style="{StaticResource GroupHeaderStyle}" />
+                    <Grid ColumnSpacing="24">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Левая колонка -->
+                        <StackPanel Grid.Column="0" Spacing="12">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Целевая платформа" FontWeight="SemiBold" />
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <RadioButton x:Name="SfaPlatformWindows" Grid.Row="0" Grid.Column="0"
+                                                 GroupName="SfaPlatform" Content="Windows" IsChecked="True"
+                                                 Margin="0,0,20,4" />
+                                    <RadioButton x:Name="SfaPlatformLinuxAndroid" Grid.Row="0" Grid.Column="1"
+                                                 GroupName="SfaPlatform" Content="Linux / Android"
+                                                 Margin="0,0,0,4" />
+                                    <RadioButton x:Name="SfaPlatformMacIos" Grid.Row="1" Grid.Column="0"
+                                                 GroupName="SfaPlatform" Content="macOS / iOS" />
+                                </Grid>
+                            </StackPanel>
+
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Потоков IDA:" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Slider x:Name="SfaMaxIdaSlider" Grid.Column="0" Minimum="1" Maximum="32" Value="4"
+                                            StepFrequency="1" TickFrequency="4" />
+                                    <TextBlock Grid.Column="1" Text="{Binding ElementName=SfaMaxIdaSlider, Path=Value}"
+                                               VerticalAlignment="Center" MinWidth="24" TextAlignment="Center"
+                                               FontSize="14" FontWeight="SemiBold" />
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Правая колонка -->
+                        <StackPanel Grid.Column="1" Spacing="4">
+                            <TextBlock Text="Флаги анализа" FontWeight="SemiBold" />
+                            <CheckBox x:Name="SfaCleanupCheck" Content="Удалять .asm и .log после успешного анализа"
+                                      IsChecked="True" Margin="0,0,0,4" />
+                            <CheckBox x:Name="SfaTempCleanupCheck" Content="Удалять временные файлы IDA (.id0, .id1, .nam, .til)"
+                                      IsChecked="True" Margin="0,0,0,4" />
+                            <CheckBox x:Name="SfaPseudocodeCheck" Content="Включить псевдокод в JSON-экспорт"
+                                      IsChecked="True" Margin="0,0,0,4" />
+                            <CheckBox x:Name="SfaDeleteJsonCheck" Content="Удалить JSON-файлы после создания отчётов"
+                                      IsChecked="True" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Процесс анализа СФ -->
+            <Border Grid.Row="2" Style="{StaticResource GroupBoxStyle}">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Процесс анализа СФ" Style="{StaticResource GroupHeaderStyle}" />
+                    <TextBlock x:Name="SfaProcessStatusText" Text="Готов к запуску"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <ProgressBar x:Name="SfaProcessProgress" Minimum="0" Maximum="100" Value="0" />
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="SfaStartButton" Grid.Column="0" Content="Запустить анализ СФ"
+                                Height="40" Width="180" />
+                        <Button x:Name="SfaCancelButton" Grid.Column="1" Content="Отмена"
+                                Height="40" Width="100" IsEnabled="False" />
+                        <Button x:Name="SfaGenerateHtmlButton" Grid.Column="3" Content="Сгенерировать HTML-отчёт СФ"
+                                Height="40" Width="220" IsEnabled="False" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Ошибки -->
+            <Border Grid.Row="3" Style="{StaticResource GroupBoxStyle}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Сообщения об ошибках" Style="{StaticResource GroupHeaderStyle}" />
+                    <TextBox x:Name="SfaErrorLogTextBox" AcceptsReturn="True" TextWrapping="Wrap"
+                             IsReadOnly="True" MaxHeight="150" MinHeight="60"
+                             PlaceholderText="Ошибки..." />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </ScrollViewer>
+</Page>
