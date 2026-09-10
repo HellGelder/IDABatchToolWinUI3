@@ -11,22 +11,22 @@
     <Page.Resources>
         <Style x:Key="GroupBoxStyle" TargetType="Border">
             <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
-            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="CornerRadius" Value="6" />
             <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="16" />
+            <Setter Property="Padding" Value="12,10" />
         </Style>
 
         <Style x:Key="GroupHeaderStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Margin" Value="0,0,0,12" />
+            <Setter Property="Margin" Value="0,0,0,8" />
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
         </Style>
     </Page.Resources>
 
     <ScrollViewer>
-        <Grid Padding="20,20,20,20" RowSpacing="12">
+        <Grid Padding="{StaticResource PagePadding}" RowSpacing="8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -37,34 +37,33 @@
 
             <!-- Источник файлов -->
             <Border Grid.Row="0" Style="{StaticResource GroupBoxStyle}">
-                <StackPanel Spacing="8">
+                <StackPanel Spacing="6">
                     <TextBlock Text="Источник файлов" Style="{StaticResource GroupHeaderStyle}" />
-                    <Grid ColumnSpacing="8">
+                    <Grid ColumnSpacing="6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBox x:Name="SfaInputDirTextBox" Grid.Column="0"
                                  PlaceholderText="Путь к папке с бинарными файлами или к архиву..." />
-                        <Button x:Name="SfaBrowseDirButton" Grid.Column="1" Content="Обзор..." MinWidth="100" />
+                        <Button x:Name="SfaBrowseDirButton" Grid.Column="1" Content="Обзор..." MinWidth="80" />
                     </Grid>
                 </StackPanel>
             </Border>
 
             <!-- Параметры сканирования -->
             <Border Grid.Row="1" Style="{StaticResource GroupBoxStyle}">
-                <StackPanel Spacing="12">
+                <StackPanel Spacing="8">
                     <TextBlock Text="Параметры сканирования" Style="{StaticResource GroupHeaderStyle}" />
-                    <Grid ColumnSpacing="24">
+                    <Grid ColumnSpacing="20">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
-                        <!-- Левая колонка -->
-                        <StackPanel Grid.Column="0" Spacing="12">
-                            <StackPanel Spacing="4">
-                                <TextBlock Text="Целевая платформа" FontWeight="SemiBold" />
+                        <StackPanel Grid.Column="0" Spacing="8">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="Целевая платформа" FontWeight="SemiBold" FontSize="13" />
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
@@ -76,18 +75,19 @@
                                     </Grid.ColumnDefinitions>
                                     <RadioButton x:Name="SfaPlatformWindows" Grid.Row="0" Grid.Column="0"
                                                  GroupName="SfaPlatform" Content="Windows" IsChecked="True"
-                                                 Margin="0,0,20,4" />
+                                                 Margin="0,0,16,2" Padding="2,2,2,2" />
                                     <RadioButton x:Name="SfaPlatformLinuxAndroid" Grid.Row="0" Grid.Column="1"
                                                  GroupName="SfaPlatform" Content="Linux / Android"
-                                                 Margin="0,0,0,4" />
+                                                 Margin="0,0,0,2" Padding="2,2,2,2" />
                                     <RadioButton x:Name="SfaPlatformMacIos" Grid.Row="1" Grid.Column="0"
-                                                 GroupName="SfaPlatform" Content="macOS / iOS" />
+                                                 GroupName="SfaPlatform" Content="macOS / iOS"
+                                                 Padding="2,2,2,2" />
                                 </Grid>
                             </StackPanel>
 
-                            <StackPanel Spacing="4">
-                                <TextBlock Text="Потоков IDA:" />
-                                <Grid ColumnSpacing="8">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="Потоков IDA:" FontSize="13" />
+                                <Grid ColumnSpacing="6">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
@@ -95,23 +95,22 @@
                                     <Slider x:Name="SfaMaxIdaSlider" Grid.Column="0" Minimum="1" Maximum="32" Value="4"
                                             StepFrequency="1" TickFrequency="4" />
                                     <TextBlock Grid.Column="1" Text="{Binding ElementName=SfaMaxIdaSlider, Path=Value}"
-                                               VerticalAlignment="Center" MinWidth="24" TextAlignment="Center"
-                                               FontSize="14" FontWeight="SemiBold" />
+                                               VerticalAlignment="Center" MinWidth="20" TextAlignment="Center"
+                                               FontSize="13" FontWeight="SemiBold" />
                                 </Grid>
                             </StackPanel>
                         </StackPanel>
 
-                        <!-- Правая колонка -->
-                        <StackPanel Grid.Column="1" Spacing="4">
-                            <TextBlock Text="Флаги анализа" FontWeight="SemiBold" />
+                        <StackPanel Grid.Column="1" Spacing="2">
+                            <TextBlock Text="Флаги анализа" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4" />
                             <CheckBox x:Name="SfaCleanupCheck" Content="Удалять .asm и .log после успешного анализа"
-                                      IsChecked="True" Margin="0,0,0,4" />
+                                      IsChecked="True" Padding="2,1,2,1" />
                             <CheckBox x:Name="SfaTempCleanupCheck" Content="Удалять временные файлы IDA (.id0, .id1, .nam, .til)"
-                                      IsChecked="True" Margin="0,0,0,4" />
+                                      IsChecked="True" Padding="2,1,2,1" />
                             <CheckBox x:Name="SfaPseudocodeCheck" Content="Включить псевдокод в JSON-экспорт"
-                                      IsChecked="True" Margin="0,0,0,4" />
+                                      IsChecked="True" Padding="2,1,2,1" />
                             <CheckBox x:Name="SfaDeleteJsonCheck" Content="Удалить JSON-файлы после создания отчётов"
-                                      IsChecked="True" />
+                                      IsChecked="True" Padding="2,1,2,1" />
                         </StackPanel>
                     </Grid>
                 </StackPanel>
@@ -119,12 +118,12 @@
 
             <!-- Процесс анализа СФ -->
             <Border Grid.Row="2" Style="{StaticResource GroupBoxStyle}">
-                <StackPanel Spacing="10">
+                <StackPanel Spacing="6">
                     <TextBlock Text="Процесс анализа СФ" Style="{StaticResource GroupHeaderStyle}" />
-                    <TextBlock x:Name="SfaProcessStatusText" Text="Готов к запуску"
+                    <TextBlock x:Name="SfaProcessStatusText" Text="Готов к запуску" FontSize="12"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <ProgressBar x:Name="SfaProcessProgress" Minimum="0" Maximum="100" Value="0" />
-                    <Grid ColumnSpacing="10">
+                    <ProgressBar x:Name="SfaProcessProgress" Minimum="0" Maximum="100" Value="0" Height="4" />
+                    <Grid ColumnSpacing="6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
@@ -132,21 +131,21 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <Button x:Name="SfaStartButton" Grid.Column="0" Content="Запустить анализ СФ"
-                                Height="40" Width="180" />
+                                Height="34" Width="160" Padding="12,6" />
                         <Button x:Name="SfaCancelButton" Grid.Column="1" Content="Отмена"
-                                Height="40" Width="100" IsEnabled="False" />
+                                Height="34" Width="80" Padding="12,6" IsEnabled="False" />
                         <Button x:Name="SfaGenerateHtmlButton" Grid.Column="3" Content="Сгенерировать HTML-отчёт СФ"
-                                Height="40" Width="220" IsEnabled="False" />
+                                Height="34" Width="200" Padding="12,6" IsEnabled="False" />
                     </Grid>
                 </StackPanel>
             </Border>
 
             <!-- Ошибки -->
             <Border Grid.Row="3" Style="{StaticResource GroupBoxStyle}">
-                <StackPanel Spacing="8">
+                <StackPanel Spacing="4">
                     <TextBlock Text="Сообщения об ошибках" Style="{StaticResource GroupHeaderStyle}" />
                     <TextBox x:Name="SfaErrorLogTextBox" AcceptsReturn="True" TextWrapping="Wrap"
-                             IsReadOnly="True" MaxHeight="150" MinHeight="60"
+                             IsReadOnly="True" MaxHeight="120" MinHeight="40"
                              PlaceholderText="Ошибки..." />
                 </StackPanel>
             </Border>

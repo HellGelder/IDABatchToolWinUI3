@@ -8,9 +8,23 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
-                <!-- Other merged dictionaries here -->
             </ResourceDictionary.MergedDictionaries>
-            <!-- Other app resources here -->
+
+            <!-- Compact sizing - общее уплотнение элементов -->
+            <!-- NavigationView compact -->
+            <x:Double x:Key="NavigationViewCompactPaneLength">40</x:Double>
+            <Thickness x:Key="NavigationViewItemPadding">10,0,10,0</Thickness>
+            <Thickness x:Key="NavigationViewContentGridMargin">0,0,0,0</Thickness>
+            <x:Double x:Key="NavigationViewItemIconBoxSize">18</x:Double>
+
+            <!-- Общие отступы страниц -->
+            <Thickness x:Key="PagePadding">12</Thickness>
+
+            <!-- Compact для контролов -->
+            <Thickness x:Key="TextBoxPadding">4,6,4,6</Thickness>
+            <Thickness x:Key="ButtonPadding">8,4,8,4</Thickness>
+            <Thickness x:Key="CheckBoxPadding">4,2,4,2</Thickness>
+            <Thickness x:Key="RadioButtonPadding">4,2,4,2</Thickness>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

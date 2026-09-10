@@ -11,22 +11,22 @@
     <Page.Resources>
         <Style x:Key="GroupBoxStyle" TargetType="Border">
             <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
-            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="CornerRadius" Value="6" />
             <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="16" />
+            <Setter Property="Padding" Value="12,10" />
         </Style>
 
         <Style x:Key="GroupHeaderStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Margin" Value="0,0,0,12" />
+            <Setter Property="Margin" Value="0,0,0,8" />
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
         </Style>
     </Page.Resources>
 
     <ScrollViewer>
-        <Grid Padding="30,20,30,20" RowSpacing="12">
+        <Grid Padding="{StaticResource PagePadding}" RowSpacing="8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -38,9 +38,9 @@
 
             <!-- Путь к IDA -->
             <Border Grid.Row="0" Style="{StaticResource GroupBoxStyle}">
-                <StackPanel Spacing="10">
+                <StackPanel Spacing="6">
                     <TextBlock Text="Путь к IDA (idat)" Style="{StaticResource GroupHeaderStyle}" />
-                    <Grid ColumnSpacing="8">
+                    <Grid ColumnSpacing="6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
@@ -48,17 +48,19 @@
                         </Grid.ColumnDefinitions>
                         <TextBox x:Name="IdatPathTextBox" Grid.Column="0"
                                  PlaceholderText="idat (или idat.exe на Windows)" />
-                        <Button x:Name="BrowseIdaButton" Grid.Column="1" Content="Обзор..." MinWidth="80" />
-                        <Button x:Name="AutoIdaButton" Grid.Column="2" Content="Автопоиск" MinWidth="90" />
+                        <Button x:Name="BrowseIdaButton" Grid.Column="1" Content="Обзор..." MinWidth="70"
+                                Padding="8,4" />
+                        <Button x:Name="AutoIdaButton" Grid.Column="2" Content="Автопоиск" MinWidth="80"
+                                Padding="8,4" />
                     </Grid>
                 </StackPanel>
             </Border>
 
             <!-- Путь к BinDiff -->
             <Border Grid.Row="1" Style="{StaticResource GroupBoxStyle}">
-                <StackPanel Spacing="10">
+                <StackPanel Spacing="6">
                     <TextBlock Text="Путь к BinDiff" Style="{StaticResource GroupHeaderStyle}" />
-                    <Grid ColumnSpacing="8">
+                    <Grid ColumnSpacing="6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
@@ -66,70 +68,73 @@
                         </Grid.ColumnDefinitions>
                         <TextBox x:Name="BindiffPathTextBox" Grid.Column="0"
                                  PlaceholderText="bindiff (или bindiff.exe на Windows)" />
-                        <Button x:Name="BrowseBindiffButton" Grid.Column="1" Content="Обзор..." MinWidth="80" />
-                        <Button x:Name="AutoBindiffButton" Grid.Column="2" Content="Автопоиск" MinWidth="90" />
+                        <Button x:Name="BrowseBindiffButton" Grid.Column="1" Content="Обзор..." MinWidth="70"
+                                Padding="8,4" />
+                        <Button x:Name="AutoBindiffButton" Grid.Column="2" Content="Автопоиск" MinWidth="80"
+                                Padding="8,4" />
                     </Grid>
                 </StackPanel>
             </Border>
 
             <!-- Оформление -->
             <Border Grid.Row="2" Style="{StaticResource GroupBoxStyle}">
-                <StackPanel Spacing="10">
+                <StackPanel Spacing="6">
                     <TextBlock Text="Оформление" Style="{StaticResource GroupHeaderStyle}" />
-                    <Grid ColumnSpacing="12">
+                    <Grid ColumnSpacing="8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <ToggleButton x:Name="ThemeLightButton" Grid.Column="0" Content="Светлая"
-                                      IsChecked="True" MinWidth="120" />
-                        <ToggleButton x:Name="ThemeDarkButton" Grid.Column="1" Content="Тёмная" MinWidth="120" />
+                                      IsChecked="True" MinWidth="100" Padding="8,4" />
+                        <ToggleButton x:Name="ThemeDarkButton" Grid.Column="1" Content="Тёмная"
+                                      MinWidth="100" Padding="8,4" />
                     </Grid>
                 </StackPanel>
             </Border>
 
             <!-- Вспомогательные утилиты -->
             <Border Grid.Row="3" Style="{StaticResource GroupBoxStyle}">
-                <StackPanel Spacing="8">
+                <StackPanel Spacing="6">
                     <TextBlock Text="Вспомогательные утилиты" Style="{StaticResource GroupHeaderStyle}" />
 
-                    <Grid ColumnSpacing="8" Margin="0,0,0,4">
+                    <Grid ColumnSpacing="6" Margin="0,0,0,2">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="24" />
+                            <ColumnDefinition Width="20" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="SevenZIcon" Grid.Column="0" Text="⚪" VerticalAlignment="Center" />
+                        <TextBlock x:Name="SevenZIcon" Grid.Column="0" Text="⚪" VerticalAlignment="Center" FontSize="12" />
                         <TextBlock Grid.Column="1" Text="7-Zip (распаковка DMG)"
-                                   VerticalAlignment="Center" Margin="0,0,12,0" />
+                                   VerticalAlignment="Center" Margin="0,0,8,0" FontSize="13" />
                         <TextBlock x:Name="SevenZPath" Grid.Column="2"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   FontSize="12" VerticalAlignment="Center" />
+                                   FontSize="11" VerticalAlignment="Center" />
                     </Grid>
 
-                    <Grid ColumnSpacing="8" Margin="0,0,0,8">
+                    <Grid ColumnSpacing="6" Margin="0,0,0,4">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="24" />
+                            <ColumnDefinition Width="20" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="NpxIcon" Grid.Column="0" Text="⚪" VerticalAlignment="Center" />
+                        <TextBlock x:Name="NpxIcon" Grid.Column="0" Text="⚪" VerticalAlignment="Center" FontSize="12" />
                         <TextBlock Grid.Column="1" Text="Node.js / npx (документация СФ)"
-                                   VerticalAlignment="Center" Margin="0,0,12,0" />
+                                   VerticalAlignment="Center" Margin="0,0,8,0" FontSize="13" />
                         <TextBlock x:Name="NpxPath" Grid.Column="2"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   FontSize="12" VerticalAlignment="Center" />
+                                   FontSize="11" VerticalAlignment="Center" />
                     </Grid>
 
                     <Button x:Name="CheckUtilsButton" Content="Проверить наличие"
-                            HorizontalAlignment="Right" MinWidth="140" />
+                            HorizontalAlignment="Right" MinWidth="120" Padding="12,4" />
                 </StackPanel>
             </Border>
 
             <!-- Сохранить -->
             <Button x:Name="SaveSettingsButton" Grid.Row="4"
                     Content="Сохранить настройки"
-                    Width="200" HorizontalAlignment="Center" Height="40" />
+                    Width="180" HorizontalAlignment="Center" Height="34" Margin="0,4,0,0" />
         </Grid>
     </ScrollViewer>
 </Page>
