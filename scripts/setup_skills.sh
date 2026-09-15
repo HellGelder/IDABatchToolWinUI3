@@ -60,7 +60,15 @@ if ! command -v graphify >/dev/null 2>&1; then
   exit 1
 fi
 
-# --- 3. Граф кода (пересборка только при отсутствии) ---
+# --- 3. Node.js (для MCP-сервера context7) ---
+if command -v node >/dev/null 2>&1; then
+  echo "    [ok] Node.js: $(node --version 2>&1 | head -1)"
+else
+  echo "    [warn] Node.js не найден. MCP-сервер context7 (документация библиотек) не подключится."
+  echo "           Установите Node.js >= 18: https://nodejs.org/ — скиллы продолжат работать без него."
+fi
+
+# --- 4. Граф кода (пересборка только при отсутствии) ---
 if [ -f "$REPO_ROOT/graphify-out/graph.json" ]; then
   echo "    [ok] Граф кода уже существует (graphify-out/graph.json)."
   echo "        Для пересборки запустите: graphify . --code-only --no-viz && graphify cluster-only ."

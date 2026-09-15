@@ -13,8 +13,25 @@
 | dotnet-csharp | `/dotnet-csharp` | C#/.NET 8+ (ASP.NET Core, EF Core, async, DI, Result-паттерн) | [Jeffallan/claude-skills](https://github.com/Jeffallan/claude-skills) | MIT |
 | code-reviewer | `/code-reviewer` | Структурированное ревью кода (баги, безопасность, N+1, архитектура) | [Jeffallan/claude-skills](https://github.com/Jeffallan/claude-skills) | MIT |
 
+### MCP-сервер (контекстная документация)
+
+| Сервер | Что даёт | Источник | Установка |
+|---|---|---|---|
+| context7 | Актуальная версия-специфичная документация библиотек (Python, .NET и др.) прямо в контекст — вместо устаревших знаний и чтения целых доков | [Upstash Context7](https://github.com/upstash/context7) | Авто через `.zcode/config.json` (требует Node.js ≥18) |
+
 Каждый скилл — папка `.zcode/skills/<name>/` с `SKILL.md`, опциональными `references/`
 и `ATTRIBUTION.md` (p и source/license/commit).
+
+## MCP-сервер context7 (документация библиотек)
+
+Подключён через `.zcode/config.json` (workspace-scope, авто-доверенный). Агент вызывает
+его инструменты (`context7_query`) когда нужна актуальная документация библиотеки —
+например версия API пакета или сигнатура метода. Это экономит токены: вместо чтения
+целых доков в контекст попадает только нужный фрагмент.
+
+Требования: **Node.js ≥ 18** (проверка: `node --version`). Если Node нет — удалите блок
+`mcp` из `.zcode/config.json`, MCP просто не подключится, остальные скиллы продолжат
+работать.
 
 ## Как это работает
 

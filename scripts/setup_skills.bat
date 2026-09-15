@@ -70,6 +70,15 @@ echo     [fatal] graphify всё ещё не в PATH. Добавьте его в
 exit /b 1
 
 :GRAPH_BUILD
+where node >nul 2>nul
+if %errorlevel%==0 (
+    echo     [ok] Node.js: 
+    node --version
+) else (
+    echo     [warn] Node.js не найден. MCP-сервер context7 (документация библиотек) не подключится.
+    echo            Установите Node.js ^>= 18: https://nodejs.org/ — скиллы продолжат работать без него.
+)
+
 if exist "%REPO_ROOT%\graphify-out\graph.json" (
     echo     [ok] Граф кода уже существует (graphify-out\graph.json).
     echo         Для пересборки: graphify . --code-only --no-viz ^&^& graphify cluster-only .
