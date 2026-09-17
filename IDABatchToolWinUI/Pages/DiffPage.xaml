@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:IDABatchToolWinUI.Pages"
+    xmlns:models="using:IDABatchToolWinUI.Models"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
@@ -98,8 +99,62 @@
                 </StackPanel>
             </Border>
 
-            <!-- Прогресс -->
+            <!-- Сопоставленные пары -->
             <Border Grid.Row="2" Style="{StaticResource GroupBoxStyle}">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Сопоставленные пары (отметьте для сравнения)" Style="{StaticResource GroupHeaderStyle}" />
+                    <ListView x:Name="PairsListView" MaxHeight="260" MinHeight="80"
+                              SelectionMode="None">
+                        <ListView.HeaderTemplate>
+                            <DataTemplate>
+                                <Grid ColumnSpacing="6" Padding="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="28" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="80" />
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="90" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox x:Name="HeaderCheckBox" Grid.Column="0" IsChecked="True"
+                                              VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="Файл" FontWeight="SemiBold" FontSize="12" />
+                                    <TextBlock Grid.Column="2" Text="Размер" FontWeight="SemiBold" FontSize="12" />
+                                    <TextBlock Grid.Column="3" Text="Статус" FontWeight="SemiBold" FontSize="12" />
+                                    <TextBlock Grid.Column="4" Text="BinDiff" FontWeight="SemiBold" FontSize="12" />
+                                    <TextBlock Grid.Column="5" Text="Diaphora" FontWeight="SemiBold" FontSize="12" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.HeaderTemplate>
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="models:PairRowViewModel">
+                                <Grid ColumnSpacing="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="28" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="80" />
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="90" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox Grid.Column="0" IsChecked="{x:Bind IsSelected, Mode=TwoWay}" />
+                                    <TextBlock Grid.Column="1" Text="{x:Bind RelKey}" TextWrapping="NoWrap"
+                                               ToolTipService.ToolTip="{x:Bind ToolTip}" />
+                                    <TextBlock Grid.Column="2" Text="{x:Bind SizeText}" />
+                                    <TextBlock Grid.Column="3" Text="{x:Bind StatusText}" />
+                                    <TextBlock Grid.Column="4" Text="{x:Bind BindiffStatus}" />
+                                    <TextBlock Grid.Column="5" Text="{x:Bind DiaphoraStatus}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                    <TextBlock x:Name="MapStatusLabel" Text="Укажите обе директории для анализа."
+                               FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </Border>
+
+            <!-- Прогресс -->
+            <Border Grid.Row="3" Style="{StaticResource GroupBoxStyle}">
                 <StackPanel Spacing="6">
                     <TextBlock Text="Прогресс выполнения" Style="{StaticResource GroupHeaderStyle}" />
                     <TextBlock x:Name="ProgressLabel" Text="Прогресс выполнения: ожидание..."
@@ -109,7 +164,7 @@
             </Border>
 
             <!-- Кнопки управления -->
-            <Border Grid.Row="3" Style="{StaticResource GroupBoxStyle}">
+            <Border Grid.Row="4" Style="{StaticResource GroupBoxStyle}">
                 <StackPanel Spacing="6">
                     <TextBlock Text="Управление" Style="{StaticResource GroupHeaderStyle}" />
                     <Grid ColumnSpacing="6">
@@ -130,7 +185,7 @@
             </Border>
 
             <!-- Ошибки -->
-            <Border Grid.Row="4" Style="{StaticResource GroupBoxStyle}">
+            <Border Grid.Row="5" Style="{StaticResource GroupBoxStyle}">
                 <StackPanel Spacing="4">
                     <TextBlock Text="Сообщения об ошибках" Style="{StaticResource GroupHeaderStyle}" />
                     <TextBox x:Name="DiffErrorTextBox" AcceptsReturn="True" TextWrapping="Wrap"

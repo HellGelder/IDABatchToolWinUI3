@@ -3,6 +3,7 @@
     x:Class="IDABatchToolWinUI.Pages.AnalysisPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctl="using:IDABatchToolWinUI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:IDABatchToolWinUI.Pages"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -23,134 +24,149 @@
             <Setter Property="Margin" Value="0,0,0,8" />
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
         </Style>
+
+        <!-- Общая тень для всех блоков (паттерн ThemeShadow). Receiver — ShadowCastGrid ниже блоков. -->
+        <ThemeShadow x:Key="SharedShadow" />
+
+        <Style x:Key="SubBlockStyle" TargetType="Border">
+            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
     </Page.Resources>
 
     <ScrollViewer>
-        <Grid Padding="{StaticResource PagePadding}" RowSpacing="8">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
+        <!-- Внутренний Grid: сначала прозрачный слой-приёмник тени, поверх него блоки -->
+        <Grid>
+            <Grid x:Name="ShadowCastGrid" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
 
-            <!-- Источник файлов -->
-            <Border Grid.Row="0" Style="{StaticResource GroupBoxStyle}">
-                <StackPanel Spacing="6">
-                    <TextBlock Text="Источник файлов" Style="{StaticResource GroupHeaderStyle}" />
-                    <Grid ColumnSpacing="6">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBox x:Name="InputDirTextBox" Grid.Column="0"
-                                 PlaceholderText="Путь к папке с бинарными файлами или к архиву (.apk, .ipa, .dmg)..." />
-                        <Button x:Name="BrowseDirButton" Grid.Column="1" Content="Обзор..." MinWidth="80" />
-                    </Grid>
-                </StackPanel>
-            </Border>
+            <StackPanel Padding="{StaticResource PagePadding}" Spacing="8">
 
-            <!-- Параметры сканирования -->
-            <Border Grid.Row="1" Style="{StaticResource GroupBoxStyle}">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="Параметры сканирования" Style="{StaticResource GroupHeaderStyle}" />
-                    <Grid ColumnSpacing="20">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                <!-- Источник файлов -->
+                <Border Style="{StaticResource GroupBoxStyle}" Shadow="{StaticResource SharedShadow}"
+                        Loaded="ShadowRect_Loaded">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Источник файлов" Style="{StaticResource GroupHeaderStyle}" />
+                        <Grid ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="InputDirTextBox" Grid.Column="0"
+                                     PlaceholderText="Путь к папке с бинарными файлами или к архиву (.apk, .ipa, .dmg)..." />
+                            <Button x:Name="BrowseDirButton" Grid.Column="1" Content="Обзор..." MinWidth="80" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
 
-                        <!-- Левая колонка -->
-                        <StackPanel Grid.Column="0" Spacing="8">
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Целевая платформа" FontWeight="SemiBold" FontSize="13" />
-                                <Grid>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <RadioButton x:Name="PlatformWindows" Grid.Row="0" Grid.Column="0"
-                                                 GroupName="AnalysisPlatform" Content="Windows" IsChecked="True"
-                                                 Margin="0,0,16,2" Padding="2,2,2,2" />
-                                    <RadioButton x:Name="PlatformLinuxAndroid" Grid.Row="0" Grid.Column="1"
-                                                 GroupName="AnalysisPlatform" Content="Linux / Android"
-                                                 Margin="0,0,0,2" Padding="2,2,2,2" />
-                                    <RadioButton x:Name="PlatformMacIos" Grid.Row="1" Grid.Column="0"
-                                                 GroupName="AnalysisPlatform" Content="macOS / iOS"
-                                                 Padding="2,2,2,2" />
-                                </Grid>
-                            </StackPanel>
+                <!-- Графическое отображение директории -->
+                <Border Style="{StaticResource GroupBoxStyle}" Shadow="{StaticResource SharedShadow}"
+                        Loaded="ShadowRect_Loaded">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Графическое отображение директории" Style="{StaticResource GroupHeaderStyle}" />
+                        <ctl:TreemapControl x:Name="Treemap" Height="40" />
+                    </StackPanel>
+                </Border>
 
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Потоков IDA:" FontSize="13" />
-                                <Grid ColumnSpacing="6">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <Slider x:Name="MaxIdaSlider" Grid.Column="0" Minimum="1" Maximum="32" Value="4"
-                                            StepFrequency="1" TickFrequency="4" />
-                                    <TextBlock Grid.Column="1" Text="{Binding ElementName=MaxIdaSlider, Path=Value}"
-                                               VerticalAlignment="Center" MinWidth="20" TextAlignment="Center"
-                                               FontSize="13" FontWeight="SemiBold" />
-                                </Grid>
-                            </StackPanel>
+                <!-- Параметры: левый + правый в ряд -->
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Целевая платформа (радиокнопки друг под другом) -->
+                    <Border Grid.Column="0" Style="{StaticResource GroupBoxStyle}" Shadow="{StaticResource SharedShadow}"
+                            Loaded="ShadowRect_Loaded">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Целевая платформа" Style="{StaticResource GroupHeaderStyle}" />
+                            <RadioButton x:Name="PlatformWindows" GroupName="AnalysisPlatform" Content="Windows"
+                                         IsChecked="True"
+                                         ToolTipService.ToolTip="Платформа: Windows&#10;Анализируемые расширения: .exe, .dll, .sys, .ocx, .cpl, .scr, .drv, .efi" />
+                            <RadioButton x:Name="PlatformLinuxAndroid" GroupName="AnalysisPlatform" Content="Linux / Android"
+                                         ToolTipService.ToolTip="Платформа: Linux / Android&#10;Расширения: .elf, .so, .o, .ko, .dex" />
+                            <RadioButton x:Name="PlatformMacIos" GroupName="AnalysisPlatform" Content="macOS / iOS"
+                                         ToolTipService.ToolTip="Платформа: macOS / iOS&#10;Расширения: .mach-o, .dylib, .bundle, .app" />
                         </StackPanel>
+                    </Border>
 
-                        <!-- Правая колонка: Флаги анализа -->
-                        <StackPanel Grid.Column="1" Spacing="2">
-                            <TextBlock Text="Флаги анализа" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4" />
+                    <!-- Параметры сканирования (чекбоксы) -->
+                    <Border Grid.Column="1" Style="{StaticResource GroupBoxStyle}" Shadow="{StaticResource SharedShadow}"
+                            Loaded="ShadowRect_Loaded">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Параметры" Style="{StaticResource GroupHeaderStyle}" />
                             <CheckBox x:Name="CleanupCheck" Content="Удалять .asm и .log после успешного анализа"
-                                      IsChecked="True" Padding="2,1,2,1" />
+                                          IsChecked="True" VerticalAlignment="Center" VerticalContentAlignment="Center" />
                             <CheckBox x:Name="TempCleanupCheck" Content="Удалять временные файлы IDA (.id0, .id1, .nam, .til)"
-                                      IsChecked="True" Padding="2,1,2,1" />
+                                          IsChecked="True" VerticalAlignment="Center" VerticalContentAlignment="Center" />
                             <CheckBox x:Name="PseudocodeCheck" Content="Включить псевдокод в JSON-экспорт"
-                                      IsChecked="True" Padding="2,1,2,1" />
+                                          IsChecked="True" VerticalAlignment="Center" VerticalContentAlignment="Center" />
                             <CheckBox x:Name="DeleteJsonCheck" Content="Удалить JSON-файлы после создания отчётов"
-                                      IsChecked="True" Padding="2,1,2,1" />
+                                          IsChecked="True" VerticalAlignment="Center" VerticalContentAlignment="Center" />
                         </StackPanel>
-                    </Grid>
-                </StackPanel>
-            </Border>
+                    </Border>
+                </Grid>
 
-            <!-- Процесс анализа -->
-            <Border Grid.Row="2" Style="{StaticResource GroupBoxStyle}">
-                <StackPanel Spacing="6">
-                    <TextBlock Text="Процесс анализа" Style="{StaticResource GroupHeaderStyle}" />
-                    <TextBlock x:Name="ProcessStatusText" Text="Готов к запуску" FontSize="12"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <ProgressBar x:Name="ProcessProgress" Minimum="0" Maximum="100" Value="0" Height="4" />
-                    <Grid ColumnSpacing="6">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Button x:Name="StartAnalysisButton" Grid.Column="0" Content="Запустить анализ"
-                                Height="34" Width="150" Padding="12,6" />
-                        <Button x:Name="CancelButton" Grid.Column="1" Content="Отмена"
-                                Height="34" Width="90" Padding="12,6" IsEnabled="False" />
-                        <Button x:Name="GenerateHtmlButton" Grid.Column="3" Content="Сгенерировать HTML-отчёты"
-                                Height="34" Width="180" Padding="12,6" IsEnabled="False" />
-                    </Grid>
-                </StackPanel>
-            </Border>
+                <!-- Потоки IDA (нижний, во всю ширину) -->
+                <Border Style="{StaticResource GroupBoxStyle}" Shadow="{StaticResource SharedShadow}"
+                        Loaded="ShadowRect_Loaded">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Потоки IDA" Style="{StaticResource GroupHeaderStyle}" />
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Slider x:Name="MaxIdaSlider" Grid.Column="0" Minimum="1" Maximum="32" Value="4"
+                                    StepFrequency="1" TickFrequency="4"
+                                    ToolTipService.ToolTip="Максимальное количество одновременно работающих экземпляров IDA." />
+                            <TextBlock Grid.Column="1" Text="{Binding ElementName=MaxIdaSlider, Path=Value}"
+                                       VerticalAlignment="Center" MinWidth="24" TextAlignment="Center"
+                                       FontSize="13" FontWeight="SemiBold" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
 
-            <!-- Ошибки -->
-            <Border Grid.Row="3" Style="{StaticResource GroupBoxStyle}">
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Сообщения об ошибках" Style="{StaticResource GroupHeaderStyle}" />
-                    <TextBox x:Name="ErrorLogTextBox" AcceptsReturn="True" TextWrapping="Wrap"
-                             IsReadOnly="True" MaxHeight="120" MinHeight="40"
-                             PlaceholderText="Здесь будут появляться сообщения об ошибках..." />
-                </StackPanel>
-            </Border>
+                <!-- Процесс анализа (running ProgressBar во время работы, скрыт в простое) -->
+                <Border Style="{StaticResource GroupBoxStyle}" Shadow="{StaticResource SharedShadow}"
+                        Loaded="ShadowRect_Loaded">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Процесс анализа" Style="{StaticResource GroupHeaderStyle}" />
+                        <TextBlock x:Name="ProcessStatusText" Text="Готов к запуску" FontSize="12"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <ProgressBar x:Name="ProcessProgress" IsIndeterminate="True" Height="4" Visibility="Collapsed"
+                                     Foreground="{ThemeResource AccentAAFillColorDefaultBrush}" />
+                        <Grid ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="StartAnalysisButton" Grid.Column="0" Content="Запустить анализ"
+                                    Height="34" Width="150" Padding="12,6" />
+                            <Button x:Name="CancelButton" Grid.Column="1" Content="Отмена"
+                                    Height="34" Width="90" Padding="12,6" IsEnabled="False" />
+                            <Button x:Name="GenerateHtmlButton" Grid.Column="3" Height="40" MinWidth="168" Padding="12,4" IsEnabled="False">
+                                <StackPanel Spacing="0" VerticalAlignment="Center">
+                                    <TextBlock Text="Сгенерировать" HorizontalAlignment="Center" FontSize="13" />
+                                    <TextBlock Text="HTML-отчёты" HorizontalAlignment="Center" FontSize="13" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Ошибки -->
+                <Border Style="{StaticResource GroupBoxStyle}" Shadow="{StaticResource SharedShadow}"
+                        Loaded="ShadowRect_Loaded">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Сообщения об ошибках" Style="{StaticResource GroupHeaderStyle}" />
+                        <TextBox x:Name="ErrorLogTextBox" AcceptsReturn="True" TextWrapping="Wrap"
+                                 IsReadOnly="True" MaxHeight="120" MinHeight="40"
+                                 PlaceholderText="Здесь будут появляться сообщения об ошибках..." />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
         </Grid>
     </ScrollViewer>
 </Page>

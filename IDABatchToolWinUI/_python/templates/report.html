@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Отчёт: {{ file_name }}</title>
+    {% include "_design_tokens.html" %}
+    <style>
+        .section-badge { margin-left: 8px; }
+        .table td:nth-child(2) { font-family: ui-monospace, "SF Mono", "Consolas", monospace; font-size: 12px; color: var(--text-secondary); }
+        .hex-addr { color: var(--text-tertiary); }
+        .func-meta { font-size: 12px; color: var(--text-secondary); margin-left: 8px; }
+    </style>
+</head>
+<body>
+
+    <a class="btn-back" href="{{ back_link }}">← Назад к сводному отчёту</a>
+
+    <h1>Отчёт анализа: {{ file_name }}</h1>
+
+    <input type="text" id="quickSearch" class="search-field" placeholder="Поиск по функциям, импортам, экспортам...">
+
+    <!-- Информация о файле -->
+    {% if file_info %}
+    <div class="card">
+        <h2 style="margin-top:0">Информация о файле</h2>
+        <ul class="grouped-list">
+            {% for label, value in file_info %}
+            <li class="grouped-row">
+                <span class="grouped-row-label">{{ label }}</span>
+                <span class="grouped-row-value">{{ value }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- Зависимости -->
+    <h2>Зависимости <span class="badge section-badge">{{ module_deps|length }}</span></h2>
+    <div class="card accordion open" id="acc-deps">
+        <div class="accordion-header" onclick="this.closest('.accordion').classList.toggle('open')">
+            <span>Прямые зависимости</span><span class="accordion-chevron">›</span>
+        </div>
+        <div class="accordion-body">
+            {% if module_deps %}
+            <div class="deps-grid searchable">
+                {% for dep in module_deps %}
+                <div class="dep-item">
+                    <div class="dep-marker" style="background-color: {{ dep.color }};"></div>
+                    <div class="dep-info">
+                        <span class="dep-name">{{ dep.name }}</span>
+                        {% if not is_elf and dep.count > 0 %}
+                        <span class="dep-count">{{ dep.count }} функций</span>
+                        {% endif %}
+                        <span class="dep-category">{{ dep.category }}</span>
+                        {% if dep.description %}
+                        <span class="dep-desc" title="{{ dep.description }}">ℹ️</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="empty-state">Нет зависимостей.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Импорты -->
+    <h2>Импортируемые функции <span class="badge section-badge">{{ imports|length }}</span></h2>
+    <div class="card accordion" id="acc-imports">
+        <div class="accordion-header" onclick="this.closest('.accordion').classList.toggle('open')">
+            <span>Таблица импортов</span><span class="accordion-chevron">›</span>
+        </div>
+        <div class="accordion-body">
+            {% if imports %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Имя</th>
+                        <th>Адрес</th>
+                        {% if not is_elf %}<th>Библиотека</th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for imp in imports %}
+                    <tr class="searchable">
+                        <td class="col-mono">{{ imp.name }}</td>
+                        <td class="col-nowrap">{{ imp.address }}</td>
+                        {% if not is_elf %}<td>{{ imp.module }}</td>{% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}<p class="empty-state">Нет импортируемых функций.</p>{% endif %}
+        </div>
+    </div>
+
+    <!-- Экспорты -->
+    <h2>Экспортируемые функции <span class="badge section-badge">{{ exports|length }}</span></h2>
+    <div class="card accordion" id="acc-exports">
+        <div class="accordion-header" onclick="this.closest('.accordion').classList.toggle('open')">
+            <span>Таблица экспорта</span><span class="accordion-chevron">›</span>
+        </div>
+        <div class="accordion-body">
+            {% if exports %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Имя</th>
+                        <th>Адрес</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for exp in exports %}
+                    <tr class="searchable">
+                        <td class="col-mono">{{ exp.name }}</td>
+                        <td class="col-nowrap">{{ exp.address }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}<p class="empty-state">Нет экспортируемых функций.</p>{% endif %}
+        </div>
+    </div>
+
+    <!-- Сегменты ELF -->
+    {% if elf_segment_rows %}
+    <h2>Сегменты ELF <span class="badge section-badge">{{ elf_segment_rows|length }}</span></h2>
+    <div class="card accordion" id="acc-elf-segments">
+        <div class="accordion-header" onclick="this.closest('.accordion').classList.toggle('open')">
+            <span>Программные заголовки (сегменты)</span><span class="accordion-chevron">›</span>
+        </div>
+        <div class="accordion-body">
+            <table class="table elf-table">
+                <thead>
+                    <tr>
+                        <th>Тип</th>
+                        <th>Права</th>
+                        <th>Назначение</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for seg in elf_segment_rows %}
+                    <tr class="searchable">
+                        <td class="elf-name col-nowrap">{{ seg.type }}</td>
+                        <td class="col-nowrap">{{ seg.flags }}</td>
+                        <td>{{ seg.description }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Секции ELF -->
+    {% if elf_section_rows %}
+    <h2>Секции ELF <span class="badge section-badge">{{ elf_section_rows|length }}</span></h2>
+    <div class="card accordion" id="acc-elf">
+        <div class="accordion-header" onclick="this.closest('.accordion').classList.toggle('open')">
+            <span>Таблица секций</span><span class="accordion-chevron">›</span>
+        </div>
+        <div class="accordion-body">
+            <table class="table elf-table">
+                <thead>
+                    <tr>
+                        <th>Имя</th>
+                        <th>Тип</th>
+                        <th>Флаги</th>
+                        <th>Назначение</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sec in elf_section_rows %}
+                    <tr class="searchable">
+                        <td class="elf-name col-nowrap">{{ sec.name }}</td>
+                        <td class="col-nowrap">{{ sec.type }}</td>
+                        <td class="col-nowrap">{{ sec.flags }}</td>
+                        <td>{{ sec.description }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Функции -->
+    <h2>Дизассемблированные функции <span class="badge section-badge">{{ functions|length }}</span></h2>
+    {% for func in functions %}
+    <div class="card accordion searchable" id="acc-func-{{ loop.index }}">
+        <div class="accordion-header" onclick="this.closest('.accordion').classList.toggle('open')">
+            <span>
+                {{ func.name }}
+                <span class="func-meta">({{ func.start_ea }}, размер: {{ func.size }} байт)</span>
+            </span>
+            <span class="accordion-chevron">›</span>
+        </div>
+        <div class="accordion-body">
+            <h4>Hex‑дамп</h4>
+            <div class="code-block">{{ func.hexdump }}</div>
+
+            <h4>Дизассемблирование</h4>
+            <div class="code-block">{{ func.instructions_text }}</div>
+
+            {% if func.pseudocode %}
+            <h4>Псевдокод</h4>
+            <div class="code-block">{{ func.pseudocode }}</div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+
+    <script>
+        const searchInput = document.getElementById('quickSearch');
+        searchInput.addEventListener('input', function() {
+            const term = this.value.toLowerCase();
+            document.querySelectorAll('.searchable').forEach(function(el) {
+                el.style.display = el.textContent.toLowerCase().includes(term) ? '' : 'none';
+            });
+        });
+        // Авто‑открытие первой карточки
+        var cards = document.querySelectorAll('.accordion');
+        if (cards.length > 0) cards[0].classList.add('open');
+    </script>
+
+</body>
+</html>

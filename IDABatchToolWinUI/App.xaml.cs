@@ -16,7 +16,10 @@ namespace IDABatchToolWinUI;
 public partial class App : Application
 {
     private Window? _window;
-    
+
+    /// <summary>Главное окно приложения (для диалогов и темы).</summary>
+    public Window? MainWindow => _window;
+
     /// <summary>
     /// Initializes the singleton application object.  This is the first line of authored code
     /// executed, and as such is the logical equivalent of main() or WinMain().

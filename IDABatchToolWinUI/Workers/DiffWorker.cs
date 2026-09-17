@@ -1,0 +1,1442 @@
+using System.Diagnostics;
+using System.Text;
+using IDABatchToolWinUI.Models;
+using IDABatchToolWinUI.Services;
+
+namespace IDABatchToolWinUI.Workers;
+
+/// <summary>
+/// Параллельное сравнение пар с помощью BinDiff + Diaphora — перенос
+/// diff_worker.py на C#: export BinExport и JSON, BinDiff CLI, Diaphora, пост-обработка
+/// (hexdump diff, enrich, unmatched), HTML-отчёты через Python-bridge.
+/// </summary>
+public sealed class DiffWorker : IDisposable
+{
+    private const string ExportDataScript = "export_data.py";
+    private const string DiaphoraDir = "diaphora";
+    private const string DiaphoraScript = "diaphora.py";
+
+    public event Action<int, int, string>? GlobalProgress;   // (step, total, desc)
+    public event Action<string, string, string>? PairStatus; // (relKey, engine, status)
+    public event Action<string>? ErrorOccurred;
+    public event Action<int, int>? Finished;                 // (success, total)
+
+    private CancellationTokenSource? _cts;
+    private Task? _task;
+
+    public IReadOnlyList<DiffPair> Pairs { get; }
+    public string IdatPath { get; }
+    public string BindiffPath { get; }
+    public string OutputDir { get; }
+    public string Engine { get; }         // bindiff | diaphora | both
+    public string LeftDir { get; }
+    public string RightDir { get; }
+    public string? AddOutputDir { get; }
+    public int MaxWorkers { get; }
+
+    private const long LargeFileThreshold = 100L * 1024 * 1024;
+
+    public DiffWorker(
+        IReadOnlyList<DiffPair> pairs,
+        string idatPath,
+        string bindiffPath,
+        string outputDir,
+        string engine,
+        string leftDir,
+        string rightDir,
+        string? addOutputDir,
+        int? maxWorkers = null)
+    {
+        Pairs = pairs;
+        IdatPath = idatPath;
+        BindiffPath = bindiffPath;
+        OutputDir = outputDir;
+        Engine = engine;
+        LeftDir = leftDir;
+        RightDir = rightDir;
+        AddOutputDir = addOutputDir;
+        MaxWorkers = Math.Min(maxWorkers ?? 6, 6);
+    }
+
+    public void Start()
+    {
+        if (_task != null) return;
+        _cts = new CancellationTokenSource();
+        _task = Task.Run(() => RunCore(_cts.Token));
+    }
+
+    public void Cancel() => _cts?.Cancel();
+
+    private string ScriptsDir => AppConstants.ScriptsDir;
+
+    private string ExportScript => Path.Combine(AppConstants.ScriptsDir, ExportDataScript);
+    private string DiaphoraPath => Path.Combine(AppConstants.ScriptsDir, DiaphoraDir, DiaphoraScript);
+
+    private async Task RunCore(CancellationToken ct)
+    {
+        var total = Pairs.Count;
+        if (total == 0) { Finished?.Invoke(0, 0); return; }
+
+        // Жадный алгоритм — крупные файлы первыми
+        var all = Pairs
+            .OrderByDescending(p => File.Exists(p.Primary) ? new FileInfo(p.Primary).Length : 0)
+            .ToList();
+
+        var useBindiff = Engine is "bindiff" or "both";
+        var useDiaphora = Engine is "diaphora" or "both";
+
+        // Фазы: экспорт (1 или 2) + пост-анализ + HTML
+        var phases = 2 + (useBindiff ? 1 : 0) + (useDiaphora ? 1 : 0);
+        var totalSteps = total * phases;
+        var step = 0;
+
+        void StepDone(string desc)
+        {
+            step++;
+            GlobalProgress?.Invoke(step, totalSteps, desc);
+        }
+
+        GlobalProgress?.Invoke(0, totalSteps, "Запуск...");
+
+        if (useBindiff)
+        {
+            await RunPass("BinDiff", all, total, "bindiff", "Экспорт из БД",
+                p => ProcessBindiffPairAsync(p, ct), ct, StepDone);
+            if (ct.IsCancellationRequested) { Abort(); return; }
+        }
+
+        if (useDiaphora)
+        {
+            await RunPass("Diaphora", all, total, "diaphora", "Экспорт из БД",
+                p => ProcessDiaphoraPairAsync(p, ct), ct, StepDone);
+            if (ct.IsCancellationRequested) { Abort(); return; }
+        }
+
+        await RunPass("Post", all, total, null, "Пост-анализ",
+            p => ProcessPostPairAsync(p, ct), ct, StepDone);
+        if (ct.IsCancellationRequested) { Abort(); return; }
+
+        // Генерация HTML-отчётов
+        await GenerateReportsAsync(all, total, StepDone, ct);
+        if (ct.IsCancellationRequested) { Abort(); return; }
+
+        // Доанализ для engine=bindiff
+        if (Engine == "bindiff" && !string.IsNullOrEmpty(AddOutputDir))
+        {
+            await RunAddAnalysisAsync(all, total, StepDone, ct);
+        }
+
+        Finished?.Invoke(ct.IsCancellationRequested ? Math.Max(0, total - 1) : total, total);
+    }
+
+    private void Abort()
+    {
+        Finished?.Invoke(0, Pairs.Count);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    //  Проходы
+    // ─────────────────────────────────────────────────────────────────
+
+    private async Task RunPass(
+        string stage, List<DiffPair> pairs, int total, string? engine,
+        string statusText,
+        Func<DiffPair, Task<bool>> process, CancellationToken ct, Action<string> stepDone)
+    {
+        if (pairs.Count == 0) return;
+
+        foreach (var p in pairs)
+            if (engine == null)
+            {
+                if (Engine is "bindiff" or "both") PairStatus?.Invoke(p.RelKey, "bindiff", statusText);
+                if (Engine is "diaphora" or "both") PairStatus?.Invoke(p.RelKey, "diaphora", statusText);
+            }
+            else PairStatus?.Invoke(p.RelKey, engine, statusText);
+
+        var small = pairs.Where(p => !IsLarge(p.Primary)).ToList();
+        var large = pairs.Where(p => IsLarge(p.Primary)).ToList();
+
+        async Task RunOne(DiffPair p)
+        {
+            bool ok;
+            try { ok = await process(p); }
+            catch (Exception e)
+            {
+                ErrorOccurred?.Invoke($"Ошибка {p.RelKey} в фазе {stage}: {e.Message}");
+                ok = false;
+            }
+            var status = ok ? "✓" : "✗";
+            if (engine == null)
+            {
+                if (Engine is "bindiff" or "both") PairStatus?.Invoke(p.RelKey, "bindiff", status);
+                if (Engine is "diaphora" or "both") PairStatus?.Invoke(p.RelKey, "diaphora", status);
+            }
+            else PairStatus?.Invoke(p.RelKey, engine, status);
+            stepDone(stage);
+        }
+
+        using var sem = new SemaphoreSlim(MaxWorkers);
+        var tasks = small.Select(async p =>
+        {
+            if (ct.IsCancellationRequested) return;
+            await sem.WaitAsync(ct);
+            try { await RunOne(p); } finally { sem.Release(); }
+        }).ToList();
+
+        await Task.WhenAll(tasks);
+
+        // Крупные файлы — последовательно
+        foreach (var p in large)
+        {
+            if (ct.IsCancellationRequested) break;
+            await RunOne(p);
+        }
+    }
+
+    private static bool IsLarge(string path)
+        => File.Exists(path) && new FileInfo(path).Length >= LargeFileThreshold;
+
+    // ─────────────────────────────────────────────────────────────────
+    //  BinDiff
+    // ─────────────────────────────────────────────────────────────────
+
+    private async Task<bool> ProcessBindiffPairAsync(DiffPair p, CancellationToken ct)
+    {
+        var stem = p.Stem;
+        var jsonOutput = Path.Combine(OutputDir, $"{stem}.diff.json");
+        var binexportP = Path.Combine(OutputDir, $"{stem}_primary.BinExport");
+        var binexportS = Path.Combine(OutputDir, $"{stem}_secondary.BinExport");
+
+        if (!await ExportBinExportAsync(p.Primary, binexportP, ct)) return false;
+        if (!await ExportBinExportAsync(p.Secondary, binexportS, ct)) return false;
+
+        var diffOutput = Path.Combine(OutputDir, $"{stem}.BinDiff");
+        if (!await RunBindiffAsync(binexportP, binexportS, diffOutput, ct))
+        {
+            ErrorOccurred?.Invoke($"BinDiff: {stem}");
+            return false;
+        }
+        ParseBindiffResult(diffOutput, p.Primary, p.Secondary, jsonOutput);
+        return true;
+    }
+
+    private async Task<bool> ExportBinExportAsync(string i64Path, string outputFile, CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested) return false;
+        if (File.Exists(outputFile)) File.Delete(outputFile);
+
+        var psi = NewIdatPsi();
+        psi.ArgumentList.Add("-A");
+        psi.ArgumentList.Add("-OBinExportAutoAction:BinExportBinary");
+        psi.ArgumentList.Add($"-OBinExportModule:{outputFile}");
+        psi.ArgumentList.Add(i64Path);
+        var (rc, _, _) = await RunProcAsync(psi, ct);
+        return rc == 0 && File.Exists(outputFile);
+    }
+
+    private async Task<bool> RunBindiffAsync(string primary, string secondary, string output, CancellationToken ct)
+    {
+        var tmpDir = Path.Combine(Path.GetDirectoryName(output)!, Path.GetFileNameWithoutExtension(output) + "_tmp");
+        if (Directory.Exists(tmpDir)) Directory.Delete(tmpDir, recursive: true);
+        Directory.CreateDirectory(tmpDir);
+
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = BindiffPath,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            psi.ArgumentList.Add("--primary"); psi.ArgumentList.Add(primary);
+            psi.ArgumentList.Add("--secondary"); psi.ArgumentList.Add(secondary);
+            psi.ArgumentList.Add("--output_dir"); psi.ArgumentList.Add(tmpDir);
+            var (rc, _, _) = await RunProcAsync(psi, ct);
+            if (rc != 0) return false;
+
+            var diffFiles = Directory.GetFiles(tmpDir, "*.BinDiff");
+            if (diffFiles.Length == 0) return false;
+            if (File.Exists(output)) File.Delete(output);
+            File.Move(diffFiles[0], output);
+            return true;
+        }
+        catch (Exception e)
+        {
+            ErrorOccurred?.Invoke($"BinDiff: {e.Message}");
+            return false;
+        }
+        finally
+        {
+            try { Directory.Delete(tmpDir, recursive: true); } catch { /* ignore */ }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    //  Diaphora
+    // ─────────────────────────────────────────────────────────────────
+
+    private async Task<bool> ProcessDiaphoraPairAsync(DiffPair p, CancellationToken ct)
+    {
+        var stem = p.Stem;
+        var jsonOutput = Path.Combine(OutputDir, $"{stem}.diff.json");
+        var dbPri = Path.Combine(OutputDir, $"{stem}_primary.diaphora.sqlite");
+        var dbSec = Path.Combine(OutputDir, $"{stem}_secondary.diaphora.sqlite");
+        var result = Path.Combine(OutputDir, $"{stem}_diaphora_result.sqlite");
+
+        if (!File.Exists(DiaphoraPath))
+        {
+            ErrorOccurred?.Invoke($"Diaphora не найден: {DiaphoraPath}");
+            return false;
+        }
+
+        if (!await RunDiaphoraExportAsync(p.Primary, dbPri, ct))
+        {
+            ErrorOccurred?.Invoke($"Diaphora экспорт primary {stem}");
+            Cleanup(dbPri, dbSec, result);
+            return false;
+        }
+        if (!await RunDiaphoraExportAsync(p.Secondary, dbSec, ct))
+        {
+            ErrorOccurred?.Invoke($"Diaphora экспорт secondary {stem}");
+            Cleanup(dbPri, dbSec, result);
+            return false;
+        }
+
+        if (File.Exists(dbPri) && File.Exists(dbSec))
+            if (await RunDiaphoraDiffAsync(dbPri, dbSec, result, ct))
+                MergeDiaphoraIntoJson(jsonOutput, result, stem);
+
+        Cleanup(dbPri, dbSec, result);
+        return true;
+    }
+
+    private async Task<bool> RunDiaphoraExportAsync(string i64Path, string outSqlite, CancellationToken ct)
+    {
+        var psi = NewIdatPsi();
+        var env = psi.Environment;
+        env["DIAPHORA_AUTO"] = "1";
+        env["DIAPHORA_EXPORT_FILE"] = outSqlite;
+
+        if (IsLarge(i64Path))
+        {
+            psi.ArgumentList.Add("-dVPAGESIZE=16384");
+            psi.ArgumentList.Add("-dUNDO_MAXSIZE=0");
+        }
+        psi.ArgumentList.Add("-A");
+        psi.ArgumentList.Add($"-S\"{DiaphoraPath}\"");
+        psi.ArgumentList.Add(i64Path);
+
+        var (rc, _, _) = await RunProcWithTimeoutAsync(psi, TimeSpan.FromHours(6), ct);
+        return rc == 0 && File.Exists(outSqlite);
+    }
+
+    private async Task<bool> RunDiaphoraDiffAsync(string db1, string db2, string outSqlite, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = AppConstants.PythonwPath,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        psi.ArgumentList.Add(DiaphoraPath);
+        psi.ArgumentList.Add(db1);
+        psi.ArgumentList.Add(db2);
+        psi.ArgumentList.Add("-o");
+        psi.ArgumentList.Add(outSqlite);
+        var (rc, _, _) = await RunProcAsync(psi, ct);
+        return rc == 0 && File.Exists(outSqlite);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    //  Пост-анализ
+    // ─────────────────────────────────────────────────────────────────
+
+    private async Task<bool> ProcessPostPairAsync(DiffPair p, CancellationToken ct)
+    {
+        var stem = p.Stem;
+        var jsonOutput = Path.Combine(OutputDir, $"{stem}.diff.json");
+        var primJson = Path.Combine(OutputDir, $"{stem}_primary.export.json");
+        var secJson = Path.Combine(OutputDir, $"{stem}_secondary.export.json");
+
+        var exported = await ExportJsonPairAsync(p.Primary, primJson, p.Secondary, secJson, ct);
+        EnrichDiffJson(jsonOutput, exported.Primary, exported.Secondary);
+
+        // Hexdump diff
+        var orig1 = FindOriginalBinary(p.Primary);
+        var orig2 = FindOriginalBinary(p.Secondary);
+        if (orig1 != null && orig2 != null)
+        {
+            try
+            {
+                var (rows, sim) = ComputeHexdumpDiff(orig1, orig2);
+                var data = ReadJson(jsonOutput) ?? new Dictionary<string, object?>();
+                data["global_hex_diff"] = new List<object?>
+                {
+                    new Dictionary<string, object?>
+                    {
+                        ["name1"] = Path.GetFileName(orig1), ["path1"] = orig1,
+                        ["name2"] = Path.GetFileName(orig2), ["path2"] = orig2,
+                        ["hex_rows"] = rows, ["hexdump_similarity"] = sim,
+                    }
+                };
+                data["hexdump_similarity"] = sim;
+                data["real_primary"] = orig1;
+                data["real_secondary"] = orig2;
+                WriteJson(jsonOutput, data);
+            }
+            catch { /* не критично */ }
+        }
+
+        Cleanup(primJson, secJson);
+        return true;
+    }
+
+    private async Task<(string? Primary, string? Secondary)> ExportJsonPairAsync(
+        string primaryI64, string primaryOut, string secondaryI64, string secondaryOut, CancellationToken ct)
+    {
+        var result = (Primary: (string?)null, Secondary: (string?)null);
+        foreach (var (i64, outPath, isPrimary) in new[]
+                 {
+                     (primaryI64, primaryOut, true),
+                     (secondaryI64, secondaryOut, false),
+                 })
+        {
+            if (ct.IsCancellationRequested) break;
+            var psi = NewIdatPsi();
+            psi.ArgumentList.Add("-A");
+            psi.ArgumentList.Add($"-S\"{ExportScript}\" pseudocode=1");
+            psi.ArgumentList.Add(i64);
+            var (rc, _, _) = await RunProcAsync(psi, ct);
+            if (rc != 0) continue;
+
+            var src = i64 + ".export.json";
+            if (File.Exists(src) && src != outPath)
+            {
+                if (File.Exists(outPath)) File.Delete(outPath);
+                File.Move(src, outPath);
+            }
+            if (File.Exists(outPath))
+            {
+                if (isPrimary) result.Primary = outPath;
+                else result.Secondary = outPath;
+            }
+        }
+        return result;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    //  HTML-отчёты
+    // ─────────────────────────────────────────────────────────────────
+
+    private async Task GenerateReportsAsync(List<DiffPair> pairs, int total, Action<string> stepDone, CancellationToken ct)
+    {
+        try
+        {
+            var reportsDir = Path.Combine(OutputDir, "Reports");
+            Directory.CreateDirectory(reportsDir);
+            var jsonDir = OutputDir;
+            var worker = new HtmlGenWorker("diff", deleteJson: false, reuseCache: false, platform: "Windows");
+            worker.ProgressUpdated += (cur, tot, msg) => GlobalProgress?.Invoke(cur, total, "Генерация HTML");
+            worker.ErrorOccurred += e => ErrorOccurred?.Invoke(e);
+
+            var jsonFiles = Directory.GetFiles(jsonDir, "*.diff.json").ToList();
+            if (jsonFiles.Count == 0) return;
+            await Task.Run(() => worker.Run(
+                inputDir: LeftDir, reportsDir: reportsDir, jsonDir: jsonDir,
+                leftDir: LeftDir, rightDir: RightDir, manpagesDb: null,
+                jsonPaths: jsonFiles), ct);
+
+            foreach (var p in pairs) stepDone("Генерация HTML");
+        }
+        catch (Exception e)
+        {
+            ErrorOccurred?.Invoke($"Ошибка генерации отчётов: {e.Message}");
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    //  Доанализ (engine=bindiff)
+    // ─────────────────────────────────────────────────────────────────
+
+    private async Task RunAddAnalysisAsync(List<DiffPair> pairs, int total, Action<string> stepDone, CancellationToken ct)
+    {
+        if (!File.Exists(DiaphoraPath))
+        {
+            ErrorOccurred?.Invoke("Diaphora не найден — доанализ для пар <99% пропущен");
+            return;
+        }
+
+        var low = pairs.Where(p =>
+        {
+            var stem = p.Stem;
+            var d = Path.Combine(OutputDir, $"{stem}.diff.json");
+            if (!File.Exists(d)) return false;
+            if (AddOutputDir != null && File.Exists(Path.Combine(AddOutputDir, $"{stem}.diff.json")))
+                return false;
+            try
+            {
+                var data = ReadJson(d);
+                var sim = data != null && data.TryGetValue("similarity", out var v) && v is double dv ? dv : 0.0;
+                return sim < 0.99;
+            }
+            catch { return false; }
+        }).ToList();
+
+        if (low.Count == 0) return;
+        ErrorOccurred?.Invoke($"Доанализ Diaphora: {low.Count} пар с similarity < 99%");
+
+        Directory.CreateDirectory(AddOutputDir!);
+        foreach (var p in low)
+        {
+            var src = Path.Combine(OutputDir, $"{p.Stem}.diff.json");
+            var dst = Path.Combine(AddOutputDir!, $"{p.Stem}.diff.json");
+            if (File.Exists(src)) File.Copy(src, dst, overwrite: true);
+        }
+
+        // Фаза 4: Diaphora
+        await RunPass("AddDiaphora", low, low.Count, "diaphora", "Доанализ (Diaphora)",
+            p => ProcessAddDiaphoraPairAsync(p, ct), ct, stepDone);
+        if (ct.IsCancellationRequested) return;
+
+        // Фаза 5: пост-анализ
+        await RunPass("AddPost", low, low.Count, "diaphora", "Доанализ (пост-анализ)",
+            p => ProcessAddPostPairAsync(p, ct), ct, stepDone);
+        if (ct.IsCancellationRequested) return;
+
+        // Фаза 6: HTML
+        await GenerateAddReportsAsync(low, stepDone, ct);
+    }
+
+    private async Task<bool> ProcessAddDiaphoraPairAsync(DiffPair p, CancellationToken ct)
+    {
+        var stem = p.Stem;
+        var jsonOutput = Path.Combine(AddOutputDir!, $"{stem}.diff.json");
+        var dbPri = Path.Combine(AddOutputDir!, $"{stem}_primary.diaphora.sqlite");
+        var dbSec = Path.Combine(AddOutputDir!, $"{stem}_secondary.diaphora.sqlite");
+        var result = Path.Combine(AddOutputDir!, $"{stem}_diaphora_result.sqlite");
+
+        if (!await RunDiaphoraExportAsync(p.Primary, dbPri, ct)) { Cleanup(dbPri, dbSec, result); return false; }
+        if (!await RunDiaphoraExportAsync(p.Secondary, dbSec, ct)) { Cleanup(dbPri, dbSec, result); return false; }
+
+        if (File.Exists(dbPri) && File.Exists(dbSec))
+            if (await RunDiaphoraDiffAsync(dbPri, dbSec, result, ct))
+                MergeDiaphoraIntoJson(jsonOutput, result, stem);
+        Cleanup(dbPri, dbSec, result);
+        return true;
+    }
+
+    private async Task<bool> ProcessAddPostPairAsync(DiffPair p, CancellationToken ct)
+    {
+        var stem = p.Stem;
+        var jsonOutput = Path.Combine(AddOutputDir!, $"{stem}.diff.json");
+        var primJson = Path.Combine(AddOutputDir!, $"{stem}_primary.export.json");
+        var secJson = Path.Combine(AddOutputDir!, $"{stem}_secondary.export.json");
+
+        var exported = await ExportJsonPairAsync(p.Primary, primJson, p.Secondary, secJson, ct);
+        EnrichDiffJson(jsonOutput, exported.Primary, exported.Secondary);
+
+        var orig1 = FindOriginalBinary(p.Primary);
+        var orig2 = FindOriginalBinary(p.Secondary);
+        if (orig1 != null && orig2 != null)
+        {
+            try
+            {
+                var (rows, sim) = ComputeHexdumpDiff(orig1, orig2);
+                var data = ReadJson(jsonOutput) ?? new Dictionary<string, object?>();
+                data["global_hex_diff"] = new List<object?>
+                {
+                    new Dictionary<string, object?>
+                    {
+                        ["name1"] = Path.GetFileName(orig1), ["path1"] = orig1,
+                        ["name2"] = Path.GetFileName(orig2), ["path2"] = orig2,
+                        ["hex_rows"] = rows, ["hexdump_similarity"] = sim,
+                    }
+                };
+                data["hexdump_similarity"] = sim;
+                WriteJson(jsonOutput, data);
+            }
+            catch { /* не критично */ }
+        }
+        Cleanup(primJson, secJson);
+        return true;
+    }
+
+    private async Task GenerateAddReportsAsync(List<DiffPair> pairs, Action<string> stepDone, CancellationToken ct)
+    {
+        try
+        {
+            var reportsDir = Path.Combine(AddOutputDir!, "Reports");
+            Directory.CreateDirectory(reportsDir);
+            var jsonFiles = Directory.GetFiles(AddOutputDir!, "*.diff.json").ToList();
+            if (jsonFiles.Count == 0) return;
+
+            var worker = new HtmlGenWorker("diff", deleteJson: false, reuseCache: false, platform: "Windows");
+            worker.ProgressUpdated += (cur, tot, msg) => GlobalProgress?.Invoke(cur, pairs.Count, "Генерация HTML (доанализ)");
+            worker.ErrorOccurred += e => ErrorOccurred?.Invoke(e);
+
+            await Task.Run(() => worker.Run(
+                inputDir: LeftDir, reportsDir: reportsDir, jsonDir: AddOutputDir!,
+                leftDir: LeftDir, rightDir: RightDir, manpagesDb: null,
+                jsonPaths: jsonFiles), ct);
+            foreach (var p in pairs) stepDone("Генерация HTML (доанализ)");
+        }
+        catch (Exception e)
+        {
+            ErrorOccurred?.Invoke($"Ошибка генерации отчётов (доанализ): {e.Message}");
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    //  Разбор результатов BinDiff (SQLite)
+    // ─────────────────────────────────────────────────────────────────
+
+    private void ParseBindiffResult(string dbPath, string primary, string secondary, string jsonOutput)
+    {
+        var result = new Dictionary<string, object?>
+        {
+            ["primary"] = primary, ["secondary"] = secondary,
+            ["similarity"] = 0.0, ["confidence"] = 0.0,
+            ["description"] = "", ["version"] = "", ["created"] = "", ["modified"] = "",
+            ["file1"] = new Dictionary<string, object?>(), ["file2"] = new Dictionary<string, object?>(),
+            ["matched_functions"] = new List<object?>(),
+            ["total_functions1"] = 0, ["total_functions2"] = 0,
+            ["error"] = null, ["engine"] = "bindiff",
+        };
+        try
+        {
+            using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={dbPath}");
+            conn.Open();
+
+            // metadata
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = "SELECT * FROM metadata";
+                using var r = cmd.ExecuteReader();
+                if (r.Read())
+                {
+                    for (int i = 0; i < r.FieldCount; i++)
+                        if (!r.IsDBNull(i))
+                            result[r.GetName(i)] = Convert.ToString(r.GetValue(i)) ?? "";
+                    if (result.TryGetValue("similarity", out var s) && double.TryParse(s?.ToString(), out var sd))
+                        result["similarity"] = sd;
+                    if (result.TryGetValue("confidence", out var c) && double.TryParse(c?.ToString(), out var cd))
+                        result["confidence"] = cd;
+                }
+            }
+
+            // file info
+            var fileRows = new List<Dictionary<string, object?>>();
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = "SELECT * FROM file ORDER BY id";
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    var row = new Dictionary<string, object?>();
+                    for (int i = 0; i < r.FieldCount; i++)
+                        row[r.GetName(i)] = r.IsDBNull(i) ? null : Convert.ToString(r.GetValue(i));
+                    fileRows.Add(row);
+                }
+            }
+            if (fileRows.Count >= 2)
+            {
+                foreach (var (f, key) in new[] { (fileRows[0], "file1"), (fileRows[1], "file2") })
+                {
+                    var fi = new Dictionary<string, object?>
+                    {
+                        ["filename"] = f.GetValue("filename") ?? "",
+                        ["exefilename"] = f.GetValue("exefilename") ?? "",
+                        ["hash"] = f.GetValue("hash") ?? "",
+                        ["functions"] = SafeInt(f.GetValue("functions")),
+                        ["libfunctions"] = SafeInt(f.GetValue("libfunctions")),
+                        ["calls"] = SafeInt(f.GetValue("calls")),
+                        ["basicblocks"] = SafeInt(f.GetValue("basicblocks")),
+                        ["libbasicblocks"] = SafeInt(f.GetValue("libbasicblocks")),
+                        ["edges"] = SafeInt(f.GetValue("edges")),
+                        ["libedges"] = SafeInt(f.GetValue("libedges")),
+                        ["instructions"] = SafeInt(f.GetValue("instructions")),
+                        ["libinstructions"] = SafeInt(f.GetValue("libinstructions")),
+                    };
+                    result[key] = fi;
+                }
+                result["total_functions1"] = SafeInt((result["file1"] as Dictionary<string, object?>)?.GetValue("functions"))
+                    + SafeInt((result["file1"] as Dictionary<string, object?>)?.GetValue("libfunctions"));
+                result["total_functions2"] = SafeInt((result["file2"] as Dictionary<string, object?>)?.GetValue("functions"))
+                    + SafeInt((result["file2"] as Dictionary<string, object?>)?.GetValue("libfunctions"));
+            }
+
+            // functions
+            var matches = new List<object?>();
+            var columns = GetTableColumns(conn, "function");
+            var aliases = new Dictionary<string, string[]>
+            {
+                ["address1"] = new[] { "address1" }, ["name1"] = new[] { "name1" },
+                ["address2"] = new[] { "address2" }, ["name2"] = new[] { "name2" },
+                ["similarity"] = new[] { "similarity", "sim" },
+                ["confidence"] = new[] { "confidence", "conf" },
+                ["flags"] = new[] { "flags" },
+                ["algorithm"] = new[] { "algorithm", "algo" },
+                ["basicblocks"] = new[] { "basicblocks", "basic_blocks", "basicblocks_count" },
+                ["edges"] = new[] { "edges", "edgecount", "edge_count" },
+                ["instructions"] = new[] { "instructions", "instructioncount", "instruction_count" },
+            };
+            var actuals = new List<string>();
+            foreach (var (canon, al) in aliases)
+                foreach (var a in al)
+                    if (columns.Contains(a)) { actuals.Add(a); break; }
+
+            if (actuals.Count > 0)
+            {
+                var algoNames = new Dictionary<int, string>();
+                try
+                {
+                    var algoCmd = conn.CreateCommand();
+                    algoCmd.CommandText = "SELECT id, name FROM functionalgorithm";
+                    using var algoRdr = algoCmd.ExecuteReader();
+                    while (algoRdr.Read()) algoNames[algoRdr.GetInt32(0)] = algoRdr.GetString(1);
+                }
+                catch { /* нет таблицы */ }
+
+                var funcCmd = conn.CreateCommand();
+                funcCmd.CommandText = "SELECT " + string.Join(",", actuals) + " FROM function ORDER BY similarity DESC";
+                using var funcRdr = funcCmd.ExecuteReader();
+                while (funcRdr.Read())
+                {
+                    var e = new Dictionary<string, object?>
+                    {
+                        ["address1"] = "", ["name1"] = "<unnamed>",
+                        ["address2"] = "", ["name2"] = "<unnamed>",
+                        ["similarity"] = 0.0, ["confidence"] = 0.0,
+                        ["flags"] = 0, ["algorithm"] = 0,
+                        ["basicblocks"] = 0, ["edges"] = 0, ["instructions"] = 0,
+                        ["source"] = "bindiff",
+                    };
+                    for (int i = 0; i < funcRdr.FieldCount; i++)
+                    {
+                        var col = funcRdr.GetName(i);
+                        if (col == "address1" || col == "address2")
+                        {
+                            long? v = funcRdr.IsDBNull(i) ? null : Convert.ToInt64(funcRdr.GetValue(i));
+                            e[col] = v == null ? "" : $"0x{v:X}";
+                        }
+                        else if (col == "similarity" || col == "confidence")
+                            e[col] = funcRdr.IsDBNull(i) ? 0.0 : Math.Round(Convert.ToDouble(funcRdr.GetValue(i)), 4);
+                        else if (col == "name1" || col == "name2")
+                            e[col] = funcRdr.IsDBNull(i) || string.IsNullOrEmpty(Convert.ToString(funcRdr.GetValue(i)))
+                                ? "<unnamed>" : Convert.ToString(funcRdr.GetValue(i));
+                        else e[col] = funcRdr.IsDBNull(i) ? 0 : Convert.ToInt64(funcRdr.GetValue(i));
+                    }
+                    e["algorithm_name"] = algoNames.TryGetValue(SafeInt(e["algorithm"]), out var nm)
+                        ? nm : $"#{e["algorithm"]}";
+                    matches.Add(e);
+                }
+            }
+            result["matched_functions"] = matches;
+
+            // Распределение по similarity
+            var buckets = new Dictionary<string, int>
+            {
+                ["1.0"] = 0, ["0.95_0.99"] = 0, ["0.80_0.94"] = 0, ["0.50_0.79"] = 0, ["below_0.50"] = 0,
+            };
+            foreach (var m in matches.OfType<Dictionary<string, object?>>())
+            {
+                var s = Convert.ToDouble(m["similarity"]);
+                if (s >= 1.0) buckets["1.0"]++;
+                else if (s >= 0.95) buckets["0.95_0.99"]++;
+                else if (s >= 0.80) buckets["0.80_0.94"]++;
+                else if (s >= 0.50) buckets["0.50_0.79"]++;
+                else buckets["below_0.50"]++;
+            }
+            result["similarity_distribution"] = buckets;
+
+            // Алгоритмы
+            try
+            {
+                var ad = new Dictionary<string, object?>();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = """
+                    SELECT fa.name, COUNT(*) FROM function f
+                    LEFT JOIN functionalgorithm fa ON f.algorithm = fa.id
+                    GROUP BY f.algorithm ORDER BY COUNT(*) DESC
+                    """;
+                using var r = cmd.ExecuteReader();
+                while (r.Read()) ad[r.GetString(0)] = r.GetInt64(1);
+                result["algorithm_distribution"] = ad;
+            }
+            catch { /* нет таблицы */ }
+        }
+        catch (Exception e)
+        {
+            result["error"] = e.Message;
+        }
+        WriteJson(jsonOutput, result);
+    }
+
+    private static HashSet<string> GetTableColumns(Microsoft.Data.Sqlite.SqliteConnection conn, string table)
+    {
+        var cols = new HashSet<string>();
+        try
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"PRAGMA table_info(\"{table}\")";
+            using var r = cmd.ExecuteReader();
+            while (r.Read()) cols.Add(r.GetString(1));
+        }
+        catch { /* нет таблицы */ }
+        return cols;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    //  Слияние Diaphora в .diff.json
+    // ─────────────────────────────────────────────────────────────────
+
+    private void MergeDiaphoraIntoJson(string jsonPath, string diaphoraSqlite, string stem)
+    {
+        var dres = ParseDiaphoraResults(diaphoraSqlite);
+        var data = File.Exists(jsonPath) ? ReadJson(jsonPath) ?? new Dictionary<string, object?>() : null;
+
+        if (data == null)
+        {
+            data = new Dictionary<string, object?>
+            {
+                ["primary"] = "", ["secondary"] = "",
+                ["similarity"] = 0.0, ["confidence"] = 0.0,
+                ["description"] = "", ["version"] = "", ["created"] = "", ["modified"] = "",
+                ["file1"] = new Dictionary<string, object?>(), ["file2"] = new Dictionary<string, object?>(),
+                ["matched_functions"] = new List<object?>(),
+                ["total_functions1"] = 0, ["total_functions2"] = 0,
+                ["error"] = null,
+            };
+        }
+
+        var matches = data["matched_functions"] as List<object?> ?? new List<object?>();
+        // Помечаем уже существующие как bindiff
+        foreach (var m in matches.OfType<Dictionary<string, object?>>())
+            if (!m.ContainsKey("source")) m["source"] = "bindiff";
+
+        var existing = new Dictionary<(string, string), Dictionary<string, object?>>();
+        foreach (var m in matches.OfType<Dictionary<string, object?>>())
+        {
+            var k = (Convert.ToString(m["address1"]) ?? "", Convert.ToString(m["address2"]) ?? "");
+            existing[k] = m;
+        }
+
+        foreach (var m in dres.MatchedFunctions)
+        {
+            var key = (m.Address1, m.Address2);
+            if (existing.TryGetValue(key, out var ex))
+            {
+                ex["source"] = "both";
+                ex["bindiff_similarity"] = ex["similarity"];
+                ex["diaphora_similarity"] = m.Similarity;
+            }
+            else
+            {
+                existing[key] = m.ToDict();
+                matches.Add(m.ToDict());
+            }
+        }
+
+        // Дедупликация
+        matches.Clear();
+        matches.AddRange(DeduplicateMatched(existing.Values));
+
+        data["matched_summary"] = Summarize(matches);
+        data["matched_diaphora_only"] = matches.OfType<Dictionary<string, object?>>()
+            .Where(m => Convert.ToString(m["source"]) == "diaphora").ToList();
+        data["diaphora_matched_count"] = matches.OfType<Dictionary<string, object?>>()
+            .Count(m => m["source"] is "diaphora" or "both");
+        data["total_matched"] = matches.Count;
+
+        // Unmatched
+        foreach (var (side, list) in new[] { ("unmatched_functions1", dres.Unmatched1), ("unmatched_functions2", dres.Unmatched2) })
+        {
+            if (!data.ContainsKey(side)) data[side] = new List<object?>();
+            var cur = (List<object?>)data[side]!;
+            var ext = cur.OfType<Dictionary<string, object?>>().Select(x => Convert.ToString(x["address"]) ?? "").ToHashSet();
+            foreach (var u in list)
+                if (u.Address != "" && ext.Add(u.Address))
+                    cur.Add(new Dictionary<string, object?> { ["address"] = u.Address, ["name"] = u.Name });
+        }
+
+        // Алгоритмы
+        var ad = data.ContainsKey("algorithm_distribution") && data["algorithm_distribution"] is Dictionary<string, object?> d0
+            ? d0 : new Dictionary<string, object?>();
+        data["algorithm_distribution"] = ad;
+        foreach (var (algo, cnt) in dres.AlgorithmDistribution)
+            ad[algo] = (ad.TryGetValue(algo, out var v) && v is long l ? l : 0) + cnt;
+
+        // engine
+        var hasBd = matches.OfType<Dictionary<string, object?>>().Any(m => m["source"] is "bindiff" or "both");
+        var hasDp = matches.OfType<Dictionary<string, object?>>().Any(m => m["source"] is "diaphora" or "both");
+        data["engine"] = hasBd && hasDp ? "bindiff+diaphora" : hasDp ? "diaphora" : hasBd ? "bindiff" : "";
+
+        WriteJson(jsonPath, data);
+    }
+
+    private static List<object?> Summarize(List<object?> matches)
+    {
+        var bd = matches.OfType<Dictionary<string, object?>>().Count(m => Convert.ToString(m["source"]) == "bindiff");
+        var dp = matches.OfType<Dictionary<string, object?>>().Count(m => Convert.ToString(m["source"]) == "diaphora");
+        var both = matches.OfType<Dictionary<string, object?>>().Count(m => Convert.ToString(m["source"]) == "both");
+        return new List<object?>
+        {
+            new Dictionary<string, object?> { ["total"] = matches.Count, ["bindiff_only"] = bd, ["diaphora_only"] = dp, ["both"] = both },
+        };
+    }
+
+    private static List<object?> DeduplicateMatched(IEnumerable<Dictionary<string, object?>> matches)
+    {
+        var prio = new Dictionary<string, int> { ["both"] = 0, ["bindiff"] = 1, ["diaphora"] = 2 };
+        var ordered = matches
+            .OrderBy(m => prio.TryGetValue(Convert.ToString(m["source"]) ?? "diaphora", out var pr) ? pr : 99)
+            .ThenByDescending(m => Convert.ToDouble(m["similarity"]));
+        var seen1 = new HashSet<string>();
+        var seen2 = new HashSet<string>();
+        var result = new List<object?>();
+        foreach (var m in ordered)
+        {
+            var a1 = Convert.ToString(m["address1"]) ?? "";
+            var a2 = Convert.ToString(m["address2"]) ?? "";
+            if (a1 == "" || a2 == "") continue;
+            if (seen1.Contains(a1) || seen2.Contains(a2)) continue;
+            seen1.Add(a1); seen2.Add(a2);
+            result.Add(m);
+        }
+        return result;
+    }
+
+    private DiaphoraParseResult ParseDiaphoraResults(string sqlite)
+    {
+        var res = new DiaphoraParseResult();
+        if (!File.Exists(sqlite)) return res;
+        try
+        {
+            using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={sqlite}");
+            conn.Open();
+
+            var conf = new Dictionary<string, double> { ["best"] = 0.95, ["partial"] = 0.60, ["unreliable"] = 0.25 };
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = "SELECT type, address, name, address2, name2, ratio, description FROM results ORDER BY ratio DESC";
+                try
+                {
+                    using var rd = cmd.ExecuteReader();
+                    while (rd.Read())
+                    {
+                        var type = Convert.ToString(rd["type"]) ?? "partial";
+                        res.MatchedFunctions.Add(new DiaphoraMatch(
+                            "0x" + (long.TryParse(Convert.ToString(rd["address"]), System.Globalization.NumberStyles.HexNumber, null, out var a1) ? a1.ToString("X") : "0"),
+                            Convert.ToString(rd["name"]) ?? "",
+                            "0x" + (long.TryParse(Convert.ToString(rd["address2"]), System.Globalization.NumberStyles.HexNumber, null, out var a2) ? a2.ToString("X") : "0"),
+                            Convert.ToString(rd["name2"]) ?? "",
+                            (double)(rd["ratio"] is null ? 0 : Convert.ToDouble(rd["ratio"])),
+                            conf.TryGetValue(type, out var c) ? c : 0.50,
+                            (Convert.ToString(rd["description"]) ?? "diaphora_auto").Trim(),
+                            type));
+                        var algo = (Convert.ToString(rd["description"]) ?? "diaphora_auto").Trim();
+                        res.AlgorithmDistribution.TryGetValue(algo, out var cnt);
+                        res.AlgorithmDistribution[algo] = cnt + 1;
+                    }
+                }
+                catch { /* нет таблицы */ }
+            }
+
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = "SELECT type, address, name FROM unmatched";
+                try
+                {
+                    using var rd = cmd.ExecuteReader();
+                    while (rd.Read())
+                    {
+                        var a = "0x" + (long.TryParse(Convert.ToString(rd["address"]), System.Globalization.NumberStyles.HexNumber, null, out var av) ? av.ToString("X") : "0");
+                        var entry = (Address: a, Name: Convert.ToString(rd["name"]) ?? "");
+                        if (Convert.ToInt32(rd["type"]) == 1) res.Unmatched1.Add(entry);
+                        else res.Unmatched2.Add(entry);
+                    }
+                }
+                catch { /* нет таблицы */ }
+            }
+        }
+        catch { /* ошибка парсинга */ }
+        return res;
+    }
+
+    private sealed record DiaphoraParseResult
+    {
+        public List<DiaphoraMatch> MatchedFunctions { get; } = new();
+        public List<(string Address, string Name)> Unmatched1 { get; } = new();
+        public List<(string Address, string Name)> Unmatched2 { get; } = new();
+        public Dictionary<string, long> AlgorithmDistribution { get; } = new();
+    }
+
+    private sealed record DiaphoraMatch(string Address1, string Name1, string Address2, string Name2,
+                                        double Similarity, double Confidence, string AlgorithmName, string MatchType)
+    {
+        public Dictionary<string, object?> ToDict() => new()
+        {
+            ["address1"] = Address1, ["name1"] = Name1,
+            ["address2"] = Address2, ["name2"] = Name2,
+            ["similarity"] = Math.Round(Similarity, 4), ["confidence"] = Confidence,
+            ["algorithm_name"] = AlgorithmName, ["match_type"] = MatchType,
+            ["nodes1"] = 0, ["nodes2"] = 0, ["source"] = "diaphora",
+        };
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    //  Обогащение .diff.json (imports, pseudocode, hexdump per pair)
+    // ─────────────────────────────────────────────────────────────────
+
+    private void EnrichDiffJson(string diffJson, string? primaryJson, string? secondaryJson)
+    {
+        var diffData = ReadJson(diffJson);
+        if (diffData == null) return;
+
+        var primImports = new HashSet<string>();
+        var secImports = new HashSet<string>();
+        var primFuncs = new Dictionary<string, Dictionary<string, object?>>();
+        var secFuncs = new Dictionary<string, Dictionary<string, object?>>();
+
+        foreach (var (jsonPath, impSet, funcDict) in new[]
+                 {
+                     (primaryJson, primImports, primFuncs),
+                     (secondaryJson, secImports, secFuncs),
+                 })
+        {
+            if (jsonPath == null || !File.Exists(jsonPath)) continue;
+            var d = ReadJson(jsonPath);
+            if (d == null) continue;
+            if (d.TryGetValue("imports", out var imports) && imports is List<object?> impList)
+                foreach (var imp in impList.OfType<Dictionary<string, object?>>())
+                {
+                    var n = Convert.ToString(imp.GetValue("name"))?.Trim();
+                    if (!string.IsNullOrEmpty(n)) impSet.Add(n);
+                }
+            if (d.TryGetValue("functions", out var funcs) && funcs is List<object?> fnList)
+                foreach (var fn in fnList.OfType<Dictionary<string, object?>>())
+                {
+                    var addr = Convert.ToString(fn.GetValue("start_ea"));
+                    if (string.IsNullOrEmpty(addr)) continue;
+                    funcDict[addr] = new Dictionary<string, object?>
+                    {
+                        ["name"] = Convert.ToString(fn.GetValue("name"))?.Trim() ?? "",
+                        ["pseudocode"] = Convert.ToString(fn.GetValue("pseudocode")) ?? "",
+                        ["hexdump"] = Convert.ToString(fn.GetValue("hexdump")) ?? "",
+                        ["start_ea"] = addr,
+                        ["insn_types"] = fn.GetValue("insn_types") ?? new Dictionary<string, object?>(),
+                        ["callees"] = fn.GetValue("callees") ?? new List<object?>(),
+                    };
+                }
+        }
+
+        diffData["imports_only_in_primary"] = primImports.Except(secImports).OrderBy(x => x).ToList();
+        diffData["imports_only_in_secondary"] = secImports.Except(primImports).OrderBy(x => x).ToList();
+
+        var matches = diffData.TryGetValue("matched_functions", out var m) && m is List<object?> ml
+            ? ml.OfType<Dictionary<string, object?>>().ToList() : new List<Dictionary<string, object?>>();
+
+        var allT1 = new Dictionary<string, long>();
+        var allT2 = new Dictionary<string, long>();
+        foreach (var mf in matches)
+        {
+            var a1 = Convert.ToString(mf["address1"]) ?? "";
+            var a2 = Convert.ToString(mf["address2"]) ?? "";
+            var f1 = FindFunc(primFuncs, a1, Convert.ToString(mf.GetValue("name1")))
+                ?? FindFuncByName(primFuncs, Convert.ToString(mf.GetValue("name1")));
+            var f2 = FindFunc(secFuncs, a2, Convert.ToString(mf.GetValue("name2")))
+                ?? FindFuncByName(secFuncs, Convert.ToString(mf.GetValue("name2")));
+
+            mf["pseudocode1"] = f1?.GetValue("pseudocode") ?? "";
+            mf["pseudocode2"] = f2?.GetValue("pseudocode") ?? "";
+            mf["hexdump1"] = f1?.GetValue("hexdump") ?? "";
+            mf["hexdump2"] = f2?.GetValue("hexdump") ?? "";
+
+            // pseudocode diff rows
+            mf["pseudocode_diff"] = ComputePseudocodeDiff(
+                Convert.ToString(f1?.GetValue("pseudocode")) ?? "",
+                Convert.ToString(f2?.GetValue("pseudocode")) ?? "");
+
+            // insn types / callees
+            if (f1 != null && f2 != null)
+            {
+                var it1 = f1["insn_types"] as Dictionary<string, object?> ?? new();
+                var it2 = f2["insn_types"] as Dictionary<string, object?> ?? new();
+                var mnes = it1.Keys.Union(it2.Keys).OrderBy(x => x, StringComparer.Ordinal).ToList();
+                var insnDiff = new List<object?>();
+                foreach (var mn in mnes)
+                {
+                    var c1 = it1.TryGetValue(mn, out var v1) ? Convert.ToInt64(v1) : 0;
+                    var c2 = it2.TryGetValue(mn, out var v2) ? Convert.ToInt64(v2) : 0;
+                    if (c1 != c2)
+                        insnDiff.Add(new Dictionary<string, object?> { ["mnemonic"] = mn, ["count1"] = c1, ["count2"] = c2, ["diff"] = c2 - c1 });
+                }
+                mf["insn_type_diff"] = insnDiff;
+                mf["insn_types1"] = it1;
+                mf["insn_types2"] = it2;
+
+                var c1set = (f1["callees"] as List<object?> ?? new()).Select(x => Convert.ToString(x) ?? "").ToHashSet();
+                var c2set = (f2["callees"] as List<object?> ?? new()).Select(x => Convert.ToString(x) ?? "").ToHashSet();
+                mf["callees_only1"] = c1set.Except(c2set).OrderBy(x => x).ToList();
+                mf["callees_only2"] = c2set.Except(c1set).OrderBy(x => x).ToList();
+                mf["callees_common"] = c1set.Intersect(c2set).OrderBy(x => x).ToList();
+            }
+            else
+            {
+                mf["insn_type_diff"] = new List<object?>();
+                mf["insn_types1"] = new Dictionary<string, object?>();
+                mf["insn_types2"] = new Dictionary<string, object?>();
+                mf["callees_only1"] = new List<object?>();
+                mf["callees_only2"] = new List<object?>();
+                mf["callees_common"] = new List<object?>();
+            }
+
+            // global aggregate
+            if (f1 != null && f1["insn_types"] is Dictionary<string, object?> t1)
+                foreach (var (mn, cnt) in t1) AddTo(allT1, mn, Convert.ToInt64(cnt));
+            if (f2 != null && f2["insn_types"] is Dictionary<string, object?> t2)
+                foreach (var (mn, cnt) in t2) AddTo(allT2, mn, Convert.ToInt64(cnt));
+        }
+
+        var globalInsn = new List<object?>();
+        foreach (var mn in allT1.Keys.Union(allT2.Keys).OrderBy(x => x, StringComparer.Ordinal))
+        {
+            var c1 = allT1.TryGetValue(mn, out var v1) ? v1 : 0;
+            var c2 = allT2.TryGetValue(mn, out var v2) ? v2 : 0;
+            globalInsn.Add(new Dictionary<string, object?> { ["mnemonic"] = mn, ["count1"] = c1, ["count2"] = c2, ["diff"] = c2 - c1 });
+        }
+        diffData["global_insn_diff"] = globalInsn;
+
+        WriteJson(diffJson, diffData);
+    }
+
+    private static void AddTo(Dictionary<string, long> d, string key, long value)
+        => d[key] = (d.TryGetValue(key, out var v) ? v : 0) + value;
+
+    private static Dictionary<string, object?>? FindFunc(
+        Dictionary<string, Dictionary<string, object?>> funcs, string addr, string? name)
+    {
+        if (funcs.TryGetValue(addr, out var f)) return f;
+        return FindFuncByName(funcs, name);
+    }
+
+    private static Dictionary<string, object?>? FindFuncByName(
+        Dictionary<string, Dictionary<string, object?>> funcs, string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return null;
+        var n = name.StartsWith("sub_") ? name["sub_".Length..] : name;
+        return funcs.Values.FirstOrDefault(v =>
+            Convert.ToString(v.GetValue("name")) == n ||
+            Convert.ToString(v.GetValue("name")) == name);
+    }
+
+    private static List<object?> ComputePseudocodeDiff(string l1, string l2)
+    {
+        var lines1 = l1.Replace("\r\n", "\n").Split('\n').ToList();
+        var lines2 = l2.Replace("\r\n", "\n").Split('\n').ToList();
+        if (lines1.Count == 1 && lines1[0] == "") lines1.Clear();
+        if (lines2.Count == 1 && lines2[0] == "") lines2.Clear();
+
+        var rows = new List<object?>();
+        // Простой LCS-подобный diff (аналог difflib.SequenceMatcher opcodes)
+        foreach (var (tag, i1, i2, j1, j2) in SimpleDiff(lines1, lines2))
+        {
+            if (tag == "equal")
+                for (int k = i1; k < i2 && (j1 + (k - i1)) < lines2.Count; k++)
+                    rows.Add(new Dictionary<string, object?> { ["type"] = "equal", ["left"] = lines1[k], ["right"] = lines2[j1 + (k - i1)] });
+            else if (tag == "delete")
+                for (int k = i1; k < i2; k++)
+                    rows.Add(new Dictionary<string, object?> { ["type"] = "removed", ["left"] = lines1[k], ["right"] = "" });
+            else if (tag == "insert")
+                for (int k = j1; k < j2; k++)
+                    rows.Add(new Dictionary<string, object?> { ["type"] = "added", ["left"] = "", ["right"] = lines2[k] });
+            else if (tag == "replace")
+            {
+                for (int k = i1; k < i2; k++)
+                    rows.Add(new Dictionary<string, object?> { ["type"] = "removed", ["left"] = lines1[k], ["right"] = "" });
+                for (int k = j1; k < j2; k++)
+                    rows.Add(new Dictionary<string, object?> { ["type"] = "added", ["left"] = "", ["right"] = lines2[k] });
+            }
+        }
+        return rows;
+    }
+
+    /// <summary>Простой последовательный diff (упрощённый SequenceMatcher: equal/delete/insert/replace).</summary>
+    private static IEnumerable<(string Tag, int I1, int I2, int J1, int J2)> SimpleDiff(List<string> a, List<string> b)
+    {
+        int i = 0, j = 0;
+        var ops = new List<(string, int, int, int, int)>();
+        while (i < a.Count || j < b.Count)
+        {
+            if (i < a.Count && j < b.Count && a[i] == b[j])
+            {
+                int s = i;
+                while (i < a.Count && j < b.Count && a[i] == b[j]) { i++; j++; }
+                ops.Add(("equal", s, i, j - (i - s) - (j - (i - s)) /*placeholder*/, j));
+            }
+            else if (i < a.Count && j < b.Count)
+            {
+                int s1 = i, s2 = j;
+                while (i < a.Count && j < b.Count && a[i] != b[j]) { i++; j++; }
+                ops.Add(("replace", s1, i, s2, j));
+            }
+            else if (i < a.Count)
+            {
+                int s = i; while (i < a.Count) i++;
+                ops.Add(("delete", s, i, j, j));
+            }
+            else
+            {
+                int s = j; while (j < b.Count) j++;
+                ops.Add(("insert", i, i, s, j));
+            }
+        }
+        return ops;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    //  Hexdump diff (аналог _compute_hexdump_diff)
+    // ─────────────────────────────────────────────────────────────────
+
+    public static (List<object?> Rows, double Similarity) ComputeHexdumpDiff(string orig1, string orig2)
+    {
+        byte[]? d1, d2;
+        try { d1 = File.ReadAllBytes(orig1); d2 = File.ReadAllBytes(orig2); }
+        catch { return (new List<object?>(), 0.0); }
+        if (d1.Length == 0 || d2.Length == 0) return (new List<object?>(), 0.0);
+
+        const int minMatch = 16;
+        var rows = new List<object?>();
+        long matchingBytes = 0;
+
+        // Индекс 16-байтовых ключей data2
+        var startIndex = new Dictionary<string, List<int>>();
+        for (int pos = 0; pos + minMatch <= d2.Length; pos++)
+        {
+            var key = Convert.ToBase64String(d2, pos, minMatch);
+            if (!startIndex.TryGetValue(key, out var l)) { l = new List<int>(); startIndex[key] = l; }
+            l.Add(pos);
+        }
+        var used2 = new bool[d2.Length];
+
+        int p1 = 0;
+        while (p1 < d1.Length)
+        {
+            int maxLen = 0, bestPos2 = -1;
+            if (d1.Length - p1 >= minMatch)
+            {
+                var key = Convert.ToBase64String(d1, p1, minMatch);
+                if (startIndex.TryGetValue(key, out var positions))
+                {
+                    foreach (var pc in positions)
+                    {
+                        int len = 0;
+                        while (p1 + len < d1.Length && pc + len < d2.Length && d1[p1 + len] == d2[pc + len]) len++;
+                        if (len > maxLen) { maxLen = len; bestPos2 = pc; }
+                    }
+                }
+            }
+
+            if (maxLen >= minMatch && bestPos2 >= 0)
+            {
+                var block = d1.Skip(p1).Take(maxLen).ToArray();
+                if (p1 == bestPos2)
+                {
+                    // equal — сжато
+                    var last = rows.LastOrDefault() as Dictionary<string, object?>;
+                    long lastAddr = 0, lastCount = 0;
+                    if (last != null && Convert.ToString(last.GetValue("type")) == "equal")
+                    {
+                        lastAddr = Convert.ToInt64(last.GetValue("count") ?? 0L) * 16;
+                        lastCount = Convert.ToInt64(last.GetValue("count") ?? 0L);
+                    }
+                    if (last != null && Convert.ToString(last.GetValue("type")) == "equal" && lastAddr == p1)
+                        last["count"] = lastCount + maxLen / 16;
+                    else
+                        rows.Add(new Dictionary<string, object?> { ["type"] = "equal", ["count"] = maxLen / 16 });
+                }
+                else
+                {
+                    for (int bi = 0; bi < maxLen; bi += 16)
+                    {
+                        int end = Math.Min(bi + 16, maxLen);
+                        var b1 = d1.Skip(p1 + bi).Take(end - bi).ToArray();
+                        var b2 = d2.Skip(bestPos2 + bi).Take(end - bi).ToArray();
+                        var shift = bestPos2 - p1;
+                        rows.Add(new Dictionary<string, object?>
+                        {
+                            ["type"] = "equal_shifted",
+                            ["left_addr"] = $"{p1 + bi:x8}", ["right_addr"] = $"{bestPos2 + bi:x8}",
+                            ["left_bytes"] = MakeHexBytes(b1), ["right_bytes"] = MakeHexBytes(b2),
+                            ["left_ascii"] = MakeAscii(b1), ["right_ascii"] = MakeAscii(b2),
+                            ["shift"] = shift >= 0 ? $"+{shift:x}" : $"-{-shift:x}",
+                        });
+                    }
+                }
+                for (int k = 0; k < maxLen; k++) used2[bestPos2 + k] = true;
+                matchingBytes += maxLen;
+                p1 += maxLen;
+            }
+            else
+            {
+                int actual = Math.Min(minMatch, d1.Length - p1);
+                rows.Add(new Dictionary<string, object?>
+                {
+                    ["type"] = "deleted",
+                    ["addr"] = $"{p1:x8}",
+                    ["left_bytes"] = MakeHexBytes(d1.Skip(p1).Take(actual).ToArray()),
+                    ["left_ascii"] = MakeAscii(d1.Skip(p1).Take(actual).ToArray()),
+                });
+                p1 += actual;
+            }
+        }
+
+        // Inserted
+        int p2 = 0;
+        while (p2 < d2.Length)
+        {
+            if (!used2[p2])
+            {
+                int end = p2 + 1;
+                while (end < d2.Length && !used2[end]) end++;
+                for (int off = p2; off < end; off += 16)
+                {
+                    int ce = Math.Min(off + 16, end);
+                    var chunk = d2.Skip(off).Take(ce - off).ToArray();
+                    rows.Add(new Dictionary<string, object?>
+                    {
+                        ["type"] = "inserted", ["addr"] = $"{off:x8}",
+                        ["right_bytes"] = MakeHexBytes(chunk), ["right_ascii"] = MakeAscii(chunk),
+                    });
+                }
+                p2 = end;
+            }
+            else p2++;
+        }
+
+        var totalLines = Math.Max(d1.Length / 16 + (d1.Length % 16 != 0 ? 1 : 0),
+                                  d2.Length / 16 + (d2.Length % 16 != 0 ? 1 : 0));
+        rows.Add(new Dictionary<string, object?> { ["type"] = "_meta", ["total_lines"] = totalLines });
+        var similarity = d1.Length > 0 ? Math.Round((double)matchingBytes / d1.Length, 6) : 0.0;
+        return (rows, similarity);
+    }
+
+    private static List<object?> MakeHexBytes(byte[] data)
+    {
+        var l = new List<object?>();
+        for (int i = 0; i < 16; i++)
+            l.Add(new Dictionary<string, object?> { ["b"] = i < data.Length ? data[i].ToString("x2") : "  ", ["d"] = 0 });
+        return l;
+    }
+
+    private static string MakeAscii(byte[] data)
+    {
+        var sb = new StringBuilder();
+        foreach (var b in data) sb.Append(b is >= 32 and < 127 ? (char)b : '.');
+        return sb.ToString();
+    }
+
+    private static string? FindOriginalBinary(string i64Path)
+    {
+        var stem = Path.GetFileNameWithoutExtension(i64Path); // uprngctl64.exe.i64 -> uprngctl64.exe
+        var dir = Path.GetDirectoryName(i64Path)!;
+        var cand = Path.Combine(dir, stem);
+        if (File.Exists(cand)) return cand;
+        foreach (var ext in new[] { ".exe", ".dll", ".bin", ".sys", ".elf", ".so", ".o", ".out", ".wasm", ".pyc", ".class", ".jar", ".apk", ".dex" })
+        {
+            cand = Path.Combine(dir, stem + ext);
+            if (File.Exists(cand)) return cand;
+        }
+        return null;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    //  Вспомогательное
+    // ─────────────────────────────────────────────────────────────────
+
+    private ProcessStartInfo NewIdatPsi()
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = IdatPath,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+        };
+        psi.ArgumentList.Add("-A");
+        return psi;
+    }
+
+    internal record ProcResult(int ExitCode, string Stdout, string Stderr);
+
+    private static async Task<ProcResult> RunProcAsync(ProcessStartInfo psi, CancellationToken ct)
+    {
+        using var proc = Process.Start(psi);
+        if (proc == null) return new ProcResult(-1, "", "Не удалось запустить процесс");
+        var so = proc.StandardOutput.ReadToEndAsync();
+        var se = proc.StandardError.ReadToEndAsync();
+        await proc.WaitForExitAsync(ct);
+        await Task.WhenAll(so, se);
+        return new ProcResult(proc.ExitCode, await so, await se);
+    }
+
+    private static async Task<ProcResult> RunProcWithTimeoutAsync(ProcessStartInfo psi, TimeSpan timeout, CancellationToken ct)
+    {
+        using var proc = Process.Start(psi);
+        if (proc == null) return new ProcResult(-1, "", "");
+        var so = proc.StandardOutput.ReadToEndAsync();
+        var se = proc.StandardError.ReadToEndAsync();
+        try
+        {
+            await proc.WaitForExitAsync(ct).WaitAsync(timeout);
+        }
+        catch (TimeoutException)
+        {
+            try { proc.Kill(entireProcessTree: true); } catch { }
+            return new ProcResult(-1, await so, await se);
+        }
+        await Task.WhenAll(so, se);
+        return new ProcResult(proc.ExitCode, await so, await se);
+    }
+
+    private static Dictionary<string, object?>? ReadJson(string path)
+    {
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(File.ReadAllText(path));
+        }
+        catch { return null; }
+    }
+
+    private static void WriteJson(string path, Dictionary<string, object?> data)
+    {
+        try
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(data,
+                new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(path, json);
+        }
+        catch { /* не критично */ }
+    }
+
+    private static int SafeInt(object? v)
+        => v == null ? 0 : (v is long l ? (int)l : Convert.ToInt32(v));
+
+    private static void Cleanup(params string[] paths)
+    {
+        foreach (var p in paths)
+            try { if (File.Exists(p)) File.Delete(p); } catch { }
+    }
+
+    public void Dispose() => _cts?.Cancel();
+}
+
+internal static class JsonDictExtensions
+{
+    public static object? GetValue(this Dictionary<string, object?> d, string key)
+        => d.TryGetValue(key, out var v) ? v : null;
+}

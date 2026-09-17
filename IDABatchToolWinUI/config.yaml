@@ -1,0 +1,9 @@
+ida:
+  executable: idat.exe
+bindiff:
+  executable: bindiff.exe
+max_ida: 4
+default_inputdir: .
+log_level: INFO
+theme: light
+manpages_db_path: ""

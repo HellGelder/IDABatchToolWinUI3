@@ -13,6 +13,13 @@
     <EnableMsixTooling>true</EnableMsixTooling>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+
+    <!--
+      Unpackaged запуск (dotnet run) + self-contained Windows App SDK:
+      не требует установки Windows App Runtime в системе.
+    -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,6 +32,20 @@
     <Content Include="Assets\StoreLogo.png" />
     <Content Include="Assets\AppIcon.ico" />
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
+  </ItemGroup>
+
+  <!-- Python-мосты генерации отчётов и man-pages + скрипты для IDA копируются в выходную папку -->
+  <ItemGroup>
+    <Content Include="_python\*.py" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="_python\templates\*.html" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="_python\vendor\*.js" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="scripts\export_data.py" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="config.yaml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="bindiff.exe" CopyToOutputDirectory="PreserveNewest" Condition="Exists('bindiff.exe')" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="scripts\diaphora\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -49,6 +70,7 @@
     <PropertyGroup> above to opt out.
   -->
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="0.6.1" />
