@@ -27,82 +27,90 @@
     </Page.Resources>
 
     <ScrollViewer>
-        <Grid Padding="{StaticResource PagePadding}" RowSpacing="8">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
+        <StackPanel Padding="{StaticResource PagePadding}" Spacing="8">
 
-            <!-- Директории -->
-            <Border Grid.Row="0" Style="{StaticResource GroupBoxStyle}">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="Директории для сравнения" Style="{StaticResource GroupHeaderStyle}" />
+            <!-- Директории + Движок сравнения (справа, узкий) -->
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-                    <Grid ColumnSpacing="6">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Левая (эталонная):"
-                                   VerticalAlignment="Center" MinWidth="120" FontSize="13" />
-                        <TextBox x:Name="LeftDirTextBox" Grid.Column="1"
-                                 PlaceholderText="Путь к папке с .i64 файлами..." />
-                        <Button x:Name="BrowseLeftButton" Grid.Column="2" Content="Обзор..." MinWidth="70"
-                                Padding="8,4" />
-                    </Grid>
+                <Border Grid.Column="0" Style="{StaticResource GroupBoxStyle}">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Директории для сравнения" Style="{StaticResource GroupHeaderStyle}" />
 
-                    <Grid ColumnSpacing="6">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Правая (текущая):"
-                                   VerticalAlignment="Center" MinWidth="120" FontSize="13" />
-                        <TextBox x:Name="RightDirTextBox" Grid.Column="1"
-                                 PlaceholderText="Путь к папке с .i64 файлами..." />
-                        <Button x:Name="BrowseRightButton" Grid.Column="2" Content="Обзор..." MinWidth="70"
-                                Padding="8,4" />
-                    </Grid>
+                        <Grid ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Левая (эталонная):"
+                                       VerticalAlignment="Center" MinWidth="120" FontSize="13" />
+                            <TextBox x:Name="LeftDirTextBox" Grid.Column="1"
+                                     PlaceholderText="Путь к папке с .i64 файлами..." />
+                            <Button x:Name="BrowseLeftButton" Grid.Column="2" Content="Обзор..." MinWidth="70"
+                                    Padding="8,4" />
+                        </Grid>
 
-                    <Grid ColumnSpacing="6">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Папка результатов:"
-                                   VerticalAlignment="Center" MinWidth="120" FontSize="13" />
-                        <TextBox x:Name="OutputDirTextBox" Grid.Column="1"
-                                 PlaceholderText="Автоматически: DiffResults в левой папке" />
-                        <Button x:Name="BrowseOutputButton" Grid.Column="2" Content="Обзор..." MinWidth="70"
-                                Padding="8,4" />
-                    </Grid>
-                </StackPanel>
-            </Border>
+                        <Grid ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Правая (текущая):"
+                                       VerticalAlignment="Center" MinWidth="120" FontSize="13" />
+                            <TextBox x:Name="RightDirTextBox" Grid.Column="1"
+                                     PlaceholderText="Путь к папке с .i64 файлами..." />
+                            <Button x:Name="BrowseRightButton" Grid.Column="2" Content="Обзор..." MinWidth="70"
+                                    Padding="8,4" />
+                        </Grid>
 
-            <!-- Движок сравнения -->
-            <Border Grid.Row="1" Style="{StaticResource GroupBoxStyle}">
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Движок сравнения" Style="{StaticResource GroupHeaderStyle}" />
-                    <RadioButton x:Name="EngineBindiff" GroupName="DiffEngine" Content="Только BinDiff" IsChecked="True"
-                                Padding="2,2" />
-                    <RadioButton x:Name="EngineDiaphora" GroupName="DiffEngine" Content="Только Diaphora"
-                                Padding="2,2" />
-                    <RadioButton x:Name="EngineBoth" GroupName="DiffEngine" Content="Оба движка"
-                                Padding="2,2" />
-                </StackPanel>
-            </Border>
+                        <Grid ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Папка результатов:"
+                                       VerticalAlignment="Center" MinWidth="120" FontSize="13" />
+                            <TextBox x:Name="OutputDirTextBox" Grid.Column="1"
+                                     PlaceholderText="Автоматически: DiffResults в левой папке" />
+                            <Button x:Name="BrowseOutputButton" Grid.Column="2" Content="Обзор..." MinWidth="70"
+                                    Padding="8,4" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Движок сравнения: узкий блок справа -->
+                <Border Grid.Column="1" Style="{StaticResource GroupBoxStyle}">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Движок сравнения" Style="{StaticResource GroupHeaderStyle}" />
+                        <RadioButton x:Name="EngineBindiff" GroupName="DiffEngine" Content="Только BinDiff"
+                                     IsChecked="True" MinWidth="140" Padding="2,2" />
+                        <RadioButton x:Name="EngineDiaphora" GroupName="DiffEngine" Content="Только Diaphora"
+                                     MinWidth="140" Padding="2,2" />
+                        <RadioButton x:Name="EngineBoth" GroupName="DiffEngine" Content="Оба движка"
+                                     MinWidth="140" Padding="2,2" />
+                    </StackPanel>
+                </Border>
+            </Grid>
 
             <!-- Сопоставленные пары -->
-            <Border Grid.Row="2" Style="{StaticResource GroupBoxStyle}">
+            <Border Style="{StaticResource GroupBoxStyle}">
                 <StackPanel Spacing="6">
-                    <TextBlock Text="Сопоставленные пары (отметьте для сравнения)" Style="{StaticResource GroupHeaderStyle}" />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Сопоставленные пары (отметьте для сравнения)"
+                                   Style="{StaticResource GroupHeaderStyle}" VerticalAlignment="Center" />
+                        <ProgressRing x:Name="DiffProgressRing" Grid.Column="1" Width="24" Height="24"
+                                      IsActive="False" Visibility="Collapsed" />
+                    </Grid>
                     <ListView x:Name="PairsListView" MaxHeight="260" MinHeight="80"
                               SelectionMode="None">
                         <ListView.HeaderTemplate>
@@ -113,16 +121,18 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="80" />
                                         <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="70" />
                                         <ColumnDefinition Width="90" />
                                         <ColumnDefinition Width="90" />
                                     </Grid.ColumnDefinitions>
                                     <CheckBox x:Name="HeaderCheckBox" Grid.Column="0" IsChecked="True"
-                                              VerticalAlignment="Center" />
+                                              VerticalAlignment="Center" Click="HeaderCheckBox_Click" />
                                     <TextBlock Grid.Column="1" Text="Файл" FontWeight="SemiBold" FontSize="12" />
                                     <TextBlock Grid.Column="2" Text="Размер" FontWeight="SemiBold" FontSize="12" />
                                     <TextBlock Grid.Column="3" Text="Статус" FontWeight="SemiBold" FontSize="12" />
-                                    <TextBlock Grid.Column="4" Text="BinDiff" FontWeight="SemiBold" FontSize="12" />
-                                    <TextBlock Grid.Column="5" Text="Diaphora" FontWeight="SemiBold" FontSize="12" />
+                                    <TextBlock Grid.Column="4" Text="Тред" FontWeight="SemiBold" FontSize="12" />
+                                    <TextBlock Grid.Column="5" Text="BinDiff" FontWeight="SemiBold" FontSize="12" />
+                                    <TextBlock Grid.Column="6" Text="Diaphora" FontWeight="SemiBold" FontSize="12" />
                                 </Grid>
                             </DataTemplate>
                         </ListView.HeaderTemplate>
@@ -134,40 +144,28 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="80" />
                                         <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="70" />
                                         <ColumnDefinition Width="90" />
                                         <ColumnDefinition Width="90" />
                                     </Grid.ColumnDefinitions>
-                                    <CheckBox Grid.Column="0" IsChecked="{x:Bind IsSelected, Mode=TwoWay}" />
+                                    <CheckBox Grid.Column="0" IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                                              Click="RowCheckBox_Click" />
                                     <TextBlock Grid.Column="1" Text="{x:Bind RelKey}" TextWrapping="NoWrap"
                                                ToolTipService.ToolTip="{x:Bind ToolTip}" />
                                     <TextBlock Grid.Column="2" Text="{x:Bind SizeText}" />
                                     <TextBlock Grid.Column="3" Text="{x:Bind StatusText}" />
-                                    <TextBlock Grid.Column="4" Text="{x:Bind BindiffStatus}" />
-                                    <TextBlock Grid.Column="5" Text="{x:Bind DiaphoraStatus}" />
+                                    <TextBlock Grid.Column="4" Text="{x:Bind ThreadIdText}" />
+                                    <TextBlock Grid.Column="5" Text="{x:Bind BindiffStatusDisplay}" />
+                                    <TextBlock Grid.Column="6" Text="{x:Bind DiaphoraStatusDisplay}" />
                                 </Grid>
                             </DataTemplate>
                         </ListView.ItemTemplate>
                     </ListView>
                     <TextBlock x:Name="MapStatusLabel" Text="Укажите обе директории для анализа."
                                FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-            </Border>
 
-            <!-- Прогресс -->
-            <Border Grid.Row="3" Style="{StaticResource GroupBoxStyle}">
-                <StackPanel Spacing="6">
-                    <TextBlock Text="Прогресс выполнения" Style="{StaticResource GroupHeaderStyle}" />
-                    <TextBlock x:Name="ProgressLabel" Text="Прогресс выполнения: ожидание..."
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" />
-                    <ProgressBar x:Name="DiffProgressBar" Minimum="0" Maximum="100" Value="0" Height="4" />
-                </StackPanel>
-            </Border>
-
-            <!-- Кнопки управления -->
-            <Border Grid.Row="4" Style="{StaticResource GroupBoxStyle}">
-                <StackPanel Spacing="6">
-                    <TextBlock Text="Управление" Style="{StaticResource GroupHeaderStyle}" />
-                    <Grid ColumnSpacing="6">
+                    <!-- Кнопки: запуск/отмена слева, генерация отчёта — правый нижний угол -->
+                    <Grid ColumnSpacing="6" Margin="0,6,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
@@ -178,14 +176,18 @@
                                 Height="34" Width="160" Padding="12,6" IsEnabled="False" />
                         <Button x:Name="CancelDiffButton" Grid.Column="1" Content="Отмена"
                                 Height="34" Width="80" Padding="12,6" IsEnabled="False" />
-                        <Button x:Name="GenerateReportButton" Grid.Column="3" Content="Сгенерировать HTML-отчёт"
-                                Height="34" Width="180" Padding="12,6" IsEnabled="False" />
+                        <Button x:Name="GenerateReportButton" Grid.Column="3" Height="46" MinWidth="172" Padding="12,4" IsEnabled="False">
+                            <StackPanel Spacing="0" VerticalAlignment="Center">
+                                <TextBlock Text="Сгенерировать" HorizontalAlignment="Center" FontSize="13" />
+                                <TextBlock Text="HTML-отчёт" HorizontalAlignment="Center" FontSize="13" />
+                            </StackPanel>
+                        </Button>
                     </Grid>
                 </StackPanel>
             </Border>
 
             <!-- Ошибки -->
-            <Border Grid.Row="5" Style="{StaticResource GroupBoxStyle}">
+            <Border Style="{StaticResource GroupBoxStyle}">
                 <StackPanel Spacing="4">
                     <TextBlock Text="Сообщения об ошибках" Style="{StaticResource GroupHeaderStyle}" />
                     <TextBox x:Name="DiffErrorTextBox" AcceptsReturn="True" TextWrapping="Wrap"
@@ -193,6 +195,6 @@
                              PlaceholderText="Здесь будут появляться сообщения об ошибках..." />
                 </StackPanel>
             </Border>
-        </Grid>
+        </StackPanel>
     </ScrollViewer>
 </Page>

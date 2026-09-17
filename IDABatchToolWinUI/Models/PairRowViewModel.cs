@@ -7,8 +7,9 @@ namespace IDABatchToolWinUI.Models;
 public sealed class PairRowViewModel : INotifyPropertyChanged
 {
     private bool _isSelected = true;
-    private string _bindiffStatus = "—";
-    private string _diaphoraStatus = "—";
+    private string _bindiffStatus = "waiting";
+    private string _diaphoraStatus = "waiting";
+    private string _threadIdText = "—";
 
     public required DiffPair Pair { get; init; }
     public string RelKey => Pair.RelKey;
@@ -22,17 +23,43 @@ public sealed class PairRowViewModel : INotifyPropertyChanged
         set { if (_isSelected != value) { _isSelected = value; OnPropertyChanged(); } }
     }
 
+    /// <summary>Сырой статус BinDiff: waiting | analysis | done | error | not_selected | no_analysis.</summary>
     public string BindiffStatus
     {
         get => _bindiffStatus;
-        set { if (_bindiffStatus != value) { _bindiffStatus = value; OnPropertyChanged(); } }
+        set { if (_bindiffStatus != value) { _bindiffStatus = value; OnPropertyChanged(); OnPropertyChanged(nameof(BindiffStatusDisplay)); } }
     }
 
+    /// <summary>Сырой статус Diaphora (та же семантика).</summary>
     public string DiaphoraStatus
     {
         get => _diaphoraStatus;
-        set { if (_diaphoraStatus != value) { _diaphoraStatus = value; OnPropertyChanged(); } }
+        set { if (_diaphoraStatus != value) { _diaphoraStatus = value; OnPropertyChanged(); OnPropertyChanged(nameof(DiaphoraStatusDisplay)); } }
     }
+
+    /// <summary>Отображаемый текст статуса BinDiff на русском.</summary>
+    public string BindiffStatusDisplay => StatusDisplay(_bindiffStatus);
+
+    /// <summary>Отображаемый текст статуса Diaphora на русском.</summary>
+    public string DiaphoraStatusDisplay => StatusDisplay(_diaphoraStatus);
+
+    /// <summary>ID управляющего потока анализа (или «—», если поток ещё не назначен/освобождён).</summary>
+    public string ThreadIdText
+    {
+        get => _threadIdText;
+        set { if (_threadIdText != value) { _threadIdText = value; OnPropertyChanged(); } }
+    }
+
+    private static string StatusDisplay(string key) => key switch
+    {
+        "waiting" => "ожидает",
+        "analysis" => "анализ",
+        "done" => "завершён",
+        "error" => "ошибка",
+        "not_selected" => "не выбран",
+        "no_analysis" => "без анализа",
+        _ => key,
+    };
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string? name = null)

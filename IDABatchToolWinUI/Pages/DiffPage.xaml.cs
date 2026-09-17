@@ -34,19 +34,20 @@ public DiffPage()
         LeftDirTextBox.TextChanged += (_, _) => AnalyzeDirectories();
         RightDirTextBox.TextChanged += (_, _) => AnalyzeDirectories();
 
-        // Мастер-чекбокс «Все пары» в заголовке таблицы (подписка один раз)
-        PairsListView.Loaded += (_, _) =>
-        {
-            if (PairsListView.Header is not FrameworkElement header) return;
-            var cb = FindVisualChild<CheckBox>(header);
-            if (cb != null)
-                cb.Click += (_, _) => SetAllRowsSelected(cb.IsChecked == true);
-        };
-
         Loaded += (_, _) => AnalyzeDirectories();
     }
 
     public bool IsDiffRunning() => _diffInProgress;
+
+    /// <summary>Главный чекбокс «выбрать все» в заголовке таблицы.</summary>
+    private void HeaderCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not CheckBox cb) return;
+        SetAllRowsSelected(cb.IsChecked == true);
+    }
+
+    /// <summary>Строчный чекбокс: пересчёт выбранных.</summary>
+    private void RowCheckBox_Click(object sender, RoutedEventArgs e) => UpdateSelectedCount();
 
     private void SetAllRowsSelected(bool selected)
     {
@@ -121,6 +122,7 @@ public DiffPage()
         }
 
         PairsListView.ItemsSource = rows;
+        ApplyInitialStatuses(rows);
 
         if (common.Count > 0)
         {
@@ -147,6 +149,33 @@ public DiffPage()
         int idx = baseText.IndexOf(", выбрано:");
         if (idx >= 0) baseText = baseText.Substring(0, idx);
         MapStatusLabel.Text = $"{baseText}, выбрано: {selected}";
+        ApplyInitialStatuses(rows ?? new List<PairRowViewModel>());
+    }
+
+    /// <summary>
+    /// Проставляет статусы колонок движков и «не выбран» в зависимости от выбора и движка.
+    /// Статусы колонок (сырые): waiting | analysis | done | error | not_selected | no_analysis.
+    /// Во время анализа не затирает живые статусы «анализ/завершён».
+    /// </summary>
+    private void ApplyInitialStatuses(List<PairRowViewModel> rows)
+    {
+        var engine = SelectedEngine();
+        bool useBd = engine is "bindiff" or "both";
+        bool useDp = engine is "diaphora" or "both";
+        foreach (var r in rows)
+        {
+            r.ThreadIdText = "—";
+            if (!_diffInProgress)
+            {
+                r.BindiffStatus = useBd ? "waiting" : "no_analysis";
+                r.DiaphoraStatus = useDp ? "waiting" : "no_analysis";
+            }
+            if (!r.IsSelected)
+            {
+                r.BindiffStatus = "not_selected";
+                r.DiaphoraStatus = "not_selected";
+            }
+        }
     }
 
     /// <summary>Рекурсивный поиск .i64 без падения на недоступных подкаталогах.</summary>
@@ -248,10 +277,14 @@ public DiffPage()
         StartDiffButton.IsEnabled = false;
         CancelDiffButton.IsEnabled = true;
         GenerateReportButton.IsEnabled = false;
-        DiffProgressBar.Value = 0;
-        DiffProgressBar.Maximum = 1;
-        ProgressLabel.Text = "Прогресс выполнения: запуск...";
+        DiffProgressRing.IsActive = true;
+        DiffProgressRing.Visibility = Visibility.Visible;
+        MapStatusLabel.Text = "Прогресс: запуск...";
         DiffErrorTextBox.Text = "";
+
+        // Сброс статусов колонок: выбранные -> waiting для задействованных движков
+        var allRows = PairsListView.ItemsSource as List<PairRowViewModel>;
+        if (allRows != null) ApplyInitialStatuses(allRows);
 
         _worker = new DiffWorker(rows, idatPath, bindiffPath, outputPath, engine,
             left, right, addOutputPath);
@@ -263,8 +296,14 @@ public DiffPage()
     {
         w.GlobalProgress += (step, total, desc) => RunOnUi(() =>
         {
-            if (total > 0) { DiffProgressBar.Maximum = total; DiffProgressBar.Value = step; }
-            ProgressLabel.Text = $"Прогресс выполнения: {step} / {total} — {desc}";
+            MapStatusLabel.Text = $"Прогресс: {step} / {total} — {desc}";
+        });
+        w.PairThreadStarted += (relKey, threadId) => RunOnUi(() =>
+        {
+            var row = (PairsListView.ItemsSource as List<PairRowViewModel>)
+                ?.FirstOrDefault(r => r.RelKey == relKey);
+            if (row == null) return;
+            row.ThreadIdText = threadId > 0 ? threadId.ToString() : "—";
         });
         w.PairStatus += (relKey, engine, status) => RunOnUi(() =>
         {
@@ -283,8 +322,9 @@ public DiffPage()
         _diffInProgress = false;
         StartDiffButton.IsEnabled = true;
         CancelDiffButton.IsEnabled = false;
-        DiffProgressBar.Value = DiffProgressBar.Maximum;
-        ProgressLabel.Text = $"Прогресс выполнения: завершён ({successCount}/{total})";
+        DiffProgressRing.IsActive = false;
+        DiffProgressRing.Visibility = Visibility.Collapsed;
+        MapStatusLabel.Text = $"Прогресс: завершён ({successCount}/{total})";
 
         AnalyzeDirectories();
 
@@ -321,7 +361,7 @@ public DiffPage()
     private void CancelComparison()
     {
         _worker?.Cancel();
-        ProgressLabel.Text = "Прогресс выполнения: отменён";
+        MapStatusLabel.Text = "Прогресс: отменён";
         CancelDiffButton.IsEnabled = false;
     }
 
@@ -346,16 +386,19 @@ public DiffPage()
 
         var reportsDir = Path.Combine(_outputDir, "Reports");
         Directory.CreateDirectory(reportsDir);
+        DiffProgressRing.IsActive = true;
+        DiffProgressRing.Visibility = Visibility.Visible;
 
         var worker = new HtmlGenWorker("diff", deleteJson: false, reuseCache: false, "Windows");
         worker.ProgressUpdated += (cur, total, msg) => RunOnUi(() =>
         {
-            if (total > 0) { DiffProgressBar.Maximum = total; DiffProgressBar.Value = cur; }
-            ProgressLabel.Text = $"Генерация отчёта: {cur}/{total}";
+            MapStatusLabel.Text = $"Генерация отчёта: {cur}/{total}";
         });
         worker.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
         worker.Finished += result => RunOnUi(async () =>
         {
+            DiffProgressRing.IsActive = false;
+            DiffProgressRing.Visibility = Visibility.Collapsed;
             if (result.IndexPath != null)
             {
                 await UiDialogs.InfoAsync("Готово", $"Отчёт сгенерирован:\n{result.IndexPath}");

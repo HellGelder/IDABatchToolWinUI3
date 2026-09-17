@@ -461,6 +461,9 @@ def generate_sfa_index(reports_dir, input_dir, report_links, ida_info,
 def generate_diff_report(json_path, output_html, reports_dir, input_dir, internal_set):
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
+    if not isinstance(data, dict):
+        # diff.json может оказаться списком (доанализ/ошибка) — не падаем, рисуем пустой отчёт
+        data = {}
 
     primary = data.get("real_primary") or data.get("primary", "")
     secondary = data.get("real_secondary") or data.get("secondary", "")
@@ -513,6 +516,8 @@ def generate_diff_index(reports_dir, json_files, left_dir, right_dir,
             with open(jf, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except Exception:
+            data = {}
+        if not isinstance(data, dict):
             data = {}
         matching = data.get("matched_summary", {})
         matched_count = data.get("total_matched") or (

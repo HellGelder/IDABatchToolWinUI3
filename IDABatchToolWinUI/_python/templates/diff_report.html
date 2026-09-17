@@ -196,6 +196,7 @@
     </div>
 
     {% set ms = matched_summary if matched_summary else {} %}
+    {% if ms is mapping %}{% set ms = ms %}{% elif ms is sequence and ms %}{% set ms = ms[0] %}{% else %}{% set ms = {} %}{% endif %}
     {% set bd_only = ms.get('bindiff_only', 0) %}
     {% set dp_only = ms.get('diaphora_only', 0) %}
     {% set both_cnt = ms.get('both', 0) %}

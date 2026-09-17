@@ -18,6 +18,7 @@ public sealed class DiffWorker : IDisposable
 
     public event Action<int, int, string>? GlobalProgress;   // (step, total, desc)
     public event Action<string, string, string>? PairStatus; // (relKey, engine, status)
+    public event Action<string, int>? PairThreadStarted;     // (relKey, managedThreadId)
     public event Action<string>? ErrorOccurred;
     public event Action<int, int>? Finished;                 // (success, total)
 
@@ -77,7 +78,7 @@ public sealed class DiffWorker : IDisposable
         var total = Pairs.Count;
         if (total == 0) { Finished?.Invoke(0, 0); return; }
 
-        // Жадный алгоритм — крупные файлы первыми
+        // Дальше работаем только с выбранными парами (уже отфильтрованы страницей).
         var all = Pairs
             .OrderByDescending(p => File.Exists(p.Primary) ? new FileInfo(p.Primary).Length : 0)
             .ToList();
@@ -85,9 +86,16 @@ public sealed class DiffWorker : IDisposable
         var useBindiff = Engine is "bindiff" or "both";
         var useDiaphora = Engine is "diaphora" or "both";
 
-        // Фазы: экспорт (1 или 2) + пост-анализ + HTML
-        var phases = 2 + (useBindiff ? 1 : 0) + (useDiaphora ? 1 : 0);
-        var totalSteps = total * phases;
+        // Определяем фазы заранее и считаем шаги по фазам (а не по парам × фазы),
+        // чтобы счётчики соответствовали выбранному подмножеству файлов.
+        var phases = new List<(string name, List<DiffPair> pairs, Func<DiffPair, Task<bool>> process, bool addOnly)>();
+        if (useBindiff)
+            phases.Add(("BinDiff", all, p => ProcessBindiffPairAsync(p, ct), false));
+        if (useDiaphora)
+            phases.Add(("Diaphora", all, p => ProcessDiaphoraPairAsync(p, ct), false));
+        phases.Add(("Post", all, p => ProcessPostPairAsync(p, ct), false));
+
+        var totalSteps = phases.Count;
         var step = 0;
 
         void StepDone(string desc)
@@ -98,35 +106,53 @@ public sealed class DiffWorker : IDisposable
 
         GlobalProgress?.Invoke(0, totalSteps, "Запуск...");
 
-        if (useBindiff)
+        foreach (var (name, pairs, process, _) in phases)
         {
-            await RunPass("BinDiff", all, total, "bindiff", "Экспорт из БД",
-                p => ProcessBindiffPairAsync(p, ct), ct, StepDone);
+            await RunPass(name, pairs, pairs.Count, null, name, process, ct, StepDone);
             if (ct.IsCancellationRequested) { Abort(); return; }
         }
 
-        if (useDiaphora)
-        {
-            await RunPass("Diaphora", all, total, "diaphora", "Экспорт из БД",
-                p => ProcessDiaphoraPairAsync(p, ct), ct, StepDone);
-            if (ct.IsCancellationRequested) { Abort(); return; }
-        }
-
-        await RunPass("Post", all, total, null, "Пост-анализ",
-            p => ProcessPostPairAsync(p, ct), ct, StepDone);
+        // Генерация HTML-отчётов (одна фаза)
+        await GenerateReportsAsync(all, all.Count, StepDone, ct);
         if (ct.IsCancellationRequested) { Abort(); return; }
 
-        // Генерация HTML-отчётов
-        await GenerateReportsAsync(all, total, StepDone, ct);
-        if (ct.IsCancellationRequested) { Abort(); return; }
-
-        // Доанализ для engine=bindiff
+        // Доанализ для engine=bindiff — одна фаза, шаг добавляется только при наличии пар <99%
         if (Engine == "bindiff" && !string.IsNullOrEmpty(AddOutputDir))
         {
-            await RunAddAnalysisAsync(all, total, StepDone, ct);
+            var lowCount = CountLowSimilarityPairs(all);
+            if (lowCount > 0)
+            {
+                await RunAddAnalysisAsync(all, lowCount, _ => StepDone("Доанализ Diaphora"), ct);
+            }
+            else
+            {
+                GlobalProgress?.Invoke(step, totalSteps, "Доанализ не требуется");
+            }
+            if (ct.IsCancellationRequested) { Abort(); return; }
         }
 
-        Finished?.Invoke(ct.IsCancellationRequested ? Math.Max(0, total - 1) : total, total);
+        Finished?.Invoke(Math.Min(total, all.Count), total);
+    }
+
+    private int CountLowSimilarityPairs(List<DiffPair> pairs)
+    {
+        int low = 0;
+        foreach (var p in pairs)
+        {
+            var d = Path.Combine(OutputDir, $"{p.Stem}.diff.json");
+            if (!File.Exists(d)) continue;
+            if (AddOutputDir != null && File.Exists(Path.Combine(AddOutputDir, $"{p.Stem}.diff.json")))
+                continue;
+            try
+            {
+                var data = ReadJson(d);
+                var sim = data != null && data.TryGetValue("similarity", out var v) && v != null
+                    ? Convert.ToDouble(v, System.Globalization.CultureInfo.InvariantCulture) : 0.0;
+                if (sim < 0.99) low++;
+            }
+            catch { /* пропускаем */ }
+        }
+        return low;
     }
 
     private void Abort()
@@ -148,16 +174,26 @@ public sealed class DiffWorker : IDisposable
         foreach (var p in pairs)
             if (engine == null)
             {
-                if (Engine is "bindiff" or "both") PairStatus?.Invoke(p.RelKey, "bindiff", statusText);
-                if (Engine is "diaphora" or "both") PairStatus?.Invoke(p.RelKey, "diaphora", statusText);
+                if (Engine is "bindiff" or "both") PairStatus?.Invoke(p.RelKey, "bindiff", "waiting");
+                if (Engine is "diaphora" or "both") PairStatus?.Invoke(p.RelKey, "diaphora", "waiting");
             }
-            else PairStatus?.Invoke(p.RelKey, engine, statusText);
+            else PairStatus?.Invoke(p.RelKey, engine, "waiting");
 
         var small = pairs.Where(p => !IsLarge(p.Primary)).ToList();
         var large = pairs.Where(p => IsLarge(p.Primary)).ToList();
 
         async Task RunOne(DiffPair p)
         {
+            var tid = Environment.CurrentManagedThreadId;
+            PairThreadStarted?.Invoke(p.RelKey, tid);
+            // Ставим «анализ» для задействованного движка (engine == null -> оба)
+            if (engine == null)
+            {
+                if (Engine is "bindiff" or "both") PairStatus?.Invoke(p.RelKey, "bindiff", "analysis");
+                if (Engine is "diaphora" or "both") PairStatus?.Invoke(p.RelKey, "diaphora", "analysis");
+            }
+            else PairStatus?.Invoke(p.RelKey, engine, "analysis");
+
             bool ok;
             try { ok = await process(p); }
             catch (Exception e)
@@ -165,14 +201,14 @@ public sealed class DiffWorker : IDisposable
                 ErrorOccurred?.Invoke($"Ошибка {p.RelKey} в фазе {stage}: {e.Message}");
                 ok = false;
             }
-            var status = ok ? "✓" : "✗";
+            var status = ok ? "done" : "error";
             if (engine == null)
             {
                 if (Engine is "bindiff" or "both") PairStatus?.Invoke(p.RelKey, "bindiff", status);
                 if (Engine is "diaphora" or "both") PairStatus?.Invoke(p.RelKey, "diaphora", status);
             }
             else PairStatus?.Invoke(p.RelKey, engine, status);
-            stepDone(stage);
+            PairThreadStarted?.Invoke(p.RelKey, -1);  // -1 = поток освобождён
         }
 
         using var sem = new SemaphoreSlim(MaxWorkers);
@@ -191,6 +227,9 @@ public sealed class DiffWorker : IDisposable
             if (ct.IsCancellationRequested) break;
             await RunOne(p);
         }
+
+        // Фаза завершена — один шаг прогресса
+        if (!ct.IsCancellationRequested) stepDone(stage);
     }
 
     private static bool IsLarge(string path)
@@ -248,6 +287,7 @@ public sealed class DiffWorker : IDisposable
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                CreateNoWindow = true,
             };
             psi.ArgumentList.Add("--primary"); psi.ArgumentList.Add(primary);
             psi.ArgumentList.Add("--secondary"); psi.ArgumentList.Add(secondary);
@@ -318,13 +358,20 @@ public sealed class DiffWorker : IDisposable
         env["DIAPHORA_AUTO"] = "1";
         env["DIAPHORA_EXPORT_FILE"] = outSqlite;
 
+        // Для крупных файлов — как в исполнении 1: увеличенная виртуальная память,
+        // отключение undo, отдельный лог IDA.
         if (IsLarge(i64Path))
         {
             psi.ArgumentList.Add("-dVPAGESIZE=16384");
             psi.ArgumentList.Add("-dUNDO_MAXSIZE=0");
+            var idaLog = Path.Combine(Path.GetDirectoryName(outSqlite) ?? ".", Path.GetFileNameWithoutExtension(outSqlite) + ".ida.log");
+            psi.ArgumentList.Add($"-L{idaLog}");
         }
+
         psi.ArgumentList.Add("-A");
-        psi.ArgumentList.Add($"-S\"{DiaphoraPath}\"");
+        // Важно: без кавычек внутри аргумента — ProcessStartInfo.ArgumentList сам
+        // экранирует путь; кавычки в значении ломали нахождение скрипта IDA.
+        psi.ArgumentList.Add($"-S{DiaphoraPath}");
         psi.ArgumentList.Add(i64Path);
 
         var (rc, _, _) = await RunProcWithTimeoutAsync(psi, TimeSpan.FromHours(6), ct);
@@ -339,6 +386,7 @@ public sealed class DiffWorker : IDisposable
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            CreateNoWindow = true,
         };
         psi.ArgumentList.Add(DiaphoraPath);
         psi.ArgumentList.Add(db1);
@@ -478,7 +526,8 @@ public sealed class DiffWorker : IDisposable
             try
             {
                 var data = ReadJson(d);
-                var sim = data != null && data.TryGetValue("similarity", out var v) && v is double dv ? dv : 0.0;
+                var sim = data != null && data.TryGetValue("similarity", out var v) && v != null
+                    ? Convert.ToDouble(v, System.Globalization.CultureInfo.InvariantCulture) : 0.0;
                 return sim < 0.99;
             }
             catch { return false; }
@@ -495,18 +544,27 @@ public sealed class DiffWorker : IDisposable
             if (File.Exists(src)) File.Copy(src, dst, overwrite: true);
         }
 
-        // Фаза 4: Diaphora
+        // Доанализ: стадии идут подряд, инкремент прогресса — один раз после всех.
+        var stageDesc = new[] { "Доанализ (Diaphora)", "Доанализ (пост-анализ)", "Генерация HTML (доанализ)" };
+        var stageIdx = 0;
+        void Progress(string d)
+        {
+            GlobalProgress?.Invoke(0, 3, $"{stageDesc[Math.Min(stageIdx, stageDesc.Length - 1)]}: {d}");
+        }
+
         await RunPass("AddDiaphora", low, low.Count, "diaphora", "Доанализ (Diaphora)",
-            p => ProcessAddDiaphoraPairAsync(p, ct), ct, stepDone);
+            p => ProcessAddDiaphoraPairAsync(p, ct), ct, Progress);
         if (ct.IsCancellationRequested) return;
+        stageIdx = 1;
 
-        // Фаза 5: пост-анализ
         await RunPass("AddPost", low, low.Count, "diaphora", "Доанализ (пост-анализ)",
-            p => ProcessAddPostPairAsync(p, ct), ct, stepDone);
+            p => ProcessAddPostPairAsync(p, ct), ct, Progress);
         if (ct.IsCancellationRequested) return;
+        stageIdx = 2;
 
-        // Фаза 6: HTML
-        await GenerateAddReportsAsync(low, stepDone, ct);
+        await GenerateAddReportsAsync(low, Progress, ct);
+
+        stepDone("Доанализ завершён");
     }
 
     private async Task<bool> ProcessAddDiaphoraPairAsync(DiffPair p, CancellationToken ct)
@@ -866,7 +924,7 @@ public sealed class DiffWorker : IDisposable
             ? d0 : new Dictionary<string, object?>();
         data["algorithm_distribution"] = ad;
         foreach (var (algo, cnt) in dres.AlgorithmDistribution)
-            ad[algo] = (ad.TryGetValue(algo, out var v) && v is long l ? l : 0) + cnt;
+            ad[algo] = (ad.TryGetValue(algo, out var v) && v != null ? Convert.ToInt64(v) : 0) + cnt;
 
         // engine
         var hasBd = matches.OfType<Dictionary<string, object?>>().Any(m => m["source"] is "bindiff" or "both");
@@ -876,14 +934,17 @@ public sealed class DiffWorker : IDisposable
         WriteJson(jsonPath, data);
     }
 
-    private static List<object?> Summarize(List<object?> matches)
+    private static Dictionary<string, object?> Summarize(List<object?> matches)
     {
         var bd = matches.OfType<Dictionary<string, object?>>().Count(m => Convert.ToString(m["source"]) == "bindiff");
         var dp = matches.OfType<Dictionary<string, object?>>().Count(m => Convert.ToString(m["source"]) == "diaphora");
         var both = matches.OfType<Dictionary<string, object?>>().Count(m => Convert.ToString(m["source"]) == "both");
-        return new List<object?>
+        return new Dictionary<string, object?>
         {
-            new Dictionary<string, object?> { ["total"] = matches.Count, ["bindiff_only"] = bd, ["diaphora_only"] = dp, ["both"] = both },
+            ["total"] = matches.Count,
+            ["bindiff_only"] = bd,
+            ["diaphora_only"] = dp,
+            ["both"] = both,
         };
     }
 
@@ -1364,6 +1425,7 @@ public sealed class DiffWorker : IDisposable
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            CreateNoWindow = true,
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
@@ -1407,9 +1469,39 @@ public sealed class DiffWorker : IDisposable
     {
         try
         {
-            return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(File.ReadAllText(path));
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+            return ConvertElement(doc.RootElement) as Dictionary<string, object?>;
         }
         catch { return null; }
+    }
+
+    /// <summary>Преобразует JsonElement в Dictionary/List/примитивы (а не JsonElement), чтобы
+    /// последующая работа с OfType&lt;Dictionary&lt;...&gt;&gt; и индексаторами находила данные.</summary>
+    private static object? ConvertElement(System.Text.Json.JsonElement el)
+    {
+        switch (el.ValueKind)
+        {
+            case System.Text.Json.JsonValueKind.Object:
+                var d = new Dictionary<string, object?>();
+                foreach (var p in el.EnumerateObject())
+                    d[p.Name] = ConvertElement(p.Value);
+                return d;
+            case System.Text.Json.JsonValueKind.Array:
+                var list = new List<object?>();
+                foreach (var item in el.EnumerateArray())
+                    list.Add(ConvertElement(item));
+                return list;
+            case System.Text.Json.JsonValueKind.String:
+                return el.GetString();
+            case System.Text.Json.JsonValueKind.Number:
+                return el.TryGetInt64(out var l) ? l
+                    : el.TryGetDouble(out var db) ? db : 0.0;
+            case System.Text.Json.JsonValueKind.True:
+            case System.Text.Json.JsonValueKind.False:
+                return el.GetBoolean();
+            default:
+                return null;
+        }
     }
 
     private static void WriteJson(string path, Dictionary<string, object?> data)
