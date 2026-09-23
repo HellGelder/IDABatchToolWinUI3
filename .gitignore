@@ -5,4 +5,5 @@
 # --- graphify knowledge graph ---
 # Генерируется локально, не коммитим (кэш, статистика и артефакты тоже).
 graphify-out/
-IDABatchToolWinUI/graphify-out/
+IDABatchToolWinUI/graphify-out/__pycache__/
+*.pyc
