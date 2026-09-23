@@ -22,10 +22,26 @@ import sys
 from pathlib import Path
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
+VENDOR_DIR = os.path.normpath(os.path.join(TEMPLATES_DIR, "..", "vendor"))
 
 # ─────────────────────────────────────────────────────────────────
 #  Рендер шаблонов — готовый Jinja2 (внешняя зависимость, НЕ исполнение 1)
 # ─────────────────────────────────────────────────────────────────
+
+def inline_vendor(name):
+    """Содержимое вендорного asset из vendor/ для инлайн-встраивания.
+
+    Встраивание идёт через контекст шаблона, а не {% include %}: в
+    минифицированных JS/CSS встречаются последовательности ``{{``/``%}``,
+    которые Jinja приняла бы за собственный синтаксис.
+    """
+    path = os.path.join(VENDOR_DIR, name)
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+    except OSError:
+        return ""
+
 
 def render_template(name, **ctx):
     """Рендерит шаблон templates/<name> движком Jinja2 с авто-escape."""
@@ -36,6 +52,7 @@ def render_template(name, **ctx):
         trim_blocks=True,
         lstrip_blocks=True,
     )
+    env.globals["inline_vendor"] = inline_vendor
     template = env.get_template(name)
     return template.render(**ctx)
 

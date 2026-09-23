@@ -418,7 +418,7 @@ public sealed class DiffWorker : IDisposable
         {
             try
             {
-                var (rows, sim) = ComputeHexdumpDiff(orig1, orig2);
+                var (_, sim) = ComputeHexdumpDiff(orig1, orig2);
                 var data = ReadJson(jsonOutput) ?? new Dictionary<string, object?>();
                 data["global_hex_diff"] = new List<object?>
                 {
@@ -426,7 +426,7 @@ public sealed class DiffWorker : IDisposable
                     {
                         ["name1"] = Path.GetFileName(orig1), ["path1"] = orig1,
                         ["name2"] = Path.GetFileName(orig2), ["path2"] = orig2,
-                        ["hex_rows"] = rows, ["hexdump_similarity"] = sim,
+                        ["hexdump_similarity"] = sim,
                     }
                 };
                 data["hexdump_similarity"] = sim;
@@ -601,7 +601,7 @@ public sealed class DiffWorker : IDisposable
         {
             try
             {
-                var (rows, sim) = ComputeHexdumpDiff(orig1, orig2);
+                var (_, sim) = ComputeHexdumpDiff(orig1, orig2);
                 var data = ReadJson(jsonOutput) ?? new Dictionary<string, object?>();
                 data["global_hex_diff"] = new List<object?>
                 {
@@ -609,7 +609,7 @@ public sealed class DiffWorker : IDisposable
                     {
                         ["name1"] = Path.GetFileName(orig1), ["path1"] = orig1,
                         ["name2"] = Path.GetFileName(orig2), ["path2"] = orig2,
-                        ["hex_rows"] = rows, ["hexdump_similarity"] = sim,
+                        ["hexdump_similarity"] = sim,
                     }
                 };
                 data["hexdump_similarity"] = sim;
@@ -1112,8 +1112,6 @@ public sealed class DiffWorker : IDisposable
 
             mf["pseudocode1"] = f1?.GetValue("pseudocode") ?? "";
             mf["pseudocode2"] = f2?.GetValue("pseudocode") ?? "";
-            mf["hexdump1"] = f1?.GetValue("hexdump") ?? "";
-            mf["hexdump2"] = f2?.GetValue("hexdump") ?? "";
 
             // pseudocode diff rows
             mf["pseudocode_diff"] = ComputePseudocodeDiff(
