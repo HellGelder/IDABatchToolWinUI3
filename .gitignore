@@ -7,3 +7,6 @@
 graphify-out/
 IDABatchToolWinUI/graphify-out/__pycache__/
 *.pyc
+
+# --- Visual Studio IDE state ---
+.vs/
