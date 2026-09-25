@@ -16,7 +16,8 @@ public sealed class DiffWorker : IDisposable
     private const string DiaphoraDir = "diaphora";
     private const string DiaphoraScript = "diaphora.py";
 
-    public event Action<int, int, string>? GlobalProgress;   // (step, total, desc)
+    public event Action<string, string>? StageChanged;        // (stage, "started" | "done")
+    public event Action<string, int, int, string>? StageFile; // (stage, current, total, fileName)
     public event Action<string, string, string>? PairStatus; // (relKey, engine, status)
     public event Action<string, int>? PairThreadStarted;     // (relKey, managedThreadId)
     public event Action<string>? ErrorOccurred;
@@ -86,48 +87,33 @@ public sealed class DiffWorker : IDisposable
         var useBindiff = Engine is "bindiff" or "both";
         var useDiaphora = Engine is "diaphora" or "both";
 
-        // Определяем фазы заранее и считаем шаги по фазам (а не по парам × фазы),
-        // чтобы счётчики соответствовали выбранному подмножеству файлов.
-        var phases = new List<(string name, List<DiffPair> pairs, Func<DiffPair, Task<bool>> process, bool addOnly)>();
+        // Этапы выполнения: счётчик «шагов» не ведём — GUI показывает этапы
+        // и статусы обработки каждого файла.
+        var phases = new List<(string stage, string statusText, List<DiffPair> pairs, Func<DiffPair, Task<bool>> process)>();
         if (useBindiff)
-            phases.Add(("BinDiff", all, p => ProcessBindiffPairAsync(p, ct), false));
+            phases.Add(("BinDiff", "Экспорт из БД", all, p => ProcessBindiffPairAsync(p, ct)));
         if (useDiaphora)
-            phases.Add(("Diaphora", all, p => ProcessDiaphoraPairAsync(p, ct), false));
-        phases.Add(("Post", all, p => ProcessPostPairAsync(p, ct), false));
+            phases.Add(("Diaphora", "Экспорт из БД", all, p => ProcessDiaphoraPairAsync(p, ct)));
+        phases.Add(("Пост-анализ", "Пост-анализ", all, p => ProcessPostPairAsync(p, ct)));
 
-        var totalSteps = phases.Count;
-        var step = 0;
-
-        void StepDone(string desc)
+        foreach (var (stage, statusText, pairs, process) in phases)
         {
-            step++;
-            GlobalProgress?.Invoke(step, totalSteps, desc);
-        }
-
-        GlobalProgress?.Invoke(0, totalSteps, "Запуск...");
-
-        foreach (var (name, pairs, process, _) in phases)
-        {
-            await RunPass(name, pairs, pairs.Count, null, name, process, ct, StepDone);
+            StageChanged?.Invoke(stage, "started");
+            await RunPass(stage, pairs, pairs.Count, null, statusText, process, ct);
             if (ct.IsCancellationRequested) { Abort(); return; }
+            StageChanged?.Invoke(stage, "done");
         }
 
         // Генерация HTML-отчётов (одна фаза)
-        await GenerateReportsAsync(all, all.Count, StepDone, ct);
+        StageChanged?.Invoke("Генерация HTML", "started");
+        await GenerateReportsAsync(ct);
         if (ct.IsCancellationRequested) { Abort(); return; }
+        StageChanged?.Invoke("Генерация HTML", "done");
 
-        // Доанализ для engine=bindiff — одна фаза, шаг добавляется только при наличии пар <99%
-        if (Engine == "bindiff" && !string.IsNullOrEmpty(AddOutputDir))
+        // Доанализ для engine=bindiff — только при наличии пар <99%
+        if (Engine == "bindiff" && !string.IsNullOrEmpty(AddOutputDir) && CountLowSimilarityPairs(all) > 0)
         {
-            var lowCount = CountLowSimilarityPairs(all);
-            if (lowCount > 0)
-            {
-                await RunAddAnalysisAsync(all, lowCount, _ => StepDone("Доанализ Diaphora"), ct);
-            }
-            else
-            {
-                GlobalProgress?.Invoke(step, totalSteps, "Доанализ не требуется");
-            }
+            await RunAddAnalysisAsync(all, ct);
             if (ct.IsCancellationRequested) { Abort(); return; }
         }
 
@@ -167,20 +153,25 @@ public sealed class DiffWorker : IDisposable
     private async Task RunPass(
         string stage, List<DiffPair> pairs, int total, string? engine,
         string statusText,
-        Func<DiffPair, Task<bool>> process, CancellationToken ct, Action<string> stepDone)
+        Func<DiffPair, Task<bool>> process, CancellationToken ct)
     {
         if (pairs.Count == 0) return;
 
+        // Начало фазы: статус этапа для задействованных колонок
+        // (не «waiting» — колонки других движков уже содержат их результат).
         foreach (var p in pairs)
             if (engine == null)
             {
-                if (Engine is "bindiff" or "both") PairStatus?.Invoke(p.RelKey, "bindiff", "waiting");
-                if (Engine is "diaphora" or "both") PairStatus?.Invoke(p.RelKey, "diaphora", "waiting");
+                if (Engine is "bindiff" or "both") PairStatus?.Invoke(p.RelKey, "bindiff", statusText);
+                if (Engine is "diaphora" or "both") PairStatus?.Invoke(p.RelKey, "diaphora", statusText);
             }
-            else PairStatus?.Invoke(p.RelKey, engine, "waiting");
+            else PairStatus?.Invoke(p.RelKey, engine, statusText);
+
+        StageFile?.Invoke(stage, 0, total, "");
 
         var small = pairs.Where(p => !IsLarge(p.Primary)).ToList();
         var large = pairs.Where(p => IsLarge(p.Primary)).ToList();
+        var completed = 0;
 
         async Task RunOne(DiffPair p)
         {
@@ -209,6 +200,9 @@ public sealed class DiffWorker : IDisposable
             }
             else PairStatus?.Invoke(p.RelKey, engine, status);
             PairThreadStarted?.Invoke(p.RelKey, -1);  // -1 = поток освобождён
+
+            var done = Interlocked.Increment(ref completed);
+            StageFile?.Invoke(stage, done, total, Path.GetFileName(p.Primary));
         }
 
         using var sem = new SemaphoreSlim(MaxWorkers);
@@ -227,9 +221,6 @@ public sealed class DiffWorker : IDisposable
             if (ct.IsCancellationRequested) break;
             await RunOne(p);
         }
-
-        // Фаза завершена — один шаг прогресса
-        if (!ct.IsCancellationRequested) stepDone(stage);
     }
 
     private static bool IsLarge(string path)
@@ -482,7 +473,7 @@ public sealed class DiffWorker : IDisposable
     //  HTML-отчёты
     // ─────────────────────────────────────────────────────────────────
 
-    private async Task GenerateReportsAsync(List<DiffPair> pairs, int total, Action<string> stepDone, CancellationToken ct)
+    private async Task GenerateReportsAsync(CancellationToken ct)
     {
         try
         {
@@ -490,7 +481,7 @@ public sealed class DiffWorker : IDisposable
             Directory.CreateDirectory(reportsDir);
             var jsonDir = OutputDir;
             var worker = new HtmlGenWorker("diff", deleteJson: false, reuseCache: false, platform: "Windows");
-            worker.ProgressUpdated += (cur, tot, msg) => GlobalProgress?.Invoke(cur, total, "Генерация HTML");
+            worker.ProgressUpdated += (cur, tot, msg) => StageFile?.Invoke("Генерация HTML", cur, tot, msg);
             worker.ErrorOccurred += e => ErrorOccurred?.Invoke(e);
 
             var jsonFiles = Directory.GetFiles(jsonDir, "*.diff.json").ToList();
@@ -499,8 +490,6 @@ public sealed class DiffWorker : IDisposable
                 inputDir: LeftDir, reportsDir: reportsDir, jsonDir: jsonDir,
                 leftDir: LeftDir, rightDir: RightDir, manpagesDb: null,
                 jsonPaths: jsonFiles), ct);
-
-            foreach (var p in pairs) stepDone("Генерация HTML");
         }
         catch (Exception e)
         {
@@ -512,7 +501,7 @@ public sealed class DiffWorker : IDisposable
     //  Доанализ (engine=bindiff)
     // ─────────────────────────────────────────────────────────────────
 
-    private async Task RunAddAnalysisAsync(List<DiffPair> pairs, int total, Action<string> stepDone, CancellationToken ct)
+    private async Task RunAddAnalysisAsync(List<DiffPair> pairs, CancellationToken ct)
     {
         if (!File.Exists(DiaphoraPath))
         {
@@ -548,27 +537,21 @@ public sealed class DiffWorker : IDisposable
             if (File.Exists(src)) File.Copy(src, dst, overwrite: true);
         }
 
-        // Доанализ: стадии идут подряд, инкремент прогресса — один раз после всех.
-        var stageDesc = new[] { "Доанализ (Diaphora)", "Доанализ (пост-анализ)", "Генерация HTML (доанализ)" };
-        var stageIdx = 0;
-        void Progress(string d)
-        {
-            GlobalProgress?.Invoke(0, 3, $"{stageDesc[Math.Min(stageIdx, stageDesc.Length - 1)]}: {d}");
-        }
-
-        await RunPass("AddDiaphora", low, low.Count, "diaphora", "Доанализ (Diaphora)",
-            p => ProcessAddDiaphoraPairAsync(p, ct), ct, Progress);
+        StageChanged?.Invoke("Доанализ (Diaphora)", "started");
+        await RunPass("Доанализ (Diaphora)", low, low.Count, "diaphora", "Доанализ (Diaphora)",
+            p => ProcessAddDiaphoraPairAsync(p, ct), ct);
+        StageChanged?.Invoke("Доанализ (Diaphora)", "done");
         if (ct.IsCancellationRequested) return;
-        stageIdx = 1;
 
-        await RunPass("AddPost", low, low.Count, "diaphora", "Доанализ (пост-анализ)",
-            p => ProcessAddPostPairAsync(p, ct), ct, Progress);
+        StageChanged?.Invoke("Доанализ (пост-анализ)", "started");
+        await RunPass("Доанализ (пост-анализ)", low, low.Count, "diaphora", "Доанализ (пост-анализ)",
+            p => ProcessAddPostPairAsync(p, ct), ct);
+        StageChanged?.Invoke("Доанализ (пост-анализ)", "done");
         if (ct.IsCancellationRequested) return;
-        stageIdx = 2;
 
-        await GenerateAddReportsAsync(low, Progress, ct);
-
-        stepDone("Доанализ завершён");
+        StageChanged?.Invoke("Генерация HTML (доанализ)", "started");
+        await GenerateAddReportsAsync(low, ct);
+        StageChanged?.Invoke("Генерация HTML (доанализ)", "done");
     }
 
     private async Task<bool> ProcessAddDiaphoraPairAsync(DiffPair p, CancellationToken ct)
@@ -781,7 +764,7 @@ public sealed class DiffWorker : IDisposable
         }
     }
 
-    private async Task GenerateAddReportsAsync(List<DiffPair> pairs, Action<string> stepDone, CancellationToken ct)
+    private async Task GenerateAddReportsAsync(List<DiffPair> pairs, CancellationToken ct)
     {
         try
         {
@@ -791,14 +774,13 @@ public sealed class DiffWorker : IDisposable
             if (jsonFiles.Count == 0) return;
 
             var worker = new HtmlGenWorker("diff", deleteJson: false, reuseCache: false, platform: "Windows");
-            worker.ProgressUpdated += (cur, tot, msg) => GlobalProgress?.Invoke(cur, pairs.Count, "Генерация HTML (доанализ)");
+            worker.ProgressUpdated += (cur, tot, msg) => StageFile?.Invoke("Генерация HTML (доанализ)", cur, tot, msg);
             worker.ErrorOccurred += e => ErrorOccurred?.Invoke(e);
 
             await Task.Run(() => worker.Run(
                 inputDir: LeftDir, reportsDir: reportsDir, jsonDir: AddOutputDir!,
                 leftDir: LeftDir, rightDir: RightDir, manpagesDb: null,
                 jsonPaths: jsonFiles), ct);
-            foreach (var p in pairs) stepDone("Генерация HTML (доанализ)");
         }
         catch (Exception e)
         {

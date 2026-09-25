@@ -186,6 +186,17 @@
                 </StackPanel>
             </Border>
 
+            <!-- Прогресс выполнения: этапы и текущий файл -->
+            <Border Style="{StaticResource GroupBoxStyle}">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Прогресс выполнения" Style="{StaticResource GroupHeaderStyle}" />
+                    <StackPanel x:Name="StagesPanel" Orientation="Horizontal" Spacing="14" />
+                    <TextBlock x:Name="CurrentFileLabel" Text="Файл: —" FontSize="12"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Border>
+
             <!-- Ошибки -->
             <Border Style="{StaticResource GroupBoxStyle}">
                 <StackPanel Spacing="4">

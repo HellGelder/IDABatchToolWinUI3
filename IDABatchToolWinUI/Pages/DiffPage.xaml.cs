@@ -3,6 +3,7 @@ using IDABatchToolWinUI.Services;
 using IDABatchToolWinUI.Workers;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace IDABatchToolWinUI.Pages;
 
@@ -16,6 +17,7 @@ public sealed partial class DiffPage : Page
     private DiffWorker? _worker;
     private string? _outputDir;
     private List<DiffPair> _allPairs = new();
+    private readonly Dictionary<string, TextBlock> _stageLabels = new();
 
 public DiffPage()
     {
@@ -282,6 +284,10 @@ public DiffPage()
         MapStatusLabel.Text = "Прогресс: запуск...";
         DiffErrorTextBox.Text = "";
 
+        // Этапы прогона — под выбранный движок; счётчик шагов не ведём
+        ResetStages(engine);
+        CurrentFileLabel.Text = "Файл: —";
+
         // Сброс статусов колонок: выбранные -> waiting для задействованных движков
         var allRows = PairsListView.ItemsSource as List<PairRowViewModel>;
         if (allRows != null) ApplyInitialStatuses(allRows);
@@ -294,10 +300,8 @@ public DiffPage()
 
     private void HookWorker(DiffWorker w)
     {
-        w.GlobalProgress += (step, total, desc) => RunOnUi(() =>
-        {
-            MapStatusLabel.Text = $"Прогресс: {step} / {total} — {desc}";
-        });
+        w.StageChanged += (stage, phase) => RunOnUi(() => OnStageChanged(stage, phase));
+        w.StageFile += (stage, cur, tot, file) => RunOnUi(() => OnStageFile(stage, cur, tot, file));
         w.PairThreadStarted += (relKey, threadId) => RunOnUi(() =>
         {
             var row = (PairsListView.ItemsSource as List<PairRowViewModel>)
@@ -317,6 +321,58 @@ public DiffPage()
         w.Finished += (ok, total) => RunOnUi(() => OnDiffFinished(ok, total));
     }
 
+    // ──────────────────────────────────────────────
+    //  Этапы прогона
+    // ──────────────────────────────────────────────
+
+    private void ResetStages(string engine)
+    {
+        StagesPanel.Children.Clear();
+        _stageLabels.Clear();
+        var stages = new List<string>();
+        if (engine is "bindiff" or "both") stages.Add("BinDiff");
+        if (engine is "diaphora" or "both") stages.Add("Diaphora");
+        stages.Add("Пост-анализ");
+        stages.Add("Генерация HTML");
+        foreach (var s in stages)
+        {
+            var tb = new TextBlock { Text = $"○ {s}", FontSize = 13, Opacity = 0.65 };
+            _stageLabels[s] = tb;
+            StagesPanel.Children.Add(tb);
+        }
+    }
+
+    private void OnStageChanged(string stage, string phase)
+    {
+        if (!_stageLabels.TryGetValue(stage, out var tb))
+        {
+            // Этапы доанализа добавляются динамически
+            tb = new TextBlock { Text = stage, FontSize = 13 };
+            _stageLabels[stage] = tb;
+            StagesPanel.Children.Add(tb);
+        }
+        switch (phase)
+        {
+            case "started":
+                tb.Text = $"▶ {stage}";
+                tb.Foreground = new SolidColorBrush(Microsoft.UI.Colors.DodgerBlue);
+                tb.Opacity = 1.0;
+                break;
+            case "done":
+                tb.Text = $"✔ {stage}";
+                tb.Foreground = new SolidColorBrush(Microsoft.UI.Colors.ForestGreen);
+                tb.Opacity = 1.0;
+                break;
+        }
+    }
+
+    private void OnStageFile(string stage, int current, int total, string file)
+    {
+        CurrentFileLabel.Text = string.IsNullOrEmpty(file)
+            ? $"{stage}: {current} / {total}"
+            : $"{stage}: {file} ({current} / {total})";
+    }
+
     private async void OnDiffFinished(int successCount, int total)
     {
         _diffInProgress = false;
@@ -324,7 +380,8 @@ public DiffPage()
         CancelDiffButton.IsEnabled = false;
         DiffProgressRing.IsActive = false;
         DiffProgressRing.Visibility = Visibility.Collapsed;
-        MapStatusLabel.Text = $"Прогресс: завершён ({successCount}/{total})";
+        // Итог — в строке текущего файла: MapStatusLabel перезапишет AnalyzeDirectories()
+        CurrentFileLabel.Text = $"Сравнение завершено: успешно {successCount} из {total} пар";
 
         AnalyzeDirectories();
 
@@ -362,6 +419,7 @@ public DiffPage()
     {
         _worker?.Cancel();
         MapStatusLabel.Text = "Прогресс: отменён";
+        CurrentFileLabel.Text = "Сравнение: отменено";
         CancelDiffButton.IsEnabled = false;
     }
 
