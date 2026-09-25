@@ -91,11 +91,35 @@ def normalize_display_name(name):
 
 
 # ─────────────────────────────────────────────────────────────────
-#  Генератор «Общий анализ» (индивидуальные отчёты + индекс)
+#  Классификатор модулей — единый источник истины, как в исполнении 1
 # ─────────────────────────────────────────────────────────────────
 
+from classifier.platform_classifier import classify_module as _classifier_describe
+from classifier.categories import get_module_category_and_description
+from classifier.system_modules import is_system_module as _classifier_is_system
+
+# Неизвестная платформа → проверка по всем словарям (как в исполнении 1).
+_UNKNOWN_DESC = "Неопознанный модуль"
+
+
 def _classify_module(mod_name):
-    """Простая классификация модуля по имени (категория + описание)."""
+    """Категория и описание модуля: сначала словари классификатора,
+    при отсутствии записи — эвристика по имени."""
+    try:
+        desc = _classifier_describe(mod_name)
+        cat, cat_desc = get_module_category_and_description(mod_name)
+        if desc and desc != _UNKNOWN_DESC:
+            return cat, desc
+        if cat and cat != "Неопознанные модули":
+            return cat, cat_desc
+    except Exception:
+        pass
+    return _classify_module_heuristic(mod_name)
+
+
+def _classify_module_heuristic(mod_name):
+    """Эвристическая классификация по имени (фолбэк для модулей,
+    отсутствующих в словарях классификатора)."""
     n = mod_name.lower()
     if n in ("kernel32", "kernelbase", "ntdll", "user32", "gdi32", "advapi32",
              "ole32", "oleaut32", "comdlg32", "shell32", "shlwapi", "winmm",
@@ -197,6 +221,10 @@ def _file_info_entries(data):
             rows.append((k, val))
     return rows
 
+
+# ─────────────────────────────────────────────────────────────────
+#  Генератор «Общий анализ» (индивидуальные отчёты + индекс)
+# ─────────────────────────────────────────────────────────────────
 
 def generate_analysis_report(json_path, output_html, input_dir, internal_set):
     """Генерирует индивидуальный HTML-отчёт «Общий анализ»."""
@@ -383,15 +411,10 @@ def _lookup_doc(func_name, platform, cache_db, manpages_db):
 
 
 def _is_system_module(mod_name, platform):
-    """Определяет, системный ли модуль."""
-    n = (mod_name or "").lower()
-    if platform in ("Linux", "Linux / Android"):
-        return (n.startswith("lib") and any(x in n for x in
-                ("libc", "libm", "libpthread", "libdl", "librt", "libgcc", "libstdc++",
-                 "libz", "libssl", "libcrypto", "libcurl", "libxml", "libjson", "libsqlite",
-                 "libpcap", "libudev", "libusb", "libgtk", "libqt", "libx11", "libglib"))) \
-                or n in ("ld-linux", "linux-vdso")
-    return True  # для Windows считаем всё системным (как в референсе)
+    """Определяет, системный ли модуль — по словарям классификатора
+    (classifier/system_modules.py; единая точка принятия решения,
+    аналогичная исполнению 1: словари платформ + префиксы API Sets)."""
+    return _classifier_is_system(mod_name or "", platform or "")
 
 
 def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
