@@ -437,6 +437,10 @@ public sealed class DiffWorker : IDisposable
             catch { /* не критично */ }
         }
 
+        // Экспорт IDA — источник истины: согласуем matched/unmatched и тоталы
+        // с реальным перечнем функций (доработка исполнения 1: 190fff3, ee9d761).
+        ApplyIdaExportTruth(jsonOutput, exported.Primary, exported.Secondary);
+
         Cleanup(primJson, secJson);
         return true;
     }
@@ -617,8 +621,164 @@ public sealed class DiffWorker : IDisposable
             }
             catch { /* не критично */ }
         }
+
+        // Экспорт IDA — источник истины (доработка исполнения 1: 190fff3, ee9d761).
+        ApplyIdaExportTruth(jsonOutput, exported.Primary, exported.Secondary);
+
         Cleanup(primJson, secJson);
         return true;
+    }
+
+    /// <summary>
+    /// Экспорт IDA — источник истины (доработка исполнения 1, коммиты 190fff3/ee9d761):
+    /// отбрасывает сопоставления с адресами вне перечня функций IDA (псевдофункции
+    /// BinExport, из-за которых показатель превышал 100%), пересобирает
+    /// matched_summary/total_matched, перезаписывает unmatched_functions1/2 и
+    /// total_functions1/2 фактическими данными экспорта, ставит
+    /// unmatched_source=ida_export. Для старых JSON без экспорта — разность тоталов.
+    /// </summary>
+    private void ApplyIdaExportTruth(string jsonOutput, string? primaryExport, string? secondaryExport)
+    {
+        if (!File.Exists(jsonOutput)) return;
+        var data = ReadJson(jsonOutput);
+        if (data == null) return;
+
+        var exportSet1 = ReadExportAddrs(primaryExport);
+        var exportSet2 = ReadExportAddrs(secondaryExport);
+
+        // BinExport содержит псевдофункции (jump-thunk'и), которых нет в
+        // перечне IDA — из-за них сопоставленных бывает больше, чем функций
+        // в файле (показатель > 100%). Оставляем только пары, чьи стороны
+        // есть в перечне.
+        var matches = data.TryGetValue("matched_functions", out var mf) && mf is List<object?> ml
+            ? ml : new List<object?>();
+        var kept = matches
+            .OfType<Dictionary<string, object?>>()
+            .Where(m =>
+                (exportSet1.Count == 0 || (Convert.ToString(m.GetValue("address1")) ?? "") != "" &&
+                    exportSet1.Contains(Convert.ToString(m.GetValue("address1")) ?? "")) &&
+                (exportSet2.Count == 0 || (Convert.ToString(m.GetValue("address2")) ?? "") != "" &&
+                    exportSet2.Contains(Convert.ToString(m.GetValue("address2")) ?? "")))
+            .ToList();
+        var dropped = matches.Count - kept.Count;
+        if (dropped > 0)
+            ErrorOccurred?.Invoke($"Post: отброшено {dropped} пар с адресами вне перечня IDA (pseudo-functions)");
+
+        data["matched_functions"] = kept;
+        data["matched_summary"] = new Dictionary<string, object?>
+        {
+            ["total"] = kept.Count,
+            ["bindiff_only"] = kept.Count(m => Convert.ToString(m.GetValue("source")) == "bindiff"),
+            ["diaphora_only"] = kept.Count(m => Convert.ToString(m.GetValue("source")) == "diaphora"),
+            ["both"] = kept.Count(m => Convert.ToString(m.GetValue("source")) == "both"),
+        };
+        data["total_matched"] = kept.Count;
+        data["matched_diaphora_only"] = kept
+            .Where(m => Convert.ToString(m.GetValue("source")) == "diaphora").ToList<object?>();
+        data["diaphora_matched_count"] = kept
+            .Count(m => Convert.ToString(m.GetValue("source")) is "diaphora" or "both");
+
+        var matchedPrimary = kept
+            .Select(m => Convert.ToString(m.GetValue("address1")) ?? "")
+            .Where(a => a != "").ToHashSet();
+        var matchedSecondary = kept
+            .Select(m => Convert.ToString(m.GetValue("address2")) ?? "")
+            .Where(a => a != "").ToHashSet();
+
+        if (primaryExport != null)
+        {
+            var un1 = ReadUnmatched(primaryExport, matchedPrimary);
+            data["unmatched_functions1"] = un1;
+            data["total_unmatched"] = un1.Count;
+            data["unmatched_source"] = "ida_export";
+            if (exportSet1.Count > 0) data["total_functions1"] = exportSet1.Count;
+        }
+        if (secondaryExport != null)
+        {
+            var un2 = ReadUnmatched(secondaryExport, matchedSecondary);
+            data["unmatched_functions2"] = un2;
+            if (exportSet2.Count > 0) data["total_functions2"] = exportSet2.Count;
+        }
+        if (primaryExport == null)
+        {
+            if (data.TryGetValue("unmatched_functions1", out var uf1) &&
+                uf1 is List<object?> l1 && l1.Count > 0)
+            {
+                data["total_unmatched"] = l1.Count;
+            }
+            else
+            {
+                var total1 = Convert.ToInt64(data.GetValue("total_functions") ?? data.GetValue("total_functions1") ?? 0);
+                data["total_unmatched"] = Math.Max(0, total1 - matchedPrimary.Count);
+            }
+        }
+
+        WriteJson(jsonOutput, data);
+    }
+
+    /// <summary>Уникальные адреса функций из экспорта IDA (в нормализованном виде 0xXXXX).</summary>
+    private static HashSet<string> ReadExportAddrs(string? exportJson)
+    {
+        var seen = new HashSet<string>();
+        if (string.IsNullOrEmpty(exportJson) || !File.Exists(exportJson)) return seen;
+        try
+        {
+            var d = ReadJson(exportJson);
+            if (d == null || !d.TryGetValue("functions", out var f) || f is not List<object?> funcs)
+                return seen;
+            foreach (var fn in funcs.OfType<Dictionary<string, object?>>())
+            {
+                var raw = Convert.ToString(fn.GetValue("start_ea")) ?? "";
+                if (raw == "") continue;
+                if (NormalizeAddr(raw) is { } norm && norm != "")
+                    seen.Add(norm);
+            }
+        }
+        catch { /* повреждённый JSON — пропускаем */ }
+        return seen;
+    }
+
+    /// <summary>Функции экспорта IDA, не вошедшие в сопоставленные.</summary>
+    private static List<object?> ReadUnmatched(string? exportJson, HashSet<string> matchedSet)
+    {
+        var funcs = new List<object?>();
+        if (string.IsNullOrEmpty(exportJson) || !File.Exists(exportJson)) return funcs;
+        try
+        {
+            var d = ReadJson(exportJson);
+            if (d == null || !d.TryGetValue("functions", out var f) || f is not List<object?> list)
+                return funcs;
+            foreach (var fn in list.OfType<Dictionary<string, object?>>())
+            {
+                var raw = Convert.ToString(fn.GetValue("start_ea")) ?? "";
+                if (raw == "") continue;
+                var norm = NormalizeAddr(raw);
+                if (norm == null || matchedSet.Contains(norm)) continue;
+                funcs.Add(new Dictionary<string, object?>
+                {
+                    ["address"] = norm,
+                    ["name"] = Convert.ToString(fn.GetValue("name"))?.Trim() ?? "<unnamed>",
+                });
+            }
+        }
+        catch { /* повреждённый JSON — пропускаем */ }
+        return funcs;
+    }
+
+    /// <summary>Нормализует адрес к виду 0xXXXX (как в перечне IDA и разборе BinDiff).</summary>
+    private static string? NormalizeAddr(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var s = raw.Trim();
+        try
+        {
+            var hex = s.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? s[2..] : s;
+            return $"0x{long.Parse(hex, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture):X}";
+        }
+        catch
+        {
+            return s.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? s : null;
+        }
     }
 
     private async Task GenerateAddReportsAsync(List<DiffPair> pairs, Action<string> stepDone, CancellationToken ct)

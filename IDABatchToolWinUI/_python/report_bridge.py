@@ -133,8 +133,56 @@ def _classify_module(mod_name):
     return "Прочие", "Дополнительные модули."
 
 
+def _api_to_release(api):
+    """Сопоставляет уровень Android API кодовому имени релиза (как в исполнении 1)."""
+    mapping = {
+        21: "5.0 Lollipop", 22: "5.1 Lollipop", 23: "6.0 Marshmallow",
+        24: "7.0 Nougat", 25: "7.1 Nougat", 26: "8.0 Oreo",
+        27: "8.1 Oreo", 28: "9.0 Pie", 29: "10", 30: "11",
+        31: "12", 32: "12L", 33: "13", 34: "14", 35: "15",
+    }
+    return mapping.get(api, "")
+
+
 def _file_info_entries(data):
-    """Информация о файле для отчёта анализа."""
+    """Карточка «Информация о файле» (аналог ELFReportGenerator._build_file_info
+    исполнения 1). Для ELF: идентификация → хеши → ELF-заголовок → динамическая
+    компоновка → notes. Пустые строки пропускаются. Для PE — прежний вариант."""
+    if data.get("is_elf"):
+        hashes = data.get("hashes") or {}
+        header = data.get("elf_header") or {}
+        rows = [
+            ("Имя файла", data.get("file_name", "")),
+            ("Формат", data.get("format") or ""),
+            ("Компилятор", data.get("compiler") or ""),
+            ("Input SHA256", hashes.get("sha256", "")),
+            ("Input MD5", hashes.get("md5", "")),
+            ("Input CRC32", hashes.get("crc32", "")),
+        ]
+        if header:
+            rows.append(("Разрядность", header.get("class", "")))
+            rows.append(("Порядок байт", header.get("endianness", "")))
+            rows.append(("Тип файла", header.get("type", "")))
+            rows.append(("Архитектура", header.get("machine", "")))
+            rows.append(("Точка входа", header.get("entry", "")))
+            rows.append(("Флаги (e_flags)", header.get("flags", "")))
+            rows.append(("Сегментов", str(header.get("program_headers", ""))))
+            rows.append(("Секций", str(header.get("sections", ""))))
+        rows.append(("Shared Name (SONAME)", data.get("soname") or ""))
+        rows.append(("Interpreter (PT_INTERP)", data.get("interpreter") or ""))
+        rows.append(("Library RPATH", data.get("rpath") or ""))
+        rows.append(("Library RUNPATH", data.get("runpath") or ""))
+        rows.append(("Build ID (GNU)", data.get("build_id") or ""))
+        abi = data.get("abi_tag")
+        if abi:
+            rows.append(("ABI Tag (GNU)", abi))
+        api = data.get("android_api")
+        if api:
+            release = _api_to_release(api)
+            rows.append(("Android API Level",
+                         f"{api} (Android {release})" if release else str(api)))
+        return [(label, value) for label, value in rows if value]
+
     rows = []
     rows.append(("Имя файла", data.get("file_name", "")))
     rows.append(("Формат", data.get("format", "") or data.get("file_format", "")))
@@ -142,9 +190,11 @@ def _file_info_entries(data):
     rows.append(("Архитектура", data.get("arch", "") or data.get("processor", "")))
     rows.append(("Компилятор", data.get("compiler", "") or ""))
     rows.append(("Размер", str(data.get("file_size", ""))))
+    hashes = data.get("hashes") or {}
     for k, v in [("SHA-256", "sha256"), ("MD5", "md5"), ("CRC32", "crc32")]:
-        if data.get(v):
-            rows.append((k, data[v]))
+        val = data.get(v) or hashes.get(v)
+        if val:
+            rows.append((k, val))
     return rows
 
 
@@ -217,19 +267,32 @@ def generate_analysis_report(json_path, output_html, input_dir, internal_set):
 
 
 def _elf_segments(data):
+    """Сегменты ELF: тип, права и словесное назначение (как в исполнении 1)."""
+    from elf_descriptions import describe_segment
     segs = []
     for seg in data.get("elf_segments", []) or []:
         segs.append({"type": seg.get("type", ""), "flags": seg.get("flags", ""),
-                     "description": seg.get("description", "")})
+                     "description": describe_segment(seg.get("type", ""))})
     return segs
 
 
 def _elf_sections(data):
+    """Секции ELF: имя, тип, флаги и словесное назначение (как в исполнении 1)."""
+    from elf_descriptions import describe_section
     secs = []
     for s in data.get("elf_sections", []) or []:
-        secs.append({"name": s.get("name", ""), "type": s.get("type", ""),
-                     "flags": s.get("flags", ""), "description": s.get("description", "")})
+        name = s.get("name", "")
+        display_name = name if name and not _is_placeholder_section(name) else "—"
+        secs.append({"name": display_name, "type": s.get("type", ""),
+                     "flags": s.get("flags", ""),
+                     "description": describe_section(name, s.get("type", ""))})
     return secs
+
+
+def _is_placeholder_section(name):
+    """Служебная заглушка секции (индекс 0): пустое имя или '<0>'."""
+    stripped = (name or "").strip()
+    return not stripped or (stripped.startswith("<") and stripped.endswith(">"))
 
 
 def generate_analysis_index(reports_dir, input_dir, report_links, global_modules,
@@ -521,9 +584,16 @@ def generate_diff_report(json_path, output_html, reports_dir, input_dir, interna
 
 def generate_diff_index(reports_dir, json_files, left_dir, right_dir,
                         generation_time, ida_version=""):
+    """Сводный отчёт сравнения (перенос доработок исполнения 1: d35a4f2/ee9d761).
+
+    Показатель совпадения: hexdump 100% — hexdump-схожесть; два движка с
+    уникальными парами Diaphora — доля найденных функций; иначе sim BinDiff.
+    Имя пары — реальный исполняемый файл (без .i64), среднее — по display_sim.
+    """
     pairs = []
-    total_pairs = len(json_files)
-    sims, confs = [], []
+    total_similarity = 0.0
+    total_confidence = 0.0
+    count = 0
     has_bindiff = False
     has_diaphora = False
 
@@ -536,45 +606,68 @@ def generate_diff_index(reports_dir, json_files, left_dir, right_dir,
             data = {}
         if not isinstance(data, dict):
             data = {}
-        matching = data.get("matched_summary", {})
-        matched_count = data.get("total_matched") or (
-            (matching.get("bindiff_only", 0) if isinstance(matching, dict) else 0)
-            + (matching.get("diaphora_only", 0) if isinstance(matching, dict) else 0)
-            + (matching.get("both", 0) if isinstance(matching, dict) else 0))
+
+        real_prim = data.get("real_primary", "")
+        # Имя реального исполняемого файла (без .i64)
+        if real_prim:
+            real_name = os.path.basename(real_prim)
+        else:
+            real_name = stem.replace("_i64", "")
+
         sim = float(data.get("similarity", 0.0) or 0.0)
-        hd_sim = float(data.get("hexdump_similarity", 0.0) or 0.0)
         conf = float(data.get("confidence", 0.0) or 0.0)
-        eng = data.get("engine", "")
+        hd_sim = float(data.get("hexdump_similarity", 0.0) or 0.0)
+        eng = str(data.get("engine", "bindiff") or "bindiff")
+        total1 = int(data.get("total_functions1", 0) or 0)
+        matching = data.get("matched_summary", {})
+        matched = len(data.get("matched_functions", []) or [])
+        if not matched and isinstance(matching, dict):
+            matched = (int(matching.get("bindiff_only", 0) or 0)
+                       + int(matching.get("diaphora_only", 0) or 0)
+                       + int(matching.get("both", 0) or 0))
+        diaphora_only = int(matching.get("diaphora_only", 0) or 0) if isinstance(matching, dict) else 0
+
         if "bindiff" in eng:
             has_bindiff = True
         if "diaphora" in eng:
             has_diaphora = True
-        if sim > 0:
-            sims.append(sim)
-            confs.append(conf)
-        display_sim = hd_sim if hd_sim > 0 else sim
+
+        # Если hexdump 100% — hexdump-схожесть. Если оба движка и Diaphora
+        # добавила уникальные пары — доля функций, найденных в сумме. Иначе
+        # (BinDiff-only или Diaphora не добавила нового) — sim BinDiff.
+        if hd_sim >= 1.0 or total1 == 0:
+            display_sim = hd_sim
+        elif eng == "bindiff+diaphora" and diaphora_only > 0:
+            display_sim = matched / total1 if total1 else 0.0
+        else:
+            display_sim = sim
+
         pairs.append({
-            "stem": stem,
+            "stem": real_name,
             "similarity": sim,
             "display_similarity": display_sim,
             "hexdump_similarity": hd_sim,
             "confidence": conf,
-            "matched_count": matched_count,
-            "total_funcs1": data.get("total_functions1", 0),
+            "matched_count": matched,
+            "total_funcs1": total1,
             "hash1": data.get("file1", {}).get("hash", "") if isinstance(data.get("file1"), dict) else "",
             "hash2": data.get("file2", {}).get("hash", "") if isinstance(data.get("file2"), dict) else "",
-            "diaphora_matched_count": data.get("diaphora_matched_count", 0),
+            "engine": eng,
+            "diaphora_matched_count": diaphora_only,
             "report_filename": stem + ".html",
         })
+        total_similarity += display_sim
+        total_confidence += conf
+        count += 1
 
-    avg_sim = sum(sims) / len(sims) if sims else 0.0
-    avg_conf = sum(confs) / len(confs) if confs else 0.0
+    avg_sim = total_similarity / count if count else 0.0
+    avg_conf = total_confidence / count if count else 0.0
     ctx = {
         "left_dir": left_dir,
         "right_dir": right_dir,
         "generation_time": generation_time,
         "ida_version": ida_version,
-        "total_pairs": total_pairs,
+        "total_pairs": count,
         "avg_similarity": avg_sim,
         "avg_confidence": avg_conf,
         "has_bindiff": has_bindiff,
