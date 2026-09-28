@@ -127,21 +127,21 @@ public sealed partial class SettingsPage : Page
 
     private static Task<(string, string)> Check7zAsync() => Task.Run(() =>
     {
-        var candidates = new[]
+        // Только полные пути: поиск по имени зависим от рабочего каталога приложения.
+        var candidates = new List<string>
         {
-            "7z", "7za", "7z.exe", "7za.exe",
             @"C:\Program Files\7-Zip\7z.exe",
             @"C:\Program Files (x86)\7-Zip\7z.exe",
         };
-        foreach (var exe in candidates)
+        candidates.AddRange(ResolveOnPath("7z.exe"));
+        candidates.AddRange(ResolveOnPath("7za.exe"));
+        foreach (var exe in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
         {
+            if (!File.Exists(exe)) continue;
             try
             {
-                var psi = new ProcessStartInfo { FileName = exe, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
-                using var proc = Process.Start(psi);
-                if (proc == null) continue;
-                var output = proc.StandardOutput.ReadToEnd() + proc.StandardError.ReadToEnd();
-                if (!proc.WaitForExit(5000)) { try { proc.Kill(); } catch { } continue; }
+                var (code, output) = RunCaptureOutput(exe);
+                if (code != 0) continue;
                 var ver = "";
                 foreach (var line in output.Split('\n'))
                 {
@@ -149,8 +149,13 @@ public sealed partial class SettingsPage : Page
                     if (l.Contains("version") || l.Contains("версия") || l.Contains("7-zip") || l.Contains("7za"))
                     { ver = line.Trim(); break; }
                 }
-                if (ver.Length > 0) return ("ok", $"{exe}  ({ver})");
-                if (!string.IsNullOrWhiteSpace(output)) return ("ok", exe);
+                if (ver.Length > 0)
+                {
+                    var cut = ver.IndexOf("Copyright", StringComparison.OrdinalIgnoreCase);
+                    if (cut > 0) ver = ver[..cut].Trim().TrimEnd(':').Trim();
+                    return ("ok", $"{exe}  ({ver})");
+                }
+                return ("ok", exe);
             }
             catch { /* ищем дальше */ }
         }
@@ -159,44 +164,115 @@ public sealed partial class SettingsPage : Page
 
     private static Task<(string, string)> CheckNpxAsync() => Task.Run(() =>
     {
-        var candidates = new[] { "npx", "npx.cmd", "npx.exe" };
-        foreach (var exe in candidates)
+        var nodeCandidates = new List<string>
         {
-            try
-            {
-                var psi = new ProcessStartInfo { FileName = exe, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
-                psi.ArgumentList.Add("--version");
-                using var proc = Process.Start(psi);
-                if (proc == null) continue;
-                var output = (proc.StandardOutput.ReadToEnd() + proc.StandardError.ReadToEnd()).Trim();
-                if (!proc.WaitForExit(10000)) { try { proc.Kill(); } catch { } continue; }
-                if (output.Length > 0) return ("ok", $"{exe}  (v{output})");
-                if (proc.ExitCode == 0) return ("ok", exe);
-            }
-            catch { /* ищем дальше */ }
-        }
-        var winCandidates = new[]
-        {
-            @"C:\Program Files\nodejs\npx.cmd", @"C:\Program Files\nodejs\npx.exe",
-            @"C:\Program Files (x86)\nodejs\npx.cmd", @"C:\Program Files (x86)\nodejs\npx.exe",
-            @"C:\ProgramData\chocolatey\bin\npx.exe",
+            @"C:\Program Files\nodejs\node.exe",
+            @"C:\Program Files (x86)\nodejs\node.exe",
         };
-        foreach (var full in winCandidates)
+        nodeCandidates.AddRange(ResolveOnPath("node.exe"));
+
+        var nodeVersion = "";
+        var nodeDir = "";
+        foreach (var exe in nodeCandidates.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            if (!File.Exists(full)) continue;
-            try
-            {
-                var psi = new ProcessStartInfo { FileName = full, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
-                psi.ArgumentList.Add("--version");
-                using var proc = Process.Start(psi);
-                if (proc == null) continue;
-                var output = (proc.StandardOutput.ReadToEnd() + proc.StandardError.ReadToEnd()).Trim();
-                if (proc.WaitForExit(10000) && output.Length > 0) return ("ok", $"{full}  (v{output})");
-            }
-            catch { }
+            if (!File.Exists(exe)) continue;
+            var (code, output) = RunCaptureOutput(exe, "--version");
+            if (code != 0 || !IsVersion(output, allowVPrefix: true)) continue;
+            nodeVersion = output;
+            nodeDir = Path.GetDirectoryName(exe) ?? "";
+            break;
         }
-        return ("error", "Не найден. Установите Node.js и перезапустите программу.");
+        if (nodeVersion.Length == 0)
+            return ("error", "Не найден. Установите Node.js и перезапустите программу.");
+
+        // npx ищем рядом с проверенным node и по известным путям — строго по полным путям,
+        // чтобы случайный npx.cmd из рабочего каталога не маскировал системный.
+        var npxCandidates = new List<string>();
+        if (nodeDir.Length > 0) npxCandidates.Add(Path.Combine(nodeDir, "npx.cmd"));
+        npxCandidates.AddRange(ResolveOnPath("npx.cmd"));
+        npxCandidates.Add(@"C:\ProgramData\chocolatey\bin\npx.cmd");
+
+        var npxVersion = "";
+        var npxPath = "";
+        var npxExit = -1;
+        foreach (var exe in npxCandidates.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!File.Exists(exe)) continue;
+            var (code, output) = RunCaptureOutput(exe, "--version");
+            npxExit = code;
+            if (code == 0 && IsVersion(output, allowVPrefix: true))
+            {
+                npxVersion = output;
+                npxPath = exe;
+                break;
+            }
+        }
+        if (npxVersion.Length == 0)
+            return ("error", npxExit < 0
+                ? $"Node.js {nodeVersion} найден, но npx не найден. Переустановите Node.js."
+                : $"Node.js {nodeVersion} найден, но npx не работает (код {npxExit}). Переустановите Node.js.");
+        return ("ok", $"{npxPath}  (Node.js {nodeVersion}, npx {npxVersion})");
     });
+
+    /// <summary>Запускает exe с аргументами, возвращает (код выхода, объединённый вывод).</summary>
+    private static (int, string) RunCaptureOutput(string exe, params string[] args)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = exe,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                WorkingDirectory = Path.GetDirectoryName(exe),
+            };
+            foreach (var a in args) psi.ArgumentList.Add(a);
+            using var proc = Process.Start(psi);
+            if (proc == null) return (-1, "");
+            var output = (proc.StandardOutput.ReadToEnd() + proc.StandardError.ReadToEnd()).Trim();
+            if (!proc.WaitForExit(10000)) { try { proc.Kill(); } catch { } return (-1, ""); }
+            return (proc.ExitCode, output);
+        }
+        catch { return (-1, ""); }
+    }
+
+    /// <summary>Ищет утилиту через where.exe; его рабочий каталог фиксирован на System32,
+    /// чтобы «мусорный» exe из каталога приложения не маскировал системный.</summary>
+    private static IEnumerable<string> ResolveOnPath(string name)
+    {
+        var found = new List<string>();
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = Path.Combine(Environment.SystemDirectory, "where.exe"),
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                WorkingDirectory = Environment.SystemDirectory,
+            };
+            psi.ArgumentList.Add(name);
+            using var proc = Process.Start(psi);
+            if (proc == null) return found;
+            var output = proc.StandardOutput.ReadToEnd();
+            proc.WaitForExit(3000);
+            if (proc.ExitCode == 0)
+                foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    if (File.Exists(line)) found.Add(line);
+        }
+        catch { /* where недоступен — остались известные пути */ }
+        return found;
+    }
+
+    /// <summary>Строгая проверка вывода версии: одна строка вида "11.19.0"/"v26.7.0",
+    /// без стектрейсов упавшего процесса.</summary>
+    private static bool IsVersion(string output, bool allowVPrefix)
+    {
+        if (output.Length == 0 || output.Length > 20 || output.Contains('\n')) return false;
+        if (allowVPrefix && output.StartsWith('v')) output = output[1..];
+        return output.Length > 0 && output.All(c => char.IsDigit(c) || c == '.') && output.Any(char.IsDigit);
+    }
 
     // ──────────────────────────────────────────────
     //  man-pages (Linux)
