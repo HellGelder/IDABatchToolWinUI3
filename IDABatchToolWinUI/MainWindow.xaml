@@ -21,21 +21,20 @@
 
         <TitleBar
             x:Name="AppTitleBar"
-            Title="IDA Batch Tool"
-            IsPaneToggleButtonVisible="True"
-            PaneToggleRequested="TitleBar_PaneToggleRequested">
+            Title="IDA Batch Tool">
             <TitleBar.IconSource>
                 <ImageIconSource ImageSource="Assets/AppIcon.ico" />
             </TitleBar.IconSource>
         </TitleBar>
 
+        <!-- Навигация сверху: пункты вкладок по центру, «Конфигурация» — справа -->
         <NavigationView
             x:Name="NavView"
             Grid.Row="1"
             IsBackButtonVisible="Collapsed"
             IsPaneToggleButtonVisible="False"
             IsSettingsVisible="False"
-            PaneDisplayMode="Left"
+            PaneDisplayMode="Top"
             SelectionChanged="NavView_SelectionChanged">
 
             <NavigationView.MenuItems>

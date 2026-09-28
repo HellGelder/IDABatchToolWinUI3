@@ -21,6 +21,8 @@ public sealed class AnalysisWorker : IDisposable
 
     /// <summary>(фаза "analysis"|"export")</summary>
     public event Action<string>? PhaseChanged;
+    /// <summary>(имя цели, PID процесса IDA, managed thread id) — сразу после запуска idat.exe.</summary>
+    public event Action<string, int, int>? ProcessStarted;
     public event Action<string, int, int>? AnalysisProgress;
     public event Action<string>? AnalysisFileStarted;
     public event Action<string, bool>? AnalysisFileCompleted;
@@ -54,6 +56,7 @@ public sealed class AnalysisWorker : IDisposable
             FileStartCallback = _ => { },
             FileDoneCallback = (_, _) => { },
         };
+        _runner.ProcessStartedCallback = (name, pid, tid) => ProcessStarted?.Invoke(name, pid, tid);
     }
 
     public void Start()

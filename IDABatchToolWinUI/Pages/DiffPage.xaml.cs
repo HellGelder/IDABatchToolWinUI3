@@ -167,6 +167,7 @@ public DiffPage()
         foreach (var r in rows)
         {
             r.ThreadIdText = "—";
+            r.PidText = "—";
             if (!_diffInProgress)
             {
                 r.BindiffStatus = useBd ? "waiting" : "no_analysis";
@@ -269,6 +270,15 @@ public DiffPage()
             {
                 foreach (var f in Directory.GetFiles(outputPath, "*.diff.json"))
                     try { File.Delete(f); } catch { }
+                // Полная перегенерация: сбрасываем и результаты доанализа
+                // (иначе маркер add_analysis_done не даст ему перезапуститься)
+                if (addOutputPath != null && Directory.Exists(addOutputPath))
+                {
+                    foreach (var f in Directory.GetFiles(addOutputPath, "*.diff.json"))
+                        try { File.Delete(f); } catch { }
+                    foreach (var f in Directory.GetFiles(addOutputPath, "*_diaphora_result.sqlite"))
+                        try { File.Delete(f); } catch { }
+                }
             }
         }
 
@@ -308,6 +318,13 @@ public DiffPage()
                 ?.FirstOrDefault(r => r.RelKey == relKey);
             if (row == null) return;
             row.ThreadIdText = threadId > 0 ? threadId.ToString() : "—";
+        });
+        w.PairProcessStarted += (relKey, pid) => RunOnUi(() =>
+        {
+            var row = (PairsListView.ItemsSource as List<PairRowViewModel>)
+                ?.FirstOrDefault(r => r.RelKey == relKey);
+            if (row == null) return;
+            row.PidText = pid > 0 ? pid.ToString() : "—";
         });
         w.PairStatus += (relKey, engine, status) => RunOnUi(() =>
         {

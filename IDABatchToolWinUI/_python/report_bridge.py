@@ -323,22 +323,56 @@ def _is_placeholder_section(name):
     return not stripped or (stripped.startswith("<") and stripped.endswith(">"))
 
 
+def _category_description(cat):
+    """Описание категории из словарей классификатора (пусто для эвристических категорий)."""
+    try:
+        from classifier.categories import _CATEGORIES
+        info = _CATEGORIES.get(cat)
+        if info:
+            return info.get("description", "")
+    except Exception:
+        pass
+    return ""
+
+
+def _sorted_category_groups(categories):
+    """Порядок категорий сводного индекса — как в исполнении 1: внутренние первыми,
+    затем по алфавиту, «Неопознанные модули» в конце; модули внутри категории по алфавиту."""
+    grouped = []
+    internal = categories.pop("Внутренние модули", None)
+    if internal:
+        internal["modules"] = sorted(internal["modules"], key=lambda x: x["name"].lower())
+        grouped.append(internal)
+    ordered = sorted(c for c in categories if c != "Неопознанные модули")
+    if "Неопознанные модули" in categories:
+        ordered.append("Неопознанные модули")
+    for cat in ordered:
+        info = categories[cat]
+        info["modules"] = sorted(info["modules"], key=lambda x: x["name"].lower())
+        grouped.append(info)
+    return grouped
+
+
 def generate_analysis_index(reports_dir, input_dir, report_links, global_modules,
                             ida_info, internal_set=None, total_files=0,
                             total_size_bytes=0, error_count=0, generation_time=""):
-    """Сводный index.html для «Общего анализа»."""
+    """Сводный index.html для «Общего анализа»: категория со словесным описанием
+    и описание у каждого модуля (как в исполнении 1, generator.generate_index)."""
     categories = {}
     for mod in global_modules:
-        is_internal = internal_set and mod.lower() in internal_set
-        if is_internal:
-            key = "Внутренние модули"
+        if internal_set and mod.lower() in internal_set:
+            cat = "Внутренние модули"
+            desc = "Собственный модуль проекта (внутренняя библиотека)"
+            cat_desc = "Библиотеки и исполняемые файлы, находящиеся внутри исследуемой директории."
         else:
-            key, _ = _classify_module(mod)
-        if key not in categories:
-            categories[key] = {"name": key, "count": 0, "modules": [], "description": ""}
-        categories[key]["count"] += 1
-        categories[key]["modules"].append({"name": mod, "desc": ""})
-    grouped = sorted(categories.values(), key=lambda c: -c["count"])
+            cat, desc = _classify_module(mod)
+            cat_desc = _category_description(cat)
+        if cat not in categories:
+            categories[cat] = {"name": cat, "description": cat_desc, "count": 0, "modules": []}
+        info = categories[cat]
+        info["count"] += 1
+        info["modules"].append({"name": mod, "desc": desc})
+    grouped = _sorted_category_groups(categories)
 
     ctx = {
         "input_dir": input_dir,
@@ -649,6 +683,7 @@ def generate_diff_index(reports_dir, json_files, left_dir, right_dir,
                        + int(matching.get("diaphora_only", 0) or 0)
                        + int(matching.get("both", 0) or 0))
         diaphora_only = int(matching.get("diaphora_only", 0) or 0) if isinstance(matching, dict) else 0
+        diaphora_confirmed = int(matching.get("both", 0) or 0) if isinstance(matching, dict) else 0
 
         if "bindiff" in eng:
             has_bindiff = True
@@ -677,6 +712,7 @@ def generate_diff_index(reports_dir, json_files, left_dir, right_dir,
             "hash2": data.get("file2", {}).get("hash", "") if isinstance(data.get("file2"), dict) else "",
             "engine": eng,
             "diaphora_matched_count": diaphora_only,
+            "diaphora_confirmed_count": diaphora_confirmed,
             "report_filename": stem + ".html",
         })
         total_similarity += display_sim

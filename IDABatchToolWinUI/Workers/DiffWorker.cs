@@ -20,6 +20,7 @@ public sealed class DiffWorker : IDisposable
     public event Action<string, int, int, string>? StageFile; // (stage, current, total, fileName)
     public event Action<string, string, string>? PairStatus; // (relKey, engine, status)
     public event Action<string, int>? PairThreadStarted;     // (relKey, managedThreadId)
+    public event Action<string, int>? PairProcessStarted;    // (relKey, PID последнего запущенного процесса пары)
     public event Action<string>? ErrorOccurred;
     public event Action<int, int>? Finished;                 // (success, total)
 
@@ -110,14 +111,37 @@ public sealed class DiffWorker : IDisposable
         if (ct.IsCancellationRequested) { Abort(); return; }
         StageChanged?.Invoke("Генерация HTML", "done");
 
-        // Доанализ для engine=bindiff — только при наличии пар <99%
-        if (Engine == "bindiff" && !string.IsNullOrEmpty(AddOutputDir) && CountLowSimilarityPairs(all) > 0)
+        // Доанализ для engine=bindiff — только при наличии пар <99%, ещё не прошедших доанализ
+        if (Engine == "bindiff" && !string.IsNullOrEmpty(AddOutputDir))
         {
-            await RunAddAnalysisAsync(all, ct);
-            if (ct.IsCancellationRequested) { Abort(); return; }
+            if (CountLowSimilarityPairs(all) > 0)
+            {
+                await RunAddAnalysisAsync(all, ct);
+                if (ct.IsCancellationRequested) { Abort(); return; }
+            }
+            else
+            {
+                ErrorOccurred?.Invoke(
+                    "Доанализ не запускался: нет пар, требующих доанализа " +
+                    "(similarity ≥ 99% или доанализ уже успешно завершён).");
+            }
         }
 
         Finished?.Invoke(Math.Min(total, all.Count), total);
+    }
+
+    /// <summary>
+    /// Доанализ пары уже завершён успешно: в add-JSON стоит маркер add_analysis_done
+    /// (ставится после реального слияния результатов Diaphora). Факт существования файла
+    /// маркером не является — там может лежать необработанная копия исходного diff.json.
+    /// </summary>
+    private bool IsAddAnalysisDone(string stem)
+    {
+        if (string.IsNullOrEmpty(AddOutputDir)) return false;
+        var path = Path.Combine(AddOutputDir, $"{stem}.diff.json");
+        if (!File.Exists(path)) return false;
+        var d = ReadJson(path);
+        return d != null && d.TryGetValue("add_analysis_done", out var v) && v is true;
     }
 
     private int CountLowSimilarityPairs(List<DiffPair> pairs)
@@ -127,8 +151,7 @@ public sealed class DiffWorker : IDisposable
         {
             var d = Path.Combine(OutputDir, $"{p.Stem}.diff.json");
             if (!File.Exists(d)) continue;
-            if (AddOutputDir != null && File.Exists(Path.Combine(AddOutputDir, $"{p.Stem}.diff.json")))
-                continue;
+            if (IsAddAnalysisDone(p.Stem)) continue;
             try
             {
                 var data = ReadJson(d);
@@ -153,7 +176,8 @@ public sealed class DiffWorker : IDisposable
     private async Task RunPass(
         string stage, List<DiffPair> pairs, int total, string? engine,
         string statusText,
-        Func<DiffPair, Task<bool>> process, CancellationToken ct)
+        Func<DiffPair, Task<bool>> process, CancellationToken ct,
+        bool parallelLarge = false)
     {
         if (pairs.Count == 0) return;
 
@@ -169,8 +193,11 @@ public sealed class DiffWorker : IDisposable
 
         StageFile?.Invoke(stage, 0, total, "");
 
-        var small = pairs.Where(p => !IsLarge(p.Primary)).ToList();
-        var large = pairs.Where(p => IsLarge(p.Primary)).ToList();
+        // parallelLarge=true — крупные файлы тоже идут через общий семафор
+        // (доанализ Diaphora должен быть многопоточным; в исполнении 1 крупные
+        // файлы всегда последовательны — для основных фаз сохраняем это поведение).
+        var small = parallelLarge ? pairs : pairs.Where(p => !IsLarge(p.Primary)).ToList();
+        var large = parallelLarge ? new List<DiffPair>() : pairs.Where(p => IsLarge(p.Primary)).ToList();
         var completed = 0;
 
         async Task RunOne(DiffPair p)
@@ -237,11 +264,11 @@ public sealed class DiffWorker : IDisposable
         var binexportP = Path.Combine(OutputDir, $"{stem}_primary.BinExport");
         var binexportS = Path.Combine(OutputDir, $"{stem}_secondary.BinExport");
 
-        if (!await ExportBinExportAsync(p.Primary, binexportP, ct)) return false;
-        if (!await ExportBinExportAsync(p.Secondary, binexportS, ct)) return false;
+        if (!await ExportBinExportAsync(p.Primary, binexportP, p.RelKey, ct)) return false;
+        if (!await ExportBinExportAsync(p.Secondary, binexportS, p.RelKey, ct)) return false;
 
         var diffOutput = Path.Combine(OutputDir, $"{stem}.BinDiff");
-        if (!await RunBindiffAsync(binexportP, binexportS, diffOutput, ct))
+        if (!await RunBindiffAsync(binexportP, binexportS, diffOutput, p.RelKey, ct))
         {
             ErrorOccurred?.Invoke($"BinDiff: {stem}");
             return false;
@@ -250,7 +277,7 @@ public sealed class DiffWorker : IDisposable
         return true;
     }
 
-    private async Task<bool> ExportBinExportAsync(string i64Path, string outputFile, CancellationToken ct)
+    private async Task<bool> ExportBinExportAsync(string i64Path, string outputFile, string relKey, CancellationToken ct)
     {
         if (ct.IsCancellationRequested) return false;
         if (File.Exists(outputFile)) File.Delete(outputFile);
@@ -260,11 +287,11 @@ public sealed class DiffWorker : IDisposable
         psi.ArgumentList.Add("-OBinExportAutoAction:BinExportBinary");
         psi.ArgumentList.Add($"-OBinExportModule:{outputFile}");
         psi.ArgumentList.Add(i64Path);
-        var (rc, _, _) = await RunProcAsync(psi, ct);
+        var (rc, _, _) = await RunProcAsync(psi, relKey, ct);
         return rc == 0 && File.Exists(outputFile);
     }
 
-    private async Task<bool> RunBindiffAsync(string primary, string secondary, string output, CancellationToken ct)
+    private async Task<bool> RunBindiffAsync(string primary, string secondary, string output, string relKey, CancellationToken ct)
     {
         var tmpDir = Path.Combine(Path.GetDirectoryName(output)!, Path.GetFileNameWithoutExtension(output) + "_tmp");
         if (Directory.Exists(tmpDir)) Directory.Delete(tmpDir, recursive: true);
@@ -283,7 +310,7 @@ public sealed class DiffWorker : IDisposable
             psi.ArgumentList.Add("--primary"); psi.ArgumentList.Add(primary);
             psi.ArgumentList.Add("--secondary"); psi.ArgumentList.Add(secondary);
             psi.ArgumentList.Add("--output_dir"); psi.ArgumentList.Add(tmpDir);
-            var (rc, _, _) = await RunProcAsync(psi, ct);
+            var (rc, _, _) = await RunProcAsync(psi, relKey, ct);
             if (rc != 0) return false;
 
             var diffFiles = Directory.GetFiles(tmpDir, "*.BinDiff");
@@ -321,13 +348,13 @@ public sealed class DiffWorker : IDisposable
             return false;
         }
 
-        if (!await RunDiaphoraExportAsync(p.Primary, dbPri, ct))
+        if (!await RunDiaphoraExportAsync(p.Primary, dbPri, p.RelKey, ct))
         {
             ErrorOccurred?.Invoke($"Diaphora экспорт primary {stem}");
             Cleanup(dbPri, dbSec, result);
             return false;
         }
-        if (!await RunDiaphoraExportAsync(p.Secondary, dbSec, ct))
+        if (!await RunDiaphoraExportAsync(p.Secondary, dbSec, p.RelKey, ct))
         {
             ErrorOccurred?.Invoke($"Diaphora экспорт secondary {stem}");
             Cleanup(dbPri, dbSec, result);
@@ -335,14 +362,14 @@ public sealed class DiffWorker : IDisposable
         }
 
         if (File.Exists(dbPri) && File.Exists(dbSec))
-            if (await RunDiaphoraDiffAsync(dbPri, dbSec, result, ct))
+            if (await RunDiaphoraDiffAsync(dbPri, dbSec, result, p.RelKey, ct))
                 MergeDiaphoraIntoJson(jsonOutput, result, stem);
 
         Cleanup(dbPri, dbSec, result);
         return true;
     }
 
-    private async Task<bool> RunDiaphoraExportAsync(string i64Path, string outSqlite, CancellationToken ct)
+    private async Task<bool> RunDiaphoraExportAsync(string i64Path, string outSqlite, string relKey, CancellationToken ct)
     {
         var psi = NewIdatPsi();
         var env = psi.Environment;
@@ -365,11 +392,11 @@ public sealed class DiffWorker : IDisposable
         psi.ArgumentList.Add($"-S{DiaphoraPath}");
         psi.ArgumentList.Add(i64Path);
 
-        var (rc, _, _) = await RunProcWithTimeoutAsync(psi, TimeSpan.FromHours(6), ct);
+        var (rc, _, _) = await RunProcWithTimeoutAsync(psi, relKey, TimeSpan.FromHours(6), ct);
         return rc == 0 && File.Exists(outSqlite);
     }
 
-    private async Task<bool> RunDiaphoraDiffAsync(string db1, string db2, string outSqlite, CancellationToken ct)
+    private async Task<bool> RunDiaphoraDiffAsync(string db1, string db2, string outSqlite, string relKey, CancellationToken ct)
     {
         var psi = new ProcessStartInfo
         {
@@ -384,7 +411,7 @@ public sealed class DiffWorker : IDisposable
         psi.ArgumentList.Add(db2);
         psi.ArgumentList.Add("-o");
         psi.ArgumentList.Add(outSqlite);
-        var (rc, _, _) = await RunProcAsync(psi, ct);
+        var (rc, _, _) = await RunProcAsync(psi, relKey, ct);
         return rc == 0 && File.Exists(outSqlite);
     }
 
@@ -399,7 +426,7 @@ public sealed class DiffWorker : IDisposable
         var primJson = Path.Combine(OutputDir, $"{stem}_primary.export.json");
         var secJson = Path.Combine(OutputDir, $"{stem}_secondary.export.json");
 
-        var exported = await ExportJsonPairAsync(p.Primary, primJson, p.Secondary, secJson, ct);
+        var exported = await ExportJsonPairAsync(p.Primary, primJson, p.Secondary, secJson, p.RelKey, ct);
         EnrichDiffJson(jsonOutput, exported.Primary, exported.Secondary);
 
         // Hexdump diff
@@ -437,7 +464,7 @@ public sealed class DiffWorker : IDisposable
     }
 
     private async Task<(string? Primary, string? Secondary)> ExportJsonPairAsync(
-        string primaryI64, string primaryOut, string secondaryI64, string secondaryOut, CancellationToken ct)
+        string primaryI64, string primaryOut, string secondaryI64, string secondaryOut, string relKey, CancellationToken ct)
     {
         var result = (Primary: (string?)null, Secondary: (string?)null);
         foreach (var (i64, outPath, isPrimary) in new[]
@@ -451,7 +478,7 @@ public sealed class DiffWorker : IDisposable
             psi.ArgumentList.Add("-A");
             psi.ArgumentList.Add($"-S\"{ExportScript}\" pseudocode=1");
             psi.ArgumentList.Add(i64);
-            var (rc, _, _) = await RunProcAsync(psi, ct);
+            var (rc, _, _) = await RunProcAsync(psi, relKey, ct);
             if (rc != 0) continue;
 
             var src = i64 + ".export.json";
@@ -514,8 +541,7 @@ public sealed class DiffWorker : IDisposable
             var stem = p.Stem;
             var d = Path.Combine(OutputDir, $"{stem}.diff.json");
             if (!File.Exists(d)) return false;
-            if (AddOutputDir != null && File.Exists(Path.Combine(AddOutputDir, $"{stem}.diff.json")))
-                return false;
+            if (IsAddAnalysisDone(stem)) return false;
             try
             {
                 var data = ReadJson(d);
@@ -539,13 +565,13 @@ public sealed class DiffWorker : IDisposable
 
         StageChanged?.Invoke("Доанализ (Diaphora)", "started");
         await RunPass("Доанализ (Diaphora)", low, low.Count, "diaphora", "Доанализ (Diaphora)",
-            p => ProcessAddDiaphoraPairAsync(p, ct), ct);
+            p => ProcessAddDiaphoraPairAsync(p, ct), ct, parallelLarge: true);
         StageChanged?.Invoke("Доанализ (Diaphora)", "done");
         if (ct.IsCancellationRequested) return;
 
         StageChanged?.Invoke("Доанализ (пост-анализ)", "started");
         await RunPass("Доанализ (пост-анализ)", low, low.Count, "diaphora", "Доанализ (пост-анализ)",
-            p => ProcessAddPostPairAsync(p, ct), ct);
+            p => ProcessAddPostPairAsync(p, ct), ct, parallelLarge: true);
         StageChanged?.Invoke("Доанализ (пост-анализ)", "done");
         if (ct.IsCancellationRequested) return;
 
@@ -562,14 +588,34 @@ public sealed class DiffWorker : IDisposable
         var dbSec = Path.Combine(AddOutputDir!, $"{stem}_secondary.diaphora.sqlite");
         var result = Path.Combine(AddOutputDir!, $"{stem}_diaphora_result.sqlite");
 
-        if (!await RunDiaphoraExportAsync(p.Primary, dbPri, ct)) { Cleanup(dbPri, dbSec, result); return false; }
-        if (!await RunDiaphoraExportAsync(p.Secondary, dbSec, ct)) { Cleanup(dbPri, dbSec, result); return false; }
+        if (!await RunDiaphoraExportAsync(p.Primary, dbPri, p.RelKey, ct)) { Cleanup(dbPri, dbSec, result); return false; }
+        if (!await RunDiaphoraExportAsync(p.Secondary, dbSec, p.RelKey, ct)) { Cleanup(dbPri, dbSec, result); return false; }
 
+        var merged = false;
         if (File.Exists(dbPri) && File.Exists(dbSec))
-            if (await RunDiaphoraDiffAsync(dbPri, dbSec, result, ct))
+            if (await RunDiaphoraDiffAsync(dbPri, dbSec, result, p.RelKey, ct))
+            {
                 MergeDiaphoraIntoJson(jsonOutput, result, stem);
+                merged = true;
+            }
+        // Маркер успешного доанализа — по нему пара исключается из следующих прогонов
+        MarkAddAnalysisDone(jsonOutput, merged);
         Cleanup(dbPri, dbSec, result);
         return true;
+    }
+
+    /// <summary>Ставит (или снимает) маркер add_analysis_done в add-JSON пары.</summary>
+    private static void MarkAddAnalysisDone(string jsonPath, bool done)
+    {
+        try
+        {
+            if (!File.Exists(jsonPath)) return;
+            var data = ReadJson(jsonPath);
+            if (data == null) return;
+            data["add_analysis_done"] = done;
+            WriteJson(jsonPath, data);
+        }
+        catch { /* не критично */ }
     }
 
     private async Task<bool> ProcessAddPostPairAsync(DiffPair p, CancellationToken ct)
@@ -579,7 +625,7 @@ public sealed class DiffWorker : IDisposable
         var primJson = Path.Combine(AddOutputDir!, $"{stem}_primary.export.json");
         var secJson = Path.Combine(AddOutputDir!, $"{stem}_secondary.export.json");
 
-        var exported = await ExportJsonPairAsync(p.Primary, primJson, p.Secondary, secJson, ct);
+        var exported = await ExportJsonPairAsync(p.Primary, primJson, p.Secondary, secJson, p.RelKey, ct);
         EnrichDiffJson(jsonOutput, exported.Primary, exported.Secondary);
 
         var orig1 = FindOriginalBinary(p.Primary);
@@ -806,7 +852,8 @@ public sealed class DiffWorker : IDisposable
         };
         try
         {
-            using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={dbPath}");
+            // Pooling=False — не держим файл .BinDiff открытым после разбора
+            using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={dbPath};Pooling=False");
             conn.Open();
 
             // metadata
@@ -1117,7 +1164,9 @@ public sealed class DiffWorker : IDisposable
         if (!File.Exists(sqlite)) return res;
         try
         {
-            using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={sqlite}");
+            // Pooling=False: иначе пул соединений держит файл открытым,
+            // и Cleanup не может удалить result-sqlite после разбора
+            using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={sqlite};Pooling=False");
             conn.Open();
 
             var conf = new Dictionary<string, double> { ["best"] = 0.95, ["partial"] = 0.60, ["unreliable"] = 0.25 };
@@ -1130,12 +1179,18 @@ public sealed class DiffWorker : IDisposable
                     while (rd.Read())
                     {
                         var type = Convert.ToString(rd["type"]) ?? "partial";
+                        // Diaphora хранит ratio строкой '1.0000000' (с точкой):
+                        // парсим строго инвариантно — Convert.ToDouble с текущей
+                        // культурой на локалях с запятой даёт FormatException
+                        // и весь разбор молча терялся
+                        double.TryParse(Convert.ToString(rd["ratio"]), System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out var ratio);
                         res.MatchedFunctions.Add(new DiaphoraMatch(
                             "0x" + (long.TryParse(Convert.ToString(rd["address"]), System.Globalization.NumberStyles.HexNumber, null, out var a1) ? a1.ToString("X") : "0"),
                             Convert.ToString(rd["name"]) ?? "",
                             "0x" + (long.TryParse(Convert.ToString(rd["address2"]), System.Globalization.NumberStyles.HexNumber, null, out var a2) ? a2.ToString("X") : "0"),
                             Convert.ToString(rd["name2"]) ?? "",
-                            (double)(rd["ratio"] is null ? 0 : Convert.ToDouble(rd["ratio"])),
+                            ratio,
                             conf.TryGetValue(type, out var c) ? c : 0.50,
                             (Convert.ToString(rd["description"]) ?? "diaphora_auto").Trim(),
                             type));
@@ -1157,7 +1212,10 @@ public sealed class DiffWorker : IDisposable
                     {
                         var a = "0x" + (long.TryParse(Convert.ToString(rd["address"]), System.Globalization.NumberStyles.HexNumber, null, out var av) ? av.ToString("X") : "0");
                         var entry = (Address: a, Name: Convert.ToString(rd["name"]) ?? "");
-                        if (Convert.ToInt32(rd["type"]) == 1) res.Unmatched1.Add(entry);
+                        // В новых версиях Diaphora type — строка 'primary'/'secondary',
+                        // в старых — число 1/2
+                        var ut = (Convert.ToString(rd["type"]) ?? "").Trim();
+                        if (ut == "1" || ut.Equals("primary", StringComparison.OrdinalIgnoreCase)) res.Unmatched1.Add(entry);
                         else res.Unmatched2.Add(entry);
                     }
                 }
@@ -1575,10 +1633,15 @@ public sealed class DiffWorker : IDisposable
 
     internal record ProcResult(int ExitCode, string Stdout, string Stderr);
 
-    private static async Task<ProcResult> RunProcAsync(ProcessStartInfo psi, CancellationToken ct)
+    private async Task<ProcResult> RunProcAsync(ProcessStartInfo psi, string relKey, CancellationToken ct)
     {
         using var proc = Process.Start(psi);
-        if (proc == null) return new ProcResult(-1, "", "Не удалось запустить процесс");
+        if (proc == null)
+        {
+            PairProcessStarted?.Invoke(relKey, -1);
+            return new ProcResult(-1, "", "Не удалось запустить процесс");
+        }
+        PairProcessStarted?.Invoke(relKey, proc.Id);
         var so = proc.StandardOutput.ReadToEndAsync();
         var se = proc.StandardError.ReadToEndAsync();
         await proc.WaitForExitAsync(ct);
@@ -1586,10 +1649,15 @@ public sealed class DiffWorker : IDisposable
         return new ProcResult(proc.ExitCode, await so, await se);
     }
 
-    private static async Task<ProcResult> RunProcWithTimeoutAsync(ProcessStartInfo psi, TimeSpan timeout, CancellationToken ct)
+    private async Task<ProcResult> RunProcWithTimeoutAsync(ProcessStartInfo psi, string relKey, TimeSpan timeout, CancellationToken ct)
     {
         using var proc = Process.Start(psi);
-        if (proc == null) return new ProcResult(-1, "", "");
+        if (proc == null)
+        {
+            PairProcessStarted?.Invoke(relKey, -1);
+            return new ProcResult(-1, "", "");
+        }
+        PairProcessStarted?.Invoke(relKey, proc.Id);
         var so = proc.StandardOutput.ReadToEndAsync();
         var se = proc.StandardError.ReadToEndAsync();
         try

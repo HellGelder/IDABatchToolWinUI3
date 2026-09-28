@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Window
+    x:Class="IDABatchToolWinUI.TaskManagerWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:IDABatchToolWinUI"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="Диспетчер анализа"
+    mc:Ignorable="d">
+
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+
+    <Grid Padding="16,12" RowSpacing="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Spacing="2">
+            <TextBlock Text="Мини-диспетчер задач анализа" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock x:Name="SessionText" Text="Нет активной сессии анализа" FontSize="12"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        </StackPanel>
+
+        <!-- Таблица: заголовок + строки в одном горизонтальном скролле -->
+        <Border Grid.Row="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1" CornerRadius="6"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                <StackPanel MinWidth="940">
+                    <Grid ColumnSpacing="10" Padding="12,8"
+                          Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                          BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                          BorderThickness="0,0,0,1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="150" />
+                            <ColumnDefinition Width="64" />
+                            <ColumnDefinition Width="64" />
+                            <ColumnDefinition Width="136" />
+                            <ColumnDefinition Width="84" />
+                            <ColumnDefinition Width="86" />
+                            <ColumnDefinition Width="92" />
+                            <ColumnDefinition Width="76" />
+                            <ColumnDefinition Width="110" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Файл" FontWeight="SemiBold" FontSize="12" />
+                        <TextBlock Grid.Column="1" Text="PID" FontWeight="SemiBold" FontSize="12" />
+                        <TextBlock Grid.Column="2" Text="Тред" FontWeight="SemiBold" FontSize="12" />
+                        <TextBlock Grid.Column="3" Text="Статус" FontWeight="SemiBold" FontSize="12" />
+                        <TextBlock Grid.Column="4" Text="Фаза" FontWeight="SemiBold" FontSize="12" />
+                        <TextBlock Grid.Column="5" Text="CPU" FontWeight="SemiBold" FontSize="12" />
+                        <TextBlock Grid.Column="6" Text="Память" FontWeight="SemiBold" FontSize="12" />
+                        <TextBlock Grid.Column="7" Text="Потоки ОС" FontWeight="SemiBold" FontSize="12" />
+                        <TextBlock Grid.Column="8" Text="Запущен" FontWeight="SemiBold" FontSize="12" />
+                    </Grid>
+
+                    <ItemsControl x:Name="RowsList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="local:TaskRow">
+                                <Grid ColumnSpacing="10" Padding="12,6"
+                                      BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                      BorderThickness="0,0,0,1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" MinWidth="150" />
+                                        <ColumnDefinition Width="64" />
+                                        <ColumnDefinition Width="64" />
+                                        <ColumnDefinition Width="136" />
+                                        <ColumnDefinition Width="84" />
+                                        <ColumnDefinition Width="86" />
+                                        <ColumnDefinition Width="92" />
+                                        <ColumnDefinition Width="76" />
+                                        <ColumnDefinition Width="110" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{x:Bind FileName}" FontSize="12"
+                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                               ToolTipService.ToolTip="{x:Bind FileName}" />
+                                    <TextBlock Grid.Column="1" Text="{x:Bind Pid}" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="{x:Bind ThreadId}" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="3" Text="{x:Bind Status}" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="4" Text="{x:Bind Phase}" FontSize="12" VerticalAlignment="Center"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock Grid.Column="5" Text="{x:Bind Cpu}" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="6" Text="{x:Bind Memory}" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="7" Text="{x:Bind OsThreads}" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="8" Text="{x:Bind StartedAt}" FontSize="12" VerticalAlignment="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <StackPanel Grid.Row="2" Spacing="2">
+            <TextBlock x:Name="SummaryText" FontSize="12" FontWeight="SemiBold" />
+            <TextBlock FontSize="11"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       Text="PID — процесс idat.exe для файла; Тред — рабочий поток приложения; CPU, память и потоки ОС обновляются раз в секунду." />
+        </StackPanel>
+    </Grid>
+</Window>

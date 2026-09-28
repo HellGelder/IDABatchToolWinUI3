@@ -18,6 +18,7 @@ public sealed partial class AnalysisPage : Page
     private HtmlGenWorker? _htmlWorker;
     private List<FileItem> _cachedFiles = new();
     private bool _exportAllAfterAnalysis;
+    private TaskManagerWindow? _taskManagerWindow;
 
     public AnalysisPage()
     {
@@ -29,6 +30,7 @@ public sealed partial class AnalysisPage : Page
         // (кэш навигации) обработчики не дублировались.
         BrowseDirButton.Click += BrowseDir_Click;
         StartAnalysisButton.Click += StartAnalysis_Click;
+        DetailsButton.Click += DetailsButton_Click;
         CancelButton.Click += Cancel_Click;
         GenerateHtmlButton.Click += GenerateHtml_Click;
         InputDirTextBox.TextChanged += (_, _) => RefreshFileList();
@@ -234,11 +236,15 @@ public sealed partial class AnalysisPage : Page
 
         _analysisInProgress = true;
         StartAnalysisButton.IsEnabled = false;
+        DetailsButton.IsEnabled = true;
         CancelButton.IsEnabled = true;
         GenerateHtmlButton.IsEnabled = false;
         ProcessStatusText.Text = exportOnly ? "Фаза: экспорт в JSON..." : "Фаза: анализ файлов...";
         SetProgressRunning(true);   // running-индикатор
         ErrorLogTextBox.Text = "";
+
+        // Очередь файлов в мини-диспетчере задач
+        AnalysisMonitor.BeginSession(files.Select(f => f.Name));
 
         _worker = new AnalysisWorker(
             files.Select(f => f.Path).ToList(),
@@ -258,13 +264,24 @@ public sealed partial class AnalysisPage : Page
     {
         w.PhaseChanged += phase => RunOnUi(() =>
             ProcessStatusText.Text = phase == "analysis" ? "Фаза: анализ файлов..." : "Фаза: экспорт в JSON...");
+        w.ProcessStarted += (name, pid, tid) => RunOnUi(() =>
+            AnalysisMonitor.SetProcessInfo(AnalysisMonitor.NormalizeName(name), pid, tid));
         w.AnalysisProgress += (name, cur, total) => RunOnUi(() =>
         {
             ProcessStatusText.Text = $"Анализ: {cur}/{total} – {name}";
         });
-        w.AnalysisFileStarted += name => RunOnUi(() => SetFileStatusByName(name, AnalysisStatus.InProgress));
+        w.AnalysisFileStarted += name => RunOnUi(() =>
+        {
+            SetFileStatusByName(name, AnalysisStatus.InProgress);
+            AnalysisMonitor.MarkRunning(AnalysisMonitor.NormalizeName(name), "analysis");
+        });
         w.AnalysisFileCompleted += (name, ok) => RunOnUi(() =>
-            SetFileStatusByName(name, ok ? AnalysisStatus.Success : AnalysisStatus.Error));
+        {
+            SetFileStatusByName(name, ok ? AnalysisStatus.Success : AnalysisStatus.Error);
+            AnalysisMonitor.MarkCompleted(AnalysisMonitor.NormalizeName(name), ok);
+        });
+        w.ExportFileStarted += name => RunOnUi(() =>
+            AnalysisMonitor.MarkRunning(AnalysisMonitor.NormalizeName(name), "export"));
         w.ExportProgress += (name, cur, total) => RunOnUi(() =>
         {
             ProcessStatusText.Text = $"Экспорт: {cur}/{total} – {name}";
@@ -272,6 +289,7 @@ public sealed partial class AnalysisPage : Page
         w.ExportFileCompleted += (name, ok) => RunOnUi(() =>
         {
             if (!ok) AppendError($"Ошибка экспорта для {name}");
+            AnalysisMonitor.MarkCompleted(AnalysisMonitor.NormalizeName(name), ok);
         });
         w.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
         w.Finished += (ok, total) => RunOnUi(() => OnAnalysisFinished(ok, total));
@@ -287,11 +305,13 @@ public sealed partial class AnalysisPage : Page
     {
         _analysisInProgress = false;
         StartAnalysisButton.IsEnabled = true;
+        DetailsButton.IsEnabled = false;
         CancelButton.IsEnabled = false;
         ProcessStatusText.Text = $"Завершено. Обработано: {succeeded}/{total}";
         SetProgressRunning(false);  // вернуть в простой
         AppNotifier.Notify("Анализ завершён",
             $"Обработано: {succeeded}/{total}.");
+        AnalysisMonitor.EndSession();
 
         if (_exportAllAfterAnalysis && succeeded > 0)
         {
@@ -327,6 +347,9 @@ public sealed partial class AnalysisPage : Page
         }
         ProcessStatusText.Text = "Фаза: экспорт в JSON...";
         ProcessProgress.Value = 0;
+        DetailsButton.IsEnabled = true;
+        // Новая сессия в мини-диспетчере: имена баз без суффикса .i64
+        AnalysisMonitor.BeginSession(idbFiles.Select(p => AnalysisMonitor.NormalizeName(p)));
         var worker = new AnalysisWorker(idbFiles, idatPath, (int)MaxIdaSlider.Value, null,
             false, false, PseudocodeCheck.IsChecked == true, false, true);
         HookWorker(worker);
@@ -340,6 +363,19 @@ public sealed partial class AnalysisPage : Page
         _worker?.Cancel();
         ProcessStatusText.Text = "Отмена...";
         CancelButton.IsEnabled = false;
+    }
+
+    /// <summary>Открыть окно «мини-диспетчер задач» (или вывести существующее на передний план).</summary>
+    private void DetailsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_taskManagerWindow != null)
+        {
+            _taskManagerWindow.Activate();
+            return;
+        }
+        _taskManagerWindow = new TaskManagerWindow();
+        _taskManagerWindow.Closed += (_, _) => _taskManagerWindow = null;
+        _taskManagerWindow.Activate();
     }
 
     private void AppendError(string message)

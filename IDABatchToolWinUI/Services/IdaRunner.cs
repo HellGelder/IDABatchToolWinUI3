@@ -23,6 +23,9 @@ public sealed class IdaRunner : IDisposable
     public Action<string>? FileStartCallback { get; set; }
     public Action<string, bool>? FileDoneCallback { get; set; }
 
+    /// <summary>(имя цели, PID процесса IDA, managed thread id) — вызывается сразу после запуска процесса.</summary>
+    public Action<string, int, int>? ProcessStartedCallback { get; set; }
+
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     public IdaRunner(string idatPath, int maxWorkers)
@@ -214,6 +217,8 @@ public sealed class IdaRunner : IDisposable
         {
             using var proc = Process.Start(psi);
             if (proc == null) return false;
+
+            ProcessStartedCallback?.Invoke(Path.GetFileName(target), proc.Id, Environment.CurrentManagedThreadId);
 
             // Читаем потоки, чтобы не переполнился pipe-буфер
             var stdoutTask = proc.StandardOutput.ReadToEndAsync();

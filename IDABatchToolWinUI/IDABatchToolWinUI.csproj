@@ -37,6 +37,7 @@
   <!-- Python-мосты генерации отчётов и man-pages + скрипты для IDA копируются в выходную папку -->
   <ItemGroup>
     <Content Include="_python\*.py" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="_python\classifier\**\*.py" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="_python\templates\*.html" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="_python\vendor\*.js" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="scripts\export_data.py" CopyToOutputDirectory="PreserveNewest" />
