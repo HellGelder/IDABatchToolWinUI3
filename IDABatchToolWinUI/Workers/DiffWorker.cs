@@ -19,7 +19,6 @@ public sealed class DiffWorker : IDisposable
     public event Action<string, string>? StageChanged;        // (stage, "started" | "done")
     public event Action<string, int, int, string>? StageFile; // (stage, current, total, fileName)
     public event Action<string, string, string>? PairStatus; // (relKey, engine, status)
-    public event Action<string, int>? PairThreadStarted;     // (relKey, managedThreadId)
     public event Action<string, int>? PairProcessStarted;    // (relKey, PID последнего запущенного процесса пары)
     public event Action<string>? ErrorOccurred;
     public event Action<int, int>? Finished;                 // (success, total)
@@ -202,8 +201,6 @@ public sealed class DiffWorker : IDisposable
 
         async Task RunOne(DiffPair p)
         {
-            var tid = Environment.CurrentManagedThreadId;
-            PairThreadStarted?.Invoke(p.RelKey, tid);
             // Ставим «анализ» для задействованного движка (engine == null -> оба)
             if (engine == null)
             {
@@ -226,7 +223,6 @@ public sealed class DiffWorker : IDisposable
                 if (Engine is "diaphora" or "both") PairStatus?.Invoke(p.RelKey, "diaphora", status);
             }
             else PairStatus?.Invoke(p.RelKey, engine, status);
-            PairThreadStarted?.Invoke(p.RelKey, -1);  // -1 = поток освобождён
 
             var done = Interlocked.Increment(ref completed);
             StageFile?.Invoke(stage, done, total, Path.GetFileName(p.Primary));

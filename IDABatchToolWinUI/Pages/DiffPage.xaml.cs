@@ -104,22 +104,15 @@ public DiffPage()
 
         _allPairs = common.Select(rel => new DiffPair(leftMap[rel], rightMap[rel], rel)).ToList();
 
-        var outputBase = string.IsNullOrWhiteSpace(OutputDirTextBox.Text.Trim())
-            ? Path.Combine(left, "DiffResults")
-            : OutputDirTextBox.Text.Trim();
-
         var rows = new List<PairRowViewModel>();
         foreach (var pair in _allPairs)
         {
             long size = File.Exists(pair.Primary) ? new FileInfo(pair.Primary).Length : 0;
             var sizeText = size < 1024 * 1024 ? $"{size / 1024} KB" : $"{size / 1024.0 / 1024.0:F1} MB";
-            var stem = pair.Stem;
-            var hasDiff = File.Exists(Path.Combine(outputBase, $"{stem}.diff.json"));
             rows.Add(new PairRowViewModel
             {
                 Pair = pair,
                 SizeText = sizeText,
-                StatusText = hasDiff ? "✅ Есть" : "—",
             });
         }
 
@@ -166,7 +159,6 @@ public DiffPage()
         bool useDp = engine is "diaphora" or "both";
         foreach (var r in rows)
         {
-            r.ThreadIdText = "—";
             r.PidText = "—";
             if (!_diffInProgress)
             {
@@ -312,13 +304,6 @@ public DiffPage()
     {
         w.StageChanged += (stage, phase) => RunOnUi(() => OnStageChanged(stage, phase));
         w.StageFile += (stage, cur, tot, file) => RunOnUi(() => OnStageFile(stage, cur, tot, file));
-        w.PairThreadStarted += (relKey, threadId) => RunOnUi(() =>
-        {
-            var row = (PairsListView.ItemsSource as List<PairRowViewModel>)
-                ?.FirstOrDefault(r => r.RelKey == relKey);
-            if (row == null) return;
-            row.ThreadIdText = threadId > 0 ? threadId.ToString() : "—";
-        });
         w.PairProcessStarted += (relKey, pid) => RunOnUi(() =>
         {
             var row = (PairsListView.ItemsSource as List<PairRowViewModel>)

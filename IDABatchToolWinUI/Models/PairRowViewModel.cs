@@ -9,20 +9,12 @@ public sealed class PairRowViewModel : INotifyPropertyChanged
     private bool _isSelected = true;
     private string _bindiffStatus = "waiting";
     private string _diaphoraStatus = "waiting";
-    private string _threadIdText = "—";
     private string _pidText = "—";
-    private string _statusText = "—";
 
     public required DiffPair Pair { get; init; }
     public string RelKey => Pair.RelKey;
     public string ToolTip => $"{Pair.Primary}\n{Pair.Secondary}";
     public string SizeText { get; init; } = "";
-
-    public string StatusText
-    {
-        get => _statusText;
-        set { if (_statusText != value) { _statusText = value; OnPropertyChanged(); } }
-    }
 
     public bool IsSelected
     {
@@ -49,13 +41,6 @@ public sealed class PairRowViewModel : INotifyPropertyChanged
 
     /// <summary>Отображаемый текст статуса Diaphora на русском.</summary>
     public string DiaphoraStatusDisplay => StatusDisplay(_diaphoraStatus);
-
-    /// <summary>ID управляющего потока анализа (или «—», если поток ещё не назначен/освобождён).</summary>
-    public string ThreadIdText
-    {
-        get => _threadIdText;
-        set { if (_threadIdText != value) { _threadIdText = value; OnPropertyChanged(); } }
-    }
 
     /// <summary>PID последнего запущенного процесса для пары (idat.exe / bindiff.exe / pythonw).</summary>
     public string PidText

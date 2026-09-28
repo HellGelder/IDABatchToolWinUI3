@@ -120,8 +120,6 @@
                                         <ColumnDefinition Width="28" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="80" />
-                                        <ColumnDefinition Width="90" />
-                                        <ColumnDefinition Width="70" />
                                         <ColumnDefinition Width="70" />
                                         <ColumnDefinition Width="90" />
                                         <ColumnDefinition Width="90" />
@@ -130,11 +128,9 @@
                                               VerticalAlignment="Center" Click="HeaderCheckBox_Click" />
                                     <TextBlock Grid.Column="1" Text="Файл" FontWeight="SemiBold" FontSize="12" />
                                     <TextBlock Grid.Column="2" Text="Размер" FontWeight="SemiBold" FontSize="12" />
-                                    <TextBlock Grid.Column="3" Text="Статус" FontWeight="SemiBold" FontSize="12" />
-                                    <TextBlock Grid.Column="4" Text="Тред" FontWeight="SemiBold" FontSize="12" />
-                                    <TextBlock Grid.Column="5" Text="PID" FontWeight="SemiBold" FontSize="12" />
-                                    <TextBlock Grid.Column="6" Text="BinDiff" FontWeight="SemiBold" FontSize="12" />
-                                    <TextBlock Grid.Column="7" Text="Diaphora" FontWeight="SemiBold" FontSize="12" />
+                                    <TextBlock Grid.Column="3" Text="PID" FontWeight="SemiBold" FontSize="12" />
+                                    <TextBlock Grid.Column="4" Text="BinDiff" FontWeight="SemiBold" FontSize="12" />
+                                    <TextBlock Grid.Column="5" Text="Diaphora" FontWeight="SemiBold" FontSize="12" />
                                 </Grid>
                             </DataTemplate>
                         </ListView.HeaderTemplate>
@@ -145,8 +141,6 @@
                                         <ColumnDefinition Width="28" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="80" />
-                                        <ColumnDefinition Width="90" />
-                                        <ColumnDefinition Width="70" />
                                         <ColumnDefinition Width="70" />
                                         <ColumnDefinition Width="90" />
                                         <ColumnDefinition Width="90" />
@@ -157,12 +151,10 @@
                                                ToolTipService.ToolTip="{x:Bind ToolTip}" />
                                     <TextBlock Grid.Column="2" Text="{x:Bind SizeText}" />
                                     <!-- Динамические колонки: только Mode=OneWay, иначе x:Bind (OneTime)
-                                         не перечитывает изменения статусов/PID/треда -->
-                                    <TextBlock Grid.Column="3" Text="{x:Bind StatusText, Mode=OneWay}" />
-                                    <TextBlock Grid.Column="4" Text="{x:Bind ThreadIdText, Mode=OneWay}" />
-                                    <TextBlock Grid.Column="5" Text="{x:Bind PidText, Mode=OneWay}" />
-                                    <TextBlock Grid.Column="6" Text="{x:Bind BindiffStatusDisplay, Mode=OneWay}" />
-                                    <TextBlock Grid.Column="7" Text="{x:Bind DiaphoraStatusDisplay, Mode=OneWay}" />
+                                         не перечитывает изменения статусов/PID -->
+                                    <TextBlock Grid.Column="3" Text="{x:Bind PidText, Mode=OneWay}" />
+                                    <TextBlock Grid.Column="4" Text="{x:Bind BindiffStatusDisplay, Mode=OneWay}" />
+                                    <TextBlock Grid.Column="5" Text="{x:Bind DiaphoraStatusDisplay, Mode=OneWay}" />
                                 </Grid>
                             </DataTemplate>
                         </ListView.ItemTemplate>
