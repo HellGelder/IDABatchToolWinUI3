@@ -100,14 +100,26 @@ public sealed class AnalysisWorker : IDisposable
             succeededFiles = new List<string>();
             foreach (var f in _files)
             {
+                var name = Path.GetFileName(f);
+                // Вход может быть уже базой (.i64/.idb — автоэкспорт после анализа
+                // передаёт ExpectedI64Path): имя базы повторно не наращиваем.
+                if (name.EndsWith(".i64", StringComparison.OrdinalIgnoreCase)
+                    || name.EndsWith(".idb", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (File.Exists(f)) succeededFiles.Add(f);
+                    else ErrorOccurred?.Invoke($"База данных не найдена для {name} (режим export_only).");
+                    continue;
+                }
+
+                // Либо исходный файл (экспорт из стартового диалога) — база рядом с ним.
                 var dir = Path.GetDirectoryName(f)!;
-                var i64 = Path.Combine(dir, Path.GetFileName(f) + ".i64");
+                var i64 = Path.Combine(dir, name + ".i64");
                 if (File.Exists(i64)) succeededFiles.Add(i64);
                 else
                 {
-                    var idb = Path.Combine(dir, Path.GetFileName(f) + ".idb");
+                    var idb = Path.Combine(dir, name + ".idb");
                     if (File.Exists(idb)) succeededFiles.Add(idb);
-                    else ErrorOccurred?.Invoke($"База данных не найдена для {Path.GetFileName(f)} (режим export_only).");
+                    else ErrorOccurred?.Invoke($"База данных не найдена для {name} (режим export_only).");
                 }
             }
             if (succeededFiles.Count == 0)
@@ -150,8 +162,12 @@ public sealed class AnalysisWorker : IDisposable
         int successOriginal = 0;
         foreach (var f in _files)
         {
+            var name = Path.GetFileName(f);
+            if (name.EndsWith(".i64", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith(".idb", StringComparison.OrdinalIgnoreCase))
+                name = name[..^4];
             var dir = Path.GetDirectoryName(f)!;
-            if (File.Exists(Path.Combine(dir, Path.GetFileName(f) + ".i64"))) successOriginal++;
+            if (File.Exists(Path.Combine(dir, name + ".i64"))) successOriginal++;
         }
         Finished?.Invoke(successOriginal, _files.Count);
     }

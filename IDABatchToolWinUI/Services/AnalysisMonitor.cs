@@ -63,17 +63,25 @@ public static class AnalysisMonitor
 {
     private static readonly List<MonitorEntry> _entries = new();
     private static bool _sessionActive;
+    private static int _maxWorkers;
 
     public static bool IsSessionActive => _sessionActive;
 
+    /// <summary>Число рабочих потоков сессии (ползунок «Одновременно IDA»).</summary>
+    public static int MaxWorkers
+    {
+        get { lock (_entries) return _maxWorkers; }
+    }
+
     /// <summary>Начать новую сессию: очередь всех файлов со статусом «В ожидании».</summary>
-    public static void BeginSession(IEnumerable<string> fileNames)
+    public static void BeginSession(IEnumerable<string> fileNames, int maxWorkers)
     {
         lock (_entries)
         {
             _entries.Clear();
             foreach (var name in fileNames)
                 _entries.Add(new MonitorEntry { FileName = name });
+            _maxWorkers = Math.Max(1, maxWorkers);
             _sessionActive = true;
         }
     }
@@ -81,29 +89,35 @@ public static class AnalysisMonitor
     /// <summary>Файл начал обрабатываться (колбэк FileStart).</summary>
     public static void MarkRunning(string fileName, string phase)
     {
-        var e = Find(fileName);
-        if (e == null) return;
-        e.Status = MonitorFileStatus.Running;
-        e.Phase = phase;
-        e.StartedAt ??= DateTime.Now;
+        // Имена в очереди могут повторяться (файлы в подпапках/архивах):
+        // обновляем все записи с этим именем, иначе «вторые» копии навсегда
+        // остаются «В ожидании» и в конце сессии помечаются отменёнными.
+        foreach (var e in FindAll(fileName))
+        {
+            e.Status = MonitorFileStatus.Running;
+            e.Phase = phase;
+            e.StartedAt ??= DateTime.Now;
+        }
     }
 
     /// <summary>Процесс IDA запущен: запоминаем PID и тред воркера.</summary>
     public static void SetProcessInfo(string fileName, int pid, int threadId)
     {
-        var e = Find(fileName);
-        if (e == null) return;
-        e.Pid = pid;
-        e.ThreadId = threadId;
+        foreach (var e in FindAll(fileName))
+        {
+            e.Pid = pid;
+            e.ThreadId = threadId;
+        }
     }
 
     /// <summary>Файл обработан (успешно или с ошибкой).</summary>
     public static void MarkCompleted(string fileName, bool ok)
     {
-        var e = Find(fileName);
-        if (e == null) return;
-        e.Status = ok ? MonitorFileStatus.Done : MonitorFileStatus.Failed;
-        e.EndedAt = DateTime.Now;
+        foreach (var e in FindAll(fileName))
+        {
+            e.Status = ok ? MonitorFileStatus.Done : MonitorFileStatus.Failed;
+            e.EndedAt = DateTime.Now;
+        }
     }
 
     /// <summary>Конец сессии: необработанные файлы помечаются отменёнными.</summary>
@@ -140,10 +154,10 @@ public static class AnalysisMonitor
         return name;
     }
 
-    private static MonitorEntry? Find(string fileName)
+    private static List<MonitorEntry> FindAll(string fileName)
     {
         var key = NormalizeName(fileName);
         lock (_entries)
-            return _entries.FirstOrDefault(e => e.FileName == key);
+            return _entries.Where(e => e.FileName == key).ToList();
     }
 }

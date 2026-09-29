@@ -304,7 +304,7 @@ def _classify_full(module_name, internal_set):
     return _CATEGORY_LABELS.get(cat_ru, "Unknown"), desc
 
 
-def generate_analysis_report(json_path, output_html, input_dir, internal_set):
+def generate_analysis_report(json_path, output_html, input_dir, internal_set, reports_dir=None):
     """Генерирует индивидуальный HTML-отчёт «Общий анализ»."""
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -314,18 +314,14 @@ def generate_analysis_report(json_path, output_html, input_dir, internal_set):
     imports = data.get("imports", [])
     exports = data.get("exports", [])
 
-    # Ссылка «Назад к сводному отчёту» — по глубине вложенности отчёта
-    # относительно reports_dir (compute_back_link исполнения 1):
-    # IDAReports/bin/x.html -> ../index.html.
-    reports_dir = Path(output_html).parent
-    while not (reports_dir / "index.html").exists() and reports_dir.parent != reports_dir:
-        reports_dir = reports_dir.parent
-    try:
-        rel = Path(output_html).resolve().relative_to(reports_dir.resolve())
-    except ValueError:
-        rel = Path(os.path.basename(str(output_html)))
-    depth = len(rel.parent.parts) if str(rel.parent) not in (".", "") else 0
-    back_link = ("../" * depth) + "index.html"
+    # Ссылка «Назад к сводному отчёту» — детерминированно от reports_dir
+    # (аналог compute_back_link исполнения 1): IDAReports/bin/x.html ->
+    # ../index.html, IDAReports/x.html -> index.html. Поиск готового
+    # index.html в родителях здесь неприменим: индекс пишется ПОСЛЕ
+    # частных отчётов, на первом прогоне цикл ушёл бы до корня диска.
+    if reports_dir is None:
+        reports_dir = Path(output_html).parent
+    back_link = _back_link(output_html, reports_dir)
 
     module_deps = []
     seen = set()
@@ -1984,7 +1980,8 @@ def run_generate(args):
                 rel = Path(original)
             out_rel = rel.with_suffix(rel.suffix + ".html")
             output_html = reports_dir / out_rel
-            generate_analysis_report(str(jp), str(output_html), str(input_dir), internal_set)
+            generate_analysis_report(str(jp), str(output_html), str(input_dir), internal_set,
+                                     reports_dir=str(reports_dir))
 
             link = out_rel.as_posix()
             display = rel.as_posix()

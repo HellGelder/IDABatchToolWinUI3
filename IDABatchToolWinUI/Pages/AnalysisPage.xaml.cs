@@ -235,7 +235,7 @@ public sealed partial class AnalysisPage : Page
         ErrorLogTextBox.Text = "";
 
         // Очередь файлов в мини-диспетчере задач
-        AnalysisMonitor.BeginSession(files.Select(f => f.Name));
+        AnalysisMonitor.BeginSession(files.Select(f => f.Name), (int)MaxIdaSlider.Value);
 
         _worker = new AnalysisWorker(
             files.Select(f => f.Path).ToList(),
@@ -340,7 +340,7 @@ public sealed partial class AnalysisPage : Page
         ProcessProgress.Value = 0;
         DetailsButton.IsEnabled = true;
         // Новая сессия в мини-диспетчере: имена баз без суффикса .i64
-        AnalysisMonitor.BeginSession(idbFiles.Select(p => AnalysisMonitor.NormalizeName(p)));
+        AnalysisMonitor.BeginSession(idbFiles.Select(p => AnalysisMonitor.NormalizeName(p)), (int)MaxIdaSlider.Value);
         var worker = new AnalysisWorker(idbFiles, idatPath, (int)MaxIdaSlider.Value, null,
             false, false, PseudocodeCheck.IsChecked == true, false, true);
         HookWorker(worker);
