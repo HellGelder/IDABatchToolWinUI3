@@ -73,7 +73,7 @@ public sealed class TreemapControl : Grid
             {
                 Text = "Нет данных для отображения",
                 Foreground = new SolidColorBrush(Color.FromArgb(255, 140, 140, 140)),
-                FontSize = 12,
+                FontSize = 11,
                 VerticalAlignment = VerticalAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Center,
             };

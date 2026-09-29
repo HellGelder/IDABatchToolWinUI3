@@ -76,15 +76,15 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Spacing="6">
                             <CheckBox x:Name="SfaCleanupCheck" Content="Удалять .asm и .log после успешного анализа"
-                                      IsChecked="True" Padding="2,1,2,1" />
+                                      IsChecked="True" />
                             <CheckBox x:Name="SfaTempCleanupCheck" Content="Удалять временные файлы IDA (.id0, .id1, .nam, .til)"
-                                      IsChecked="True" Padding="2,1,2,1" />
+                                      IsChecked="True" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" Spacing="6">
                             <CheckBox x:Name="SfaPseudocodeCheck" Content="Включить псевдокод в JSON-экспорт"
-                                      IsChecked="True" Padding="2,1,2,1" />
+                                      IsChecked="True" />
                             <CheckBox x:Name="SfaDeleteJsonCheck" Content="Удалить JSON-файлы после создания отчётов"
-                                      IsChecked="True" Padding="2,1,2,1" />
+                                      IsChecked="True" />
                         </StackPanel>
                     </Grid>
                     <Grid ColumnSpacing="10">
@@ -93,13 +93,13 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Потоков IDA:" VerticalAlignment="Center" FontSize="13" />
+                        <TextBlock Grid.Column="0" Text="Потоков IDA:" VerticalAlignment="Center" FontSize="12" />
                         <Slider x:Name="SfaMaxIdaSlider" Grid.Column="1" Minimum="1" Maximum="32" Value="4"
                                 StepFrequency="1" TickFrequency="4"
                                 ToolTipService.ToolTip="Максимальное количество одновременно работающих экземпляров IDA." />
                         <TextBlock Grid.Column="2" Text="{Binding ElementName=SfaMaxIdaSlider, Path=Value}"
                                    VerticalAlignment="Center" MinWidth="20" TextAlignment="Center"
-                                   FontSize="13" FontWeight="SemiBold" />
+                                   FontSize="12" FontWeight="SemiBold" />
                     </Grid>
                 </StackPanel>
             </Border>
@@ -108,7 +108,7 @@
             <Border Grid.Row="4" Style="{StaticResource GroupBoxStyle}">
                 <StackPanel Spacing="6">
                     <TextBlock Text="Процесс анализа СФ" Style="{StaticResource GroupHeaderStyle}" />
-                    <TextBlock x:Name="SfaProcessStatusText" Text="Готов к запуску" FontSize="12"
+                    <TextBlock x:Name="SfaProcessStatusText" Text="Готов к запуску" FontSize="11"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <ProgressBar x:Name="SfaProcessProgress" Minimum="0" Maximum="100" Value="0" Height="4" />
                     <Grid ColumnSpacing="6">
@@ -122,8 +122,13 @@
                                 Height="34" Width="160" Padding="12,6" />
                         <Button x:Name="SfaCancelButton" Grid.Column="1" Content="Отмена"
                                 Height="34" Width="80" Padding="12,6" IsEnabled="False" />
-                        <Button x:Name="SfaGenerateHtmlButton" Grid.Column="3" Content="Сгенерировать HTML-отчёт СФ"
-                                Height="34" Width="200" Padding="12,6" IsEnabled="False" />
+                        <Button x:Name="SfaGenerateHtmlButton" Grid.Column="3" Height="46" MinWidth="172"
+                                Padding="12,4" IsEnabled="False">
+                            <StackPanel Spacing="0" VerticalAlignment="Center">
+                                <TextBlock Text="Сгенерировать" HorizontalAlignment="Center" FontSize="12" />
+                                <TextBlock Text="HTML-отчёт СФ" HorizontalAlignment="Center" FontSize="12" />
+                            </StackPanel>
+                        </Button>
                     </Grid>
                 </StackPanel>
             </Border>

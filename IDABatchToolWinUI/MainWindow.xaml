@@ -53,7 +53,7 @@
                     Content="Сравнение"
                     Tag="diff">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE948;" />
+                        <FontIcon Glyph="&#xE89A;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
@@ -62,7 +62,7 @@
                     Content="Анализ СФ"
                     Tag="sfa">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE943;" />
+                        <FontIcon Glyph="&#xE82D;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>

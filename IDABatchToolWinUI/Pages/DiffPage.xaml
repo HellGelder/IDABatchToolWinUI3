@@ -47,7 +47,7 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="Левая (эталонная):"
-                                       VerticalAlignment="Center" MinWidth="120" FontSize="13" />
+                                       VerticalAlignment="Center" MinWidth="120" FontSize="12" />
                             <TextBox x:Name="LeftDirTextBox" Grid.Column="1"
                                      PlaceholderText="Путь к папке с .i64 файлами..." />
                             <Button x:Name="BrowseLeftButton" Grid.Column="2" Content="Обзор..." MinWidth="70"
@@ -61,7 +61,7 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="Правая (текущая):"
-                                       VerticalAlignment="Center" MinWidth="120" FontSize="13" />
+                                       VerticalAlignment="Center" MinWidth="120" FontSize="12" />
                             <TextBox x:Name="RightDirTextBox" Grid.Column="1"
                                      PlaceholderText="Путь к папке с .i64 файлами..." />
                             <Button x:Name="BrowseRightButton" Grid.Column="2" Content="Обзор..." MinWidth="70"
@@ -75,7 +75,7 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="Папка результатов:"
-                                       VerticalAlignment="Center" MinWidth="120" FontSize="13" />
+                                       VerticalAlignment="Center" MinWidth="120" FontSize="12" />
                             <TextBox x:Name="OutputDirTextBox" Grid.Column="1"
                                      PlaceholderText="Автоматически: DiffResults в левой папке" />
                             <Button x:Name="BrowseOutputButton" Grid.Column="2" Content="Обзор..." MinWidth="70"
@@ -126,11 +126,11 @@
                                     </Grid.ColumnDefinitions>
                                     <CheckBox x:Name="HeaderCheckBox" Grid.Column="0" IsChecked="True"
                                               VerticalAlignment="Center" Click="HeaderCheckBox_Click" />
-                                    <TextBlock Grid.Column="1" Text="Файл" FontWeight="SemiBold" FontSize="12" />
-                                    <TextBlock Grid.Column="2" Text="Размер" FontWeight="SemiBold" FontSize="12" />
-                                    <TextBlock Grid.Column="3" Text="PID" FontWeight="SemiBold" FontSize="12" />
-                                    <TextBlock Grid.Column="4" Text="BinDiff" FontWeight="SemiBold" FontSize="12" />
-                                    <TextBlock Grid.Column="5" Text="Diaphora" FontWeight="SemiBold" FontSize="12" />
+                                    <TextBlock Grid.Column="1" Text="Файл" FontWeight="SemiBold" FontSize="11" />
+                                    <TextBlock Grid.Column="2" Text="Размер" FontWeight="SemiBold" FontSize="11" />
+                                    <TextBlock Grid.Column="3" Text="PID" FontWeight="SemiBold" FontSize="11" />
+                                    <TextBlock Grid.Column="4" Text="BinDiff" FontWeight="SemiBold" FontSize="11" />
+                                    <TextBlock Grid.Column="5" Text="Diaphora" FontWeight="SemiBold" FontSize="11" />
                                 </Grid>
                             </DataTemplate>
                         </ListView.HeaderTemplate>
@@ -160,7 +160,7 @@
                         </ListView.ItemTemplate>
                     </ListView>
                     <TextBlock x:Name="MapStatusLabel" Text="Укажите обе директории для анализа."
-                               FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                               FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
                     <!-- Кнопки: запуск/отмена слева, генерация отчёта — правый нижний угол -->
                     <Grid ColumnSpacing="6" Margin="0,6,0,0">
@@ -176,8 +176,8 @@
                                 Height="34" Width="80" Padding="12,6" IsEnabled="False" />
                         <Button x:Name="GenerateReportButton" Grid.Column="3" Height="46" MinWidth="172" Padding="12,4" IsEnabled="False">
                             <StackPanel Spacing="0" VerticalAlignment="Center">
-                                <TextBlock Text="Сгенерировать" HorizontalAlignment="Center" FontSize="13" />
-                                <TextBlock Text="HTML-отчёт" HorizontalAlignment="Center" FontSize="13" />
+                                <TextBlock Text="Сгенерировать" HorizontalAlignment="Center" FontSize="12" />
+                                <TextBlock Text="HTML-отчёт" HorizontalAlignment="Center" FontSize="12" />
                             </StackPanel>
                         </Button>
                     </Grid>
@@ -189,7 +189,7 @@
                 <StackPanel Spacing="6">
                     <TextBlock Text="Прогресс выполнения" Style="{StaticResource GroupHeaderStyle}" />
                     <StackPanel x:Name="StagesPanel" Orientation="Horizontal" Spacing="14" />
-                    <TextBlock x:Name="CurrentFileLabel" Text="Файл: —" FontSize="12"
+                    <TextBlock x:Name="CurrentFileLabel" Text="Файл: —" FontSize="11"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                TextTrimming="CharacterEllipsis" />
                 </StackPanel>

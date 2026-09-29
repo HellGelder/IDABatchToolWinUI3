@@ -338,7 +338,7 @@ public DiffPage()
         stages.Add("Генерация HTML");
         foreach (var s in stages)
         {
-            var tb = new TextBlock { Text = $"○ {s}", FontSize = 13, Opacity = 0.65 };
+            var tb = new TextBlock { Text = $"○ {s}", FontSize = 12, Opacity = 0.65 };
             _stageLabels[s] = tb;
             StagesPanel.Children.Add(tb);
         }
@@ -349,7 +349,7 @@ public DiffPage()
         if (!_stageLabels.TryGetValue(stage, out var tb))
         {
             // Этапы доанализа добавляются динамически
-            tb = new TextBlock { Text = stage, FontSize = 13 };
+            tb = new TextBlock { Text = stage, FontSize = 12 };
             _stageLabels[stage] = tb;
             StagesPanel.Children.Add(tb);
         }

@@ -101,13 +101,13 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="Потоков IDA:" VerticalAlignment="Center" FontSize="13" />
+                            <TextBlock Grid.Column="0" Text="Потоков IDA:" VerticalAlignment="Center" FontSize="12" />
                             <Slider x:Name="MaxIdaSlider" Grid.Column="1" Minimum="1" Maximum="32" Value="4"
                                     StepFrequency="1" TickFrequency="4"
                                     ToolTipService.ToolTip="Максимальное количество одновременно работающих экземпляров IDA." />
                             <TextBlock Grid.Column="2" Text="{Binding ElementName=MaxIdaSlider, Path=Value}"
                                        VerticalAlignment="Center" MinWidth="24" TextAlignment="Center"
-                                       FontSize="13" FontWeight="SemiBold" />
+                                       FontSize="12" FontWeight="SemiBold" />
                         </Grid>
                     </StackPanel>
                 </Border>
@@ -117,7 +117,7 @@
                         Loaded="ShadowRect_Loaded">
                     <StackPanel Spacing="6">
                         <TextBlock Text="Процесс анализа" Style="{StaticResource GroupHeaderStyle}" />
-                        <TextBlock x:Name="ProcessStatusText" Text="Готов к запуску" FontSize="12"
+                        <TextBlock x:Name="ProcessStatusText" Text="Готов к запуску" FontSize="11"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         <ProgressBar x:Name="ProcessProgress" IsIndeterminate="True" Height="4" Visibility="Collapsed"
                                      Foreground="{ThemeResource AccentAAFillColorDefaultBrush}" />
@@ -136,7 +136,7 @@
                                     Padding="12,6" IsEnabled="False" Click="DetailsButton_Click"
                                     ToolTipService.ToolTip="Мини-диспетчер задач анализа: PID, потоки и статусы всех файлов">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <FontIcon Glyph="&#xE946;" FontSize="14" />
+                                    <FontIcon Glyph="&#xE946;" FontSize="13" />
                                     <TextBlock Text="Подробнее" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
@@ -144,8 +144,8 @@
                                     Height="34" Width="90" Padding="12,6" IsEnabled="False" />
                             <Button x:Name="GenerateHtmlButton" Grid.Column="4" Height="40" MinWidth="168" Padding="12,4" IsEnabled="False">
                                 <StackPanel Spacing="0" VerticalAlignment="Center">
-                                    <TextBlock Text="Сгенерировать" HorizontalAlignment="Center" FontSize="13" />
-                                    <TextBlock Text="HTML-отчёты" HorizontalAlignment="Center" FontSize="13" />
+                                    <TextBlock Text="Сгенерировать" HorizontalAlignment="Center" FontSize="12" />
+                                    <TextBlock Text="HTML-отчёты" HorizontalAlignment="Center" FontSize="12" />
                                 </StackPanel>
                             </Button>
                         </Grid>

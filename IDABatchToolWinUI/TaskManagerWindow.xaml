@@ -21,8 +21,8 @@
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0" Spacing="2">
-            <TextBlock Text="Мини-диспетчер задач анализа" FontSize="16" FontWeight="SemiBold" />
-            <TextBlock x:Name="SessionText" Text="Нет активной сессии анализа" FontSize="12"
+            <TextBlock Text="Мини-диспетчер задач анализа" FontSize="15" FontWeight="SemiBold" />
+            <TextBlock x:Name="SessionText" Text="Нет активной сессии анализа" FontSize="11"
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
         </StackPanel>
 
@@ -48,15 +48,15 @@
                             <ColumnDefinition Width="76" />
                             <ColumnDefinition Width="110" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Файл" FontWeight="SemiBold" FontSize="12" />
-                        <TextBlock Grid.Column="1" Text="PID" FontWeight="SemiBold" FontSize="12" />
-                        <TextBlock Grid.Column="2" Text="Тред" FontWeight="SemiBold" FontSize="12" />
-                        <TextBlock Grid.Column="3" Text="Статус" FontWeight="SemiBold" FontSize="12" />
-                        <TextBlock Grid.Column="4" Text="Фаза" FontWeight="SemiBold" FontSize="12" />
-                        <TextBlock Grid.Column="5" Text="CPU" FontWeight="SemiBold" FontSize="12" />
-                        <TextBlock Grid.Column="6" Text="Память" FontWeight="SemiBold" FontSize="12" />
-                        <TextBlock Grid.Column="7" Text="Потоки ОС" FontWeight="SemiBold" FontSize="12" />
-                        <TextBlock Grid.Column="8" Text="Запущен" FontWeight="SemiBold" FontSize="12" />
+                        <TextBlock Grid.Column="0" Text="Файл" FontWeight="SemiBold" FontSize="11" />
+                        <TextBlock Grid.Column="1" Text="PID" FontWeight="SemiBold" FontSize="11" />
+                        <TextBlock Grid.Column="2" Text="Тред" FontWeight="SemiBold" FontSize="11" />
+                        <TextBlock Grid.Column="3" Text="Статус" FontWeight="SemiBold" FontSize="11" />
+                        <TextBlock Grid.Column="4" Text="Фаза" FontWeight="SemiBold" FontSize="11" />
+                        <TextBlock Grid.Column="5" Text="CPU" FontWeight="SemiBold" FontSize="11" />
+                        <TextBlock Grid.Column="6" Text="Память" FontWeight="SemiBold" FontSize="11" />
+                        <TextBlock Grid.Column="7" Text="Потоки ОС" FontWeight="SemiBold" FontSize="11" />
+                        <TextBlock Grid.Column="8" Text="Запущен" FontWeight="SemiBold" FontSize="11" />
                     </Grid>
 
                     <ItemsControl x:Name="RowsList">
@@ -76,18 +76,18 @@
                                         <ColumnDefinition Width="76" />
                                         <ColumnDefinition Width="110" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{x:Bind FileName}" FontSize="12"
+                                    <TextBlock Grid.Column="0" Text="{x:Bind FileName}" FontSize="11"
                                                TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                                                ToolTipService.ToolTip="{x:Bind FileName}" />
-                                    <TextBlock Grid.Column="1" Text="{x:Bind Pid}" FontSize="12" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="2" Text="{x:Bind ThreadId}" FontSize="12" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="3" Text="{x:Bind Status}" FontSize="12" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="4" Text="{x:Bind Phase}" FontSize="12" VerticalAlignment="Center"
+                                    <TextBlock Grid.Column="1" Text="{x:Bind Pid}" FontSize="11" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="{x:Bind ThreadId}" FontSize="11" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="3" Text="{x:Bind Status}" FontSize="11" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="4" Text="{x:Bind Phase}" FontSize="11" VerticalAlignment="Center"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <TextBlock Grid.Column="5" Text="{x:Bind Cpu}" FontSize="12" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="6" Text="{x:Bind Memory}" FontSize="12" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="7" Text="{x:Bind OsThreads}" FontSize="12" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="8" Text="{x:Bind StartedAt}" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="5" Text="{x:Bind Cpu}" FontSize="11" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="6" Text="{x:Bind Memory}" FontSize="11" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="7" Text="{x:Bind OsThreads}" FontSize="11" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="8" Text="{x:Bind StartedAt}" FontSize="11" VerticalAlignment="Center" />
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -97,8 +97,8 @@
         </Border>
 
         <StackPanel Grid.Row="2" Spacing="2">
-            <TextBlock x:Name="SummaryText" FontSize="12" FontWeight="SemiBold" />
-            <TextBlock FontSize="11"
+            <TextBlock x:Name="SummaryText" FontSize="11" FontWeight="SemiBold" />
+            <TextBlock FontSize="10"
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                        Text="PID — процесс idat.exe для файла; Тред — рабочий поток приложения; CPU, память и потоки ОС обновляются раз в секунду." />
         </StackPanel>

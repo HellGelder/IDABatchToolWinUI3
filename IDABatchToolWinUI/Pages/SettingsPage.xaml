@@ -104,12 +104,12 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="SevenZIcon" Grid.Column="0" Text="⚪" VerticalAlignment="Center" FontSize="12" />
+                        <TextBlock x:Name="SevenZIcon" Grid.Column="0" Text="⚪" VerticalAlignment="Center" FontSize="11" />
                         <TextBlock Grid.Column="1" Text="7-Zip (распаковка DMG)"
-                                   VerticalAlignment="Center" Margin="0,0,8,0" FontSize="13" />
+                                   VerticalAlignment="Center" Margin="0,0,8,0" FontSize="12" />
                         <TextBlock x:Name="SevenZPath" Grid.Column="2"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   FontSize="11" VerticalAlignment="Center" />
+                                   FontSize="10" VerticalAlignment="Center" />
                     </Grid>
 
                     <Grid ColumnSpacing="6" Margin="0,0,0,4">
@@ -118,12 +118,12 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="NpxIcon" Grid.Column="0" Text="⚪" VerticalAlignment="Center" FontSize="12" />
+                        <TextBlock x:Name="NpxIcon" Grid.Column="0" Text="⚪" VerticalAlignment="Center" FontSize="11" />
                         <TextBlock Grid.Column="1" Text="Node.js / npx (документация СФ)"
-                                   VerticalAlignment="Center" Margin="0,0,8,0" FontSize="13" />
+                                   VerticalAlignment="Center" Margin="0,0,8,0" FontSize="12" />
                         <TextBlock x:Name="NpxPath" Grid.Column="2"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   FontSize="11" VerticalAlignment="Center" />
+                                   FontSize="10" VerticalAlignment="Center" />
                     </Grid>
 
                     <Button x:Name="CheckUtilsButton" Content="Проверить наличие"
@@ -136,7 +136,7 @@
                 <StackPanel Spacing="6">
                     <TextBlock Text="Документация man-pages (Linux)" Style="{StaticResource GroupHeaderStyle}" />
                     <TextBlock Text="Загружает официальный архив man-pages и сохраняет его локально. После этого документация Linux-функций доступна офлайн."
-                               TextWrapping="Wrap" FontSize="11"
+                               TextWrapping="Wrap" FontSize="10"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <Grid ColumnSpacing="6">
                         <Grid.ColumnDefinitions>
@@ -148,7 +148,7 @@
                         <Button x:Name="BrowseManPagesButton" Grid.Column="1" Content="Обзор..." MinWidth="70"
                                 Padding="8,4" />
                     </Grid>
-                    <TextBlock x:Name="ManPagesStatusText" Text="Статус: не проверено" FontSize="12" />
+                    <TextBlock x:Name="ManPagesStatusText" Text="Статус: не проверено" FontSize="11" />
                     <Grid ColumnSpacing="6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />

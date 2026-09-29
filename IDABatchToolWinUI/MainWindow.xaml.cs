@@ -33,6 +33,10 @@ public sealed partial class MainWindow : Window
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         AppWindow.SetIcon("Assets/AppIcon.ico");
 
+        // Ширина открывающегося окна — на 30% меньше стандартной
+        var initial = AppWindow.Size;
+        AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(initial.Width * 0.7), initial.Height));
+
         _cfg = ConfigService.Load();
         ThemeHelper.Apply(this, _cfg.Theme);
 
