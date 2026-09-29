@@ -92,8 +92,15 @@ public sealed class IdaRunner : IDisposable
                     {
                         results[file] = ok;
                         completed++;
-                        ProgressCallback?.Invoke(Path.GetFileName(file) + ".i64", completed, total);
-                        FileDoneCallback?.Invoke(Path.GetFileName(file) + ".i64", ok);
+                        // Вход — либо исходный файл (экспорт после анализа:
+                        // добавляем .i64), либо готовая база .i64/.idb
+                        // (export_only: имя уже полное, ничего не добавляем).
+                        var name = Path.GetFileName(file);
+                        if (!name.EndsWith(".i64", StringComparison.OrdinalIgnoreCase)
+                            && !name.EndsWith(".idb", StringComparison.OrdinalIgnoreCase))
+                            name += ".i64";
+                        ProgressCallback?.Invoke(name, completed, total);
+                        FileDoneCallback?.Invoke(name, ok);
                     }
                 }
                 finally { sem.Release(); }

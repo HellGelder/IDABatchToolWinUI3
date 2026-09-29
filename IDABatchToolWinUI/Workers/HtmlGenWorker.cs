@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Text;
 using System.Text.Json;
 using IDABatchToolWinUI.Services;
@@ -21,6 +22,10 @@ public sealed class HtmlGenResult
     public int TotalSystemNotfound { get; set; }
     public int TotalImports { get; set; }
     public string Platform { get; set; } = "Windows";
+    // Статистика предварительного поиска документации (kind = sfa-docs)
+    public int SearchedCount { get; set; }
+    public int FoundCount { get; set; }
+    public int CachedTotal { get; set; }
 }
 
 /// <summary>
@@ -35,6 +40,7 @@ public sealed class HtmlGenWorker : IDisposable
     public event Action<HtmlGenResult>? Finished;
 
     private Process? _proc;
+    private StreamWriter? _stdin;
 
     public string Kind { get; }          // analysis | sfa | diff
     public bool DeleteJson { get; }
@@ -53,6 +59,23 @@ public sealed class HtmlGenWorker : IDisposable
                     string? leftDir, string? rightDir, string? manpagesDb,
                     IReadOnlyList<string>? jsonPaths = null)
     {
+        // Страница ждёт Run через await Task.Run внутри async void: необработанное
+        // исключение здесь уронило бы приложение — гасим в событие.
+        try
+        {
+            RunCore(inputDir, reportsDir, jsonDir, leftDir, rightDir, manpagesDb, jsonPaths);
+        }
+        catch (Exception e)
+        {
+            ErrorOccurred?.Invoke($"Ошибка процесса генерации: {e.Message}");
+            Finished?.Invoke(new HtmlGenResult { GeneratedCount = 0 });
+        }
+    }
+
+    private void RunCore(string inputDir, string reportsDir, string jsonDir,
+                         string? leftDir, string? rightDir, string? manpagesDb,
+                         IReadOnlyList<string>? jsonPaths)
+    {
         var bridge = Path.Combine(AppConstants.WinUiDir, "_python", "report_bridge.py");
         if (!File.Exists(bridge))
         {
@@ -67,10 +90,15 @@ public sealed class HtmlGenWorker : IDisposable
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            RedirectStandardInput = true,
             CreateNoWindow = true,
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
+        // Протокол моста — UTF-8: без этого pythonw пишет в системной кодировке
+        // (cp1251), и русские сообщения в GUI превращаются в нечитаемые символы.
+        psi.Environment["PYTHONUTF8"] = "1";
+        psi.Environment["PYTHONIOENCODING"] = "utf-8";
         psi.ArgumentList.Add(bridge);
         psi.ArgumentList.Add("generate");
         psi.ArgumentList.Add("--kind"); psi.ArgumentList.Add(Kind);
@@ -96,6 +124,7 @@ public sealed class HtmlGenWorker : IDisposable
             Finished?.Invoke(new HtmlGenResult { GeneratedCount = 0 });
             return;
         }
+        _stdin = _proc.StandardInput;
 
         var result = new HtmlGenResult { Platform = Platform, InputDir = inputDir, ReportsDir = reportsDir };
         var stdoutTask = ReadStdoutAsync(_proc, result);
@@ -151,14 +180,44 @@ public sealed class HtmlGenWorker : IDisposable
             if (root.TryGetProperty("total_imports", out var ti)) r.TotalImports = ti.GetInt32();
             if (root.TryGetProperty("platform", out var pf)) r.Platform = pf.GetString() ?? r.Platform;
             if (root.TryGetProperty("reports_dir", out var rd)) r.ReportsDir = rd.GetString();
+            if (root.TryGetProperty("searched", out var sd) && sd.ValueKind == JsonValueKind.Number)
+                r.SearchedCount = sd.GetInt32();
+            if (root.TryGetProperty("found", out var fd) && fd.ValueKind == JsonValueKind.Number)
+                r.FoundCount = fd.GetInt32();
+            if (root.TryGetProperty("cached_total", out var cd) && cd.ValueKind == JsonValueKind.Number)
+                r.CachedTotal = cd.GetInt32();
         }
         catch { /* неудачный JSON — игнорируем */ }
     }
 
     public void Cancel()
     {
-        try { _proc?.Kill(entireProcessTree: true); } catch { /* процесс мог завершиться */ }
+        // Мягкая отмена: мост следит за stdin, при строке CANCEL убивает все
+        // процессы поиска документации (npx/node, дерево taskkill /T) и
+        // завершает генерацию сам.
+        try { _stdin?.WriteLine("CANCEL"); _stdin?.Flush(); }
+        catch { /* процесс уже завершился */ }
+
+        // Страховка: если мост не завершился за 5 секунд — убиваем всё дерево.
+        var proc = _proc;
+        if (proc == null) return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await proc.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            catch (TimeoutException)
+            {
+                try { proc.Kill(entireProcessTree: true); } catch { /* уже завершён */ }
+            }
+            catch { /* уже завершён */ }
+        });
     }
 
-    public void Dispose() => _proc?.Dispose();
+    public void Dispose()
+    {
+        try { _stdin?.Dispose(); } catch { /* уже закрыт */ }
+        _proc?.Dispose();
+    }
 }

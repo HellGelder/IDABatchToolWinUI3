@@ -34,6 +34,24 @@ MANPAGES_ARCHIVE_URL = f"https://www.kernel.org/pub/linux/docs/man-pages/man-pag
 
 _SECTION_RE = re.compile(r"man/man([23])/(.+)\.([23][a-z]*)$")
 
+# Переносимая поставка: если мост запущен от Tools\Python рядом с приложением,
+# подключаем соседний site-packages (requests), иначе он не виден.
+import sys as _sys
+_SP = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    "..", "..", "Tools", "Python", "site-packages"))
+if os.path.isdir(_SP) and _SP not in _sys.path:
+    _sys.path.insert(0, _SP)
+
+# Протокол обмена с GUI (PROGRESS/ERROR/DONE) — строго UTF-8: без этого
+# pythonw пишет в канал в системной кодировке (cp1251), и русские сообщения
+# в GUI превращаются в нечитаемые символы.
+for _stream in (sys.stdout, sys.stderr):
+    if _stream is not None and hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS pages (
     page_name TEXT PRIMARY KEY,

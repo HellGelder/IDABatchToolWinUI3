@@ -45,6 +45,10 @@ public sealed class ManPagesSyncWorker : IDisposable
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
+        // Протокол моста — UTF-8 (иначе pythonw пишет в cp1251 и русские
+        // сообщения прогресса в GUI нечитаемы).
+        psi.Environment["PYTHONUTF8"] = "1";
+        psi.Environment["PYTHONIOENCODING"] = "utf-8";
         psi.ArgumentList.Add(_bridge);
         psi.ArgumentList.Add(_dbPath);
 

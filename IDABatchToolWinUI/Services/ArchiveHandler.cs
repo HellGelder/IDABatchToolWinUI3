@@ -14,6 +14,16 @@ public static class ArchiveHandler
 
     public static string? Find7z()
     {
+        // 1) 7-Zip, положенный рядом с приложением (Tools\7-Zip) — для
+        //    переносимой поставки без установленного 7-Zip в системе.
+        var toolsDir = Path.Combine(AppConstants.WinUiDir, "Tools", "7-Zip");
+        foreach (var name in new[] { "7z.exe", "7za.exe" })
+        {
+            var cand = Path.Combine(toolsDir, name);
+            if (File.Exists(cand)) return cand;
+        }
+
+        // 2) PATH, 3) стандартные каталоги установки
         foreach (var name in SevenZipNames)
         {
             foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator))

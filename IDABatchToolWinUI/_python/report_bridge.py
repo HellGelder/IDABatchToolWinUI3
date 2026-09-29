@@ -17,12 +17,36 @@ import html
 import json
 import os
 import re
+import shutil
 import sqlite3
+import subprocess
 import sys
+import threading
+import urllib.error
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 VENDOR_DIR = os.path.normpath(os.path.join(TEMPLATES_DIR, "..", "vendor"))
+
+# Переносимая поставка: если мост запущен от Tools\Python рядом с приложением,
+# подключаем соседний site-packages (jinja2, requests), иначе они не видны.
+_SP = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    "..", "..", "Tools", "Python", "site-packages"))
+if os.path.isdir(_SP) and _SP not in sys.path:
+    sys.path.insert(0, _SP)
+
+# Протокол обмена с GUI (PROGRESS/ERROR/RESULT) — строго UTF-8: без этого
+# pythonw пишет в канал в системной кодировке (cp1251), и русские сообщения
+# в GUI превращаются в нечитаемые символы.
+for _stream in (sys.stdout, sys.stderr):
+    if _stream is not None and hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
 
 # ─────────────────────────────────────────────────────────────────
 #  Рендер шаблонов — готовый Jinja2 (внешняя зависимость, НЕ исполнение 1)
@@ -97,6 +121,7 @@ def normalize_display_name(name):
 from classifier.platform_classifier import classify_module as _classifier_describe
 from classifier.categories import get_module_category_and_description
 from classifier.system_modules import is_system_module as _classifier_is_system
+from classifier.system_modules import normalize_platform as _normalize_platform
 
 # Неизвестная платформа → проверка по всем словарям (как в исполнении 1).
 _UNKNOWN_DESC = "Неопознанный модуль"
@@ -396,52 +421,798 @@ def generate_analysis_index(reports_dir, input_dir, report_links, global_modules
 #  Генератор «Анализ СФ»
 # ─────────────────────────────────────────────────────────────────
 
-def _mslearn_lookup(func_name, cache_db):
-    """Поиск документации в кэше MS Learn (SQLite, таблица search_cache)."""
-    if not cache_db or not os.path.isfile(cache_db):
-        return None
-    try:
-        conn = sqlite3.connect(cache_db)
+def _decode_bytes(data):
+    """Декодирует байты из subprocess с автоопределением кодировки.
+
+    На Windows npx (Node) может выводить в UTF-8 или в OEM (cp866) кодировке.
+    Пробуем UTF-8, затем системную кодовую страницу, затем latin-1 (не падает).
+    """
+    if not data:
+        return ""
+    for enc in ("utf-8", "cp866", "cp1251", "latin-1"):
         try:
-            cur = conn.execute(
-                "SELECT title, url, markdown FROM search_cache WHERE query = ? AND status = 'ok' LIMIT 1",
-                (func_name,))
-            row = cur.fetchone()
-            if row:
-                return {"title": row[0], "url": row[1], "markdown": row[2], "markdown_html": ""}
+            return data.decode(enc)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return data.decode("latin-1", errors="replace")
+
+
+def _normalize_func_name(func_name):
+    """Нормализует имя функции для поиска в Microsoft Learn.
+
+    Для C++ имён вида ``std::basic_streambuf<...>::sputc(char)``
+    извлекает последний сегмент верхнего уровня: ``sputc``.
+    """
+    name = (func_name or "").strip()
+    if not name:
+        return name
+
+    depth = 0
+    last_top_level_sep = -1
+    for i, ch in enumerate(name):
+        if ch in ("<", "(", "{"):
+            depth += 1
+        elif ch in (">", ")", "}"):
+            depth -= 1
+        elif ch == ":" and depth == 0 and i + 1 < len(name) and name[i + 1] == ":":
+            last_top_level_sep = i
+
+    if last_top_level_sep >= 0:
+        rest = name[last_top_level_sep + 2:].strip()
+        paren_idx = rest.find("(")
+        if paren_idx >= 0:
+            rest = rest[:paren_idx].strip()
+        if rest:
+            return rest
+
+    paren_idx = name.find("(")
+    if paren_idx >= 0:
+        name = name[:paren_idx].strip()
+    return name
+
+
+def _sanitize_for_shell(func_name):
+    """Экранирует имя функции для передачи npx через cmd.exe.
+
+    npx.cmd — это cmd.exe-скрипт, поэтому ``<< >> | & ;`` ломают парсинг.
+    Удаляем их полностью — для поиска это несущественно.
+    """
+    result = (func_name or "").replace("<<", "").replace(">>", "")
+    result = result.replace("<", "").replace(">", "")
+    result = result.replace("|", "").replace("&", "").replace(";", "")
+    return result.strip()
+
+
+_NPX_PATH_CACHE = None
+_NPX_MISSING_LOGGED = False
+
+
+def _find_npx():
+    """Путь к npx: PATH, затем типовые каталоги Windows. Результат кэшируется."""
+    global _NPX_PATH_CACHE
+    if _NPX_PATH_CACHE is not None:
+        return _NPX_PATH_CACHE or None
+    npx = shutil.which("npx")
+    if not npx:
+        for p in (r"C:\Program Files\nodejs\npx.cmd",
+                  r"C:\Program Files\nodejs\npx.exe",
+                  r"C:\ProgramData\chocolatey\bin\npx.exe"):
+            if Path(p).exists():
+                npx = p
+                break
+    _NPX_PATH_CACHE = npx or ""
+    return npx
+
+
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+def _kill_process_tree(proc):
+    """Убивает процесс и всё его дерево (cmd.exe → node.exe). Без окна."""
+    try:
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+            capture_output=True, timeout=10, creationflags=_NO_WINDOW,
+        )
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+
+def _parse_npx_results(stdout):
+    """Разбирает вывод ``learn-cli search`` — только первый результат
+    (как в SfaReportGenerator._search_function исполнения 1)."""
+    results = []
+    lines = stdout.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if re.match(r"^\[\d+\]", line):
+            title_match = re.match(r"^\[\d+\]\s+(.+)$", line)
+            title = title_match.group(1).strip() if title_match else "Untitled"
+            url = ""
+            if i + 1 < len(lines) and (lines[i + 1].strip().startswith("http://")
+                                       or lines[i + 1].strip().startswith("https://")):
+                url = lines[i + 1].strip()
+                i += 1
+            i += 1
+            while i < len(lines) and lines[i].strip() == "":
+                i += 1
+            md_lines = []
+            while i < len(lines) and not re.match(r"^\[\d+\]", lines[i]):
+                md_lines.append(lines[i])
+                i += 1
+            markdown_text = "\n".join(md_lines).strip()
+            if markdown_text:
+                results.append({"title": title, "url": url,
+                                "markdown": markdown_text, "markdown_html": ""})
+            break  # только первый результат
+        i += 1
+    return results
+
+
+def _extract_dll(results):
+    """Вытаскивает ``Dll: xxx.dll`` из markdown-документации (если есть)."""
+    for r in results or []:
+        m = re.search(r"[Dd][Ll][Ll]\s*:\s*(\S+\.dll)", r.get("markdown", ""))
+        if m:
+            return m.group(1)
+    return ""
+
+
+# ─────────────────────────────────────────────────────────────────
+#  Прямой клиент Microsoft Learn MCP (вместо npx-обёртки)
+# ─────────────────────────────────────────────────────────────────
+
+_MCP_ENDPOINT = "https://learn.microsoft.com/api/mcp"
+_MCP_REQUEST_TIMEOUT = 30  # сек, на один запрос (не на запуск процесса)
+
+
+def _mcp_session_cache_path():
+    """Путь к кэшу сессии learn-cli (%LOCALAPPDATA%\\mslearn\\Cache\\...)."""
+    local = os.environ.get("LOCALAPPDATA")
+    if not local:
+        return None
+    return Path(local) / "mslearn" / "Cache" / "learn-mcp-cache.json"
+
+
+def _mcp_load_cached_session():
+    """sessionId и имя docsSearch-тула из кэша learn-cli (TTL 24 ч там же).
+
+    learn-cli пишет туда session и mapping тулов при любом npx-вызове —
+    переиспользуем, чтобы не делать handshake (initialize/tools). Если кэша
+    нет — выполняем handshake сами и записываем в тот же файл.
+    """
+    path = _mcp_session_cache_path()
+    try:
+        if path and path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            entry = (data.get("entries") or {}).get(_MCP_ENDPOINT)
+            if entry:
+                exp = entry.get("expiresAt")
+                # learn-cli пишет UTC с суффиксом «Z»; naive now сравнивать с
+                # aware нельзя — приводим к UTC.
+                exp_dt = datetime.fromisoformat(exp.replace("Z", "+00:00")) if exp else None
+                if exp_dt is not None and exp_dt.tzinfo is None:
+                    exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+                if exp_dt is None or exp_dt > datetime.now(timezone.utc):
+                    tools = entry.get("tools") or []
+                    search_tool = ""
+                    for t in tools:
+                        tname = (t.get("name") if isinstance(t, dict) else t) or ""
+                        if tname.lower().replace("_", "").replace("-", "") in (
+                                "microsoftdocssearch", "docssearch", "docs_search"):
+                            search_tool = tname
+                            break
+                    if not search_tool and tools:
+                        # тулов в кэше нет (запись от нашего сохранения) —
+                        # берём дефолтное имя Microsoft Learn MCP
+                        search_tool = "microsoft_docs_search"
+                    return entry.get("sessionId") or "", search_tool
+    except Exception:
+        pass
+    return "", ""
+
+
+def _mcp_save_cached_session(session_id, tool_name):
+    """Сохраняет сессию в формат кэша learn-cli (или обновляет существующую запись)."""
+    path = _mcp_session_cache_path()
+    if not path or not session_id:
+        return
+    try:
+        data = {"entries": {}}
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+        entries = data.setdefault("entries", {})
+        old = entries.get(_MCP_ENDPOINT) or {}
+        entries[_MCP_ENDPOINT] = {
+            "endpoint": _MCP_ENDPOINT,
+            "sessionId": session_id,
+            "tools": old.get("tools") or [{"name": tool_name}],
+            "updatedAt": datetime.now().isoformat(),
+            "expiresAt": (datetime.now() + timedelta(days=1)).isoformat(),
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data), encoding="utf-8")
+    except Exception:
+        pass
+
+
+class McpDocClient:
+    """Клиент Microsoft Learn MCP: постоянное соединение, запрос на функцию.
+
+    Замена запуска npx на каждый поиск: learn-cli под капотом — это HTTP-клиент
+    к learn.microsoft.com/api/mcp (Streamable HTTP, JSON-RPC). Мы вызываем тот
+    же тул ``microsoft_docs_search`` тем же протоколом, результат идентичен
+    (title/url/markdown), но без 4–5 с на разрешение пакета и boot node.
+    Сессия (mcp-session-id) берётся из кэша learn-cli или создаётся handshake'ом
+    и сохраняется обратно — последующие прогоны переиспользуют её.
+    """
+
+    def __init__(self, log=None):
+        self._log = log or (lambda msg: None)
+        self._session_id = ""
+        self._tool = ""
+        self._lock = threading.Lock()
+        self._rpc_id = 0
+
+    def _headers(self, with_session):
+        h = {
+            "content-type": "application/json",
+            "accept": "application/json, text/event-stream",
+            "protocol-version": "2025-06-18",
+        }
+        if with_session and self._session_id:
+            h["mcp-session-id"] = self._session_id
+        return h
+
+    def _post(self, payload, with_session=True):
+        req = urllib.request.Request(
+            _MCP_ENDPOINT, data=json.dumps(payload).encode("utf-8"),
+            headers=self._headers(with_session), method="POST")
+        with urllib.request.urlopen(req, timeout=_MCP_REQUEST_TIMEOUT) as resp:
+            body = resp.read().decode("utf-8", "replace")
+            sid = resp.headers.get("mcp-session-id") or ""
+        return resp.status, sid, body
+
+    @staticmethod
+    def _sse_text(body):
+        """Достаёт result из SSE-ответа (``data: {json}``)."""
+        for line in body.splitlines():
+            if line.startswith("data:"):
+                data = json.loads(line[5:].strip())
+                if "error" in data:
+                    raise RuntimeError(data["error"].get("message", "MCP error"))
+                result = data.get("result") or {}
+                content = result.get("content") or []
+                if content and content[0].get("type") == "text":
+                    return content[0].get("text", "")
+        return ""
+
+    def search(self, query):
+        """Поиск документации; возвращает список {title, url, markdown} —
+        тот же формат, что _parse_npx_results (и исполнение 1)."""
+        with self._lock:
+            if not self._session_id or not self._tool:
+                self._session_id, self._tool = _mcp_load_cached_session()
+            if not self._tool:
+                self._tool = "microsoft_docs_search"
+            return self._search_once(query)
+
+    def _search_once(self, query):
+        payload = {"jsonrpc": "2.0", "id": self._next_id(), "method": "tools/call",
+                   "params": {"name": self._tool, "arguments": {"query": query}}}
+        try:
+            status, sid, body = self._post(payload)
+        except urllib.error.HTTPError as e:
+            # сессия умерла — полный handshake и повтор
+            if e.code in (400, 404):
+                return self._reconnect_search(query)
+            raise
+        if sid:
+            if sid != self._session_id:
+                self._session_id = sid
+                _mcp_save_cached_session(sid, self._tool)
+        return self._parse_payload(self._sse_text(body))
+
+    def _next_id(self):
+        """Уникальный id JSON-RPC-запроса внутри клиента."""
+        self._rpc_id += 1
+        return self._rpc_id
+
+    def _reconnect_search(self, query):
+        """Полный handshake и повтор поиска (кэш сессии протух)."""
+        import http.client as _hc
+        conn = _hc.HTTPSConnection("learn.microsoft.com", timeout=_MCP_REQUEST_TIMEOUT)
+        try:
+            conn.request("POST", "/api/mcp",
+                         body=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                                          "params": {"protocolVersion": "2025-06-18",
+                                                     "capabilities": {},
+                                                     "clientInfo": {"name": "learn-cli", "version": "1.0.0"}}}),
+                         headers={"content-type": "application/json",
+                                  "accept": "application/json, text/event-stream"})
+            resp = conn.getresponse()
+            resp.read()
+            self._session_id = resp.getheader("mcp-session-id") or ""
+            if self._session_id:
+                _mcp_save_cached_session(self._session_id, self._tool or "microsoft_docs_search")
         finally:
             conn.close()
+        payload = {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                   "params": {"name": self._tool or "microsoft_docs_search",
+                              "arguments": {"query": query}}}
+        status, sid, body = self._post(payload)
+        if sid:
+            self._session_id = sid
+        return self._parse_payload(self._sse_text(body))
+
+    @staticmethod
+    def _parse_payload(text):
+        """JSON ответа MCP → формат результатов поиска (первый результат,
+        как в исполнении 1 и _parse_npx_results)."""
+        if not text:
+            return []
+        try:
+            inner = json.loads(text)
+        except json.JSONDecodeError:
+            return []
+        results = []
+        for r in (inner.get("results") or [])[:1]:
+            md = r.get("content", "")
+            if not md:
+                continue
+            results.append({"title": r.get("title", ""),
+                            "url": r.get("contentUrl", ""),
+                            "markdown": md, "markdown_html": ""})
+            break  # только первый результат
+        return results
+
+
+_MCP_CLIENT = None  # общий клиент (потокобезопасен: _search_once атомарен по lock)
+
+
+def _get_mcp_client(log=None):
+    global _MCP_CLIENT
+    if _MCP_CLIENT is None:
+        _MCP_CLIENT = McpDocClient(log)
+    return _MCP_CLIENT
+
+
+def _mcp_ping():
+    """Доступность Learn MCP (любой HTTP-ответ считается успехом —
+    GET возвращает 405, но это значит, что endpoint жив; как в probeEndpoint
+    learn-cli)."""
+    try:
+        req = urllib.request.Request(_MCP_ENDPOINT, method="GET", headers={"accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=10):
+            return True
+    except urllib.error.HTTPError:
+        return True  # 405 и т.п. — сервер отвечает
     except Exception:
-        return None
+        return False
+
+
+class DocSearchManager:
+    """Менеджер параллельного поиска документации MS Learn.
+
+    - Пул потоков (по умолчанию 4): несколько функций ищутся одновременно.
+    - «Тихие» вызовы: npx запускается с CREATE_NO_WINDOW — консольные окна
+      не появляются (pythonw без консоли, а cmd.exe/npx.cmd иначе открывают
+      своё окно на каждый вызов).
+    - Отмена: cancel() убивает все запущенные процессы npx/node (дерево,
+      ``taskkill /F /T``) и отменяет невыполненные задачи пула; потоки,
+      ожидающие завершения процессов, разблокируются немедленно.
+    """
+
+    def __init__(self, log, max_workers=4):
+        self._log = log
+        self._executor = ThreadPoolExecutor(max_workers=max_workers)
+        self._lock = threading.Lock()
+        self._procs = set()
+        self._cancelled = threading.Event()
+
+    @property
+    def cancelled(self):
+        return self._cancelled.is_set()
+
+    def submit(self, func_name, timeout=45):
+        """Ставит поиск функции в пул. Возвращает None, если менеджер отменён."""
+        if self._cancelled.is_set():
+            return None
+        return self._executor.submit(self._search, func_name, timeout)
+
+    def cancel(self):
+        """Останавливает поиск: убивает запущенные процессы, отменяет очередь."""
+        if self._cancelled.is_set():
+            return
+        self._cancelled.set()
+        with self._lock:
+            procs = list(self._procs)
+            self._procs.clear()
+        for p in procs:
+            _kill_process_tree(p)
+        try:
+            self._executor.shutdown(wait=False, cancel_futures=True)
+        except Exception:
+            pass
+
+    def shutdown(self):
+        """Нормальное завершение пула (без отмены)."""
+        try:
+            self._executor.shutdown(wait=False)
+        except Exception:
+            pass
+
+    def _search(self, func_name, timeout):
+        """Рабочая функция пула: поиск документации для одной функции.
+
+        Основной путь — прямой MCP-вызов (learn.microsoft.com/api/mcp) из
+        общего клиента: 4 потока пула постоянные, процессы не пересоздаются,
+        ~1 с на функцию. Фолбэк — npx @microsoft/learn-cli (старое поведение,
+        4–5 с только на запуск), если MCP-вызов не удался.
+        """
+        global _NPX_MISSING_LOGGED
+        if self._cancelled.is_set():
+            return []
+
+        search_name = _normalize_func_name(func_name)
+        safe_name = _sanitize_for_shell(search_name)
+        if not safe_name:
+            self._log(f"[WARN] {func_name}: пустое имя после нормализации")
+            return []
+
+        self._log(f"[INFO] Searching: {func_name} → {safe_name}")
+
+        # 1) Прямой MCP-клиент (общий для всех потоков пула)
+        client = _get_mcp_client(self._log)
+        try:
+            results = client.search(safe_name)
+            if self._cancelled.is_set():
+                return []
+            if results:
+                self._log(f"[INFO] Fetched {len(results)} results for {func_name}")
+            else:
+                self._log(f"[ERROR] No results for {func_name}")
+            return results
+        except Exception as e:
+            if self._cancelled.is_set():
+                return []
+            self._log(f"[WARN] MCP search failed for {func_name}: {e} — fallback to npx")
+
+        # 2) Фолбэк: npx (прежний путь)
+        npx = _find_npx()
+        if not npx:
+            if not _NPX_MISSING_LOGGED:
+                _NPX_MISSING_LOGGED = True
+                self._log("[ERROR] npx not found. Please install Node.js and ensure it's in PATH.")
+            return []
+
+        try:
+            proc = subprocess.Popen(
+                [npx, "@microsoft/learn-cli", "search", safe_name],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                creationflags=_NO_WINDOW,
+            )
+        except Exception as e:
+            self._log(f"[ERROR] Exception starting npx for {func_name}: {e}")
+            return []
+
+        with self._lock:
+            if self._cancelled.is_set():
+                # Отмена пришла между запуском и регистрацией — гасим сразу.
+                _kill_process_tree(proc)
+                try:
+                    proc.communicate(timeout=2)
+                except Exception:
+                    pass
+                return []
+            self._procs.add(proc)
+
+        out_b = err_b = b""
+        try:
+            out_b, err_b = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            self._log(f"[ERROR] npx search timed out ({timeout}s) for {func_name}")
+            _kill_process_tree(proc)
+            try:
+                out_b, err_b = proc.communicate(timeout=5)
+            except Exception:
+                out_b, err_b = b"", b""
+        except Exception as e:
+            self._log(f"[ERROR] Exception searching {func_name}: {e}")
+            _kill_process_tree(proc)
+        finally:
+            with self._lock:
+                self._procs.discard(proc)
+
+        if self._cancelled.is_set():
+            return []
+
+        stdout = _decode_bytes(out_b)
+        stderr = _decode_bytes(err_b)
+        if proc.returncode not in (0, None):
+            # Даже при ошибке пытаемся распарсить stdout (npx может выдать
+            # результат на stdout, а предупреждения — на stderr)
+            self._log(f"[WARN] npx search returned {proc.returncode}: {stderr[:200]}")
+            if not stdout.strip():
+                return []
+
+        results = _parse_npx_results(stdout)
+        if results:
+            self._log(f"[INFO] Fetched {len(results)} results for {func_name}")
+        else:
+            self._log(f"[ERROR] No results for {func_name}")
+        return results
+
+
+# Мягкая отмена генерации: GUI присылает строку CANCEL в stdin.
+_CANCEL_EVENT = threading.Event()
+_DOC_MANAGER = None  # активный DocSearchManager (для stdin-наблюдателя)
+
+
+def _cancel_requested(doc_manager):
+    """Отмена запрошена (через stdin или напрямую менеджеру)."""
+    return _CANCEL_EVENT.is_set() or (doc_manager is not None and doc_manager.cancelled)
+
+
+def _watch_cancel_stdin():
+    """Наблюдатель stdin: строка CANCEL — остановить поиск документации
+    (убить процессы npx) и завершить генерацию."""
+    try:
+        if sys.stdin is None:
+            return
+        for line in sys.stdin:
+            if line.strip().upper().startswith("CANCEL"):
+                _CANCEL_EVENT.set()
+                manager = _DOC_MANAGER
+                if manager is not None:
+                    manager.cancel()
+                return
+    except Exception:
+        pass
+
+
+class _DocCache:
+    """Кэш документации MS Learn (SQLite).
+
+    Схема совместима с исполнением 1 (таблицы ``functions``/``results`` из
+    sfa_doc_cache.py): кэш, сформированный любым из исполнений, читается
+    другим. Генерация в мосте однопоточная — блокировки не нужны.
+    """
+
+    def __init__(self, db_path):
+        self._conn = sqlite3.connect(str(db_path))
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA busy_timeout=5000")
+        self._conn.executescript("""
+            CREATE TABLE IF NOT EXISTS functions (
+                name TEXT PRIMARY KEY,
+                dll_name TEXT NOT NULL DEFAULT '',
+                fetched_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                function_name TEXT NOT NULL,
+                result_idx INTEGER NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                url TEXT NOT NULL DEFAULT '',
+                markdown TEXT NOT NULL DEFAULT '',
+                markdown_html TEXT NOT NULL DEFAULT '',
+                FOREIGN KEY (function_name) REFERENCES functions(name),
+                UNIQUE(function_name, result_idx)
+            );
+            CREATE INDEX IF NOT EXISTS idx_results_fn ON results(function_name);
+        """)
+        self._conn.commit()
+
+    def has_function(self, func_name):
+        try:
+            return self._conn.execute(
+                "SELECT 1 FROM functions WHERE name = ?", (func_name,)
+            ).fetchone() is not None
+        except sqlite3.Error:
+            return False
+
+    def get_dll_name(self, func_name):
+        try:
+            row = self._conn.execute(
+                "SELECT dll_name FROM functions WHERE name = ?", (func_name,)
+            ).fetchone()
+            return row[0] if row else ""
+        except sqlite3.Error:
+            return ""
+
+    def get_results(self, func_name):
+        try:
+            rows = self._conn.execute(
+                "SELECT title, url, markdown FROM results "
+                "WHERE function_name = ? ORDER BY result_idx", (func_name,)
+            ).fetchall()
+        except sqlite3.Error:
+            return []
+        return [{"title": t, "url": u, "markdown": m, "markdown_html": ""}
+                for t, u, m in rows]
+
+    def save_results(self, func_name, results, dll_name=""):
+        try:
+            cur = self._conn.cursor()
+            cur.execute(
+                "INSERT OR REPLACE INTO functions (name, dll_name, fetched_at) VALUES (?, ?, ?)",
+                (func_name, dll_name, datetime.now().isoformat(timespec="seconds")))
+            cur.execute("DELETE FROM results WHERE function_name = ?", (func_name,))
+            for idx, r in enumerate(results):
+                cur.execute(
+                    "INSERT OR REPLACE INTO results "
+                    "(function_name, result_idx, title, url, markdown, markdown_html) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (func_name, idx, r.get("title", ""), r.get("url", ""),
+                     r.get("markdown", ""), r.get("markdown_html", "")))
+            self._conn.commit()
+        except sqlite3.Error:
+            pass
+
+    def count(self):
+        try:
+            return self._conn.execute("SELECT COUNT(*) FROM functions").fetchone()[0]
+        except sqlite3.Error:
+            return 0
+
+    def close(self):
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+
+
+def _manpages_candidates(func_name):
+    """Варианты имени для поиска man-pages: без версии символа (@GLIBC_...)
+    и без ведущих подчёркиваний — как ManPagesDatabase._candidates исполнения 1."""
+    if not func_name:
+        return ()
+    name = func_name.strip().split("@", 1)[0]
+    candidates = [name]
+    stripped = name.lstrip("_")
+    if stripped and stripped != name:
+        candidates.append(stripped)
+    return tuple(dict.fromkeys(candidates))
+
+
+def _manpages_open(candidates, log):
+    """Открывает БД man-pages: первый читаемый файл из списка кандидатов."""
+    searched = []
+    for raw in candidates:
+        if not raw:
+            continue
+        p = Path(raw)
+        if p.suffix.lower() != ".db":
+            p = p / "manpages.db"
+        searched.append(str(p))
+        if not p.is_file():
+            continue
+        try:
+            conn = sqlite3.connect(str(p))
+            count = conn.execute("SELECT COUNT(*) FROM function_index").fetchone()[0]
+        except sqlite3.Error as e:
+            log(f"[WARN] БД man-pages не читается ({p}): {e}")
+            continue
+        version = ""
+        try:
+            row = conn.execute("SELECT value FROM meta WHERE key = 'manpages_version'").fetchone()
+            version = row[0] if row else ""
+        except sqlite3.Error:
+            pass
+        log(f"[INFO] man-pages DB: {p} (функций: {count}, версия: {version})")
+        return conn
+    log("[WARN] БД man-pages не найдена (искали: "
+        + (", ".join(searched) or "пути не заданы")
+        + "). Документация Linux недоступна. Укажите путь в настройках "
+          "и выполните синхронизацию man-pages.")
     return None
 
 
-def _lookup_doc(func_name, platform, cache_db, manpages_db):
-    if platform in ("Linux", "Linux / Android"):
-        if manpages_db and os.path.isfile(manpages_db):
-            try:
-                conn = sqlite3.connect(manpages_db)
-                try:
-                    cur = conn.execute(
-                        "SELECT f.func_name, p.page_name, p.section, p.title, p.markdown "
-                        "FROM function_index f JOIN pages p ON p.page_name = f.page_name "
-                        "WHERE f.func_name = ? LIMIT 1", (func_name,))
-                    row = cur.fetchone()
-                    if row:
-                        section = row[2]
-                        page_name = row[1]
-                        title = row[3]
-                        markdown = row[4]
-                        url = f"https://man7.org/linux/man-pages/man{section}/{page_name}.{section}.html"
-                        return {"title": f"{page_name}({section})", "url": url,
-                                "markdown": markdown, "markdown_html": ""}
-                finally:
-                    conn.close()
-            except Exception:
-                return None
+def _manpages_get_page(conn, func_name):
+    """Документация функции из БД man-pages в формате search_results."""
+    for candidate in _manpages_candidates(func_name):
+        try:
+            row = conn.execute(
+                "SELECT p.page_name, p.section, p.title, p.markdown "
+                "FROM function_index f JOIN pages p ON p.page_name = f.page_name "
+                "WHERE f.func_name = ?", (candidate,)).fetchone()
+        except sqlite3.Error:
+            return None
+        if row:
+            page_name, section, title, markdown = row
+            url = f"https://man7.org/linux/man-pages/man{section}/{page_name}.{section}.html"
+            header = f"**{title}** — man {section}" if title else f"man {section}"
+            body = f"{header}\n\n{markdown}" if markdown else header
+            return {"title": f"{page_name}({section})", "url": url,
+                    "markdown": body, "markdown_html": ""}
+    return None
+
+
+def _sfa_index_open(index_db):
+    """Открывает индекс системных функций. None, если файла нет или он битый."""
+    p = Path(index_db)
+    if not p.is_file():
         return None
-    # Windows / прочие — MS Learn кэш
-    return _mslearn_lookup(func_name, cache_db)
+    try:
+        conn = sqlite3.connect(str(p))
+        conn.execute("SELECT 1 FROM system_functions LIMIT 1").fetchone()
+        return conn
+    except sqlite3.Error:
+        return None
+
+
+def _sfa_index_is_known(conn, func_name):
+    """Есть ли функция в индексе системных функций (фильтр 2 исполнения 1)."""
+    if conn is None:
+        return False
+    try:
+        return conn.execute(
+            "SELECT 1 FROM system_functions WHERE func_name = ?", (func_name,)
+        ).fetchone() is not None
+    except sqlite3.Error:
+        return False
+
+
+def _sfa_index_totals(conn):
+    """(модулей, функций) из индекса — фолбэк для счётчиков сводного отчёта."""
+    if conn is None:
+        return 0, 0
+    try:
+        modules = conn.execute("SELECT COUNT(*) FROM system_modules").fetchone()[0]
+        functions = conn.execute("SELECT COUNT(*) FROM system_functions").fetchone()[0]
+        return modules, functions
+    except sqlite3.Error:
+        return 0, 0
+
+
+class _SfaLog:
+    """Журнал генерации СФ (sfa_debug.log рядом с отчётами) — аналог _log
+    SfaReportGenerator. Поиск документации идёт из пула потоков —
+    запись защищена блокировкой."""
+
+    def __init__(self, reports_dir):
+        self._fh = None
+        self._lock = threading.Lock()
+        try:
+            path = Path(reports_dir) / "sfa_debug.log"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self._fh = open(path, "w", encoding="utf-8")
+            self.log(f"=== SFA Debug Log started at {datetime.now().isoformat()} ===")
+        except OSError:
+            self._fh = None
+
+    def log(self, message):
+        if self._fh is not None:
+            with self._lock:
+                try:
+                    self._fh.write(message + "\n")
+                    self._fh.flush()
+                except Exception:
+                    pass
+
+    def close(self):
+        if self._fh is not None:
+            try:
+                self._fh.close()
+            except Exception:
+                pass
+            self._fh = None
+
+
+def _back_link(output_html, reports_dir):
+    """Относительная ссылка на index.html из вложенного отчёта (как
+    compute_back_link исполнения 1)."""
+    try:
+        rel = Path(output_html).relative_to(Path(reports_dir))
+    except ValueError:
+        return "index.html"
+    depth = len(rel.parts) - 1
+    return "../" * depth + "index.html" if depth > 0 else "index.html"
 
 
 def _is_system_module(mod_name, platform):
@@ -452,103 +1223,281 @@ def _is_system_module(mod_name, platform):
 
 
 def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
-                        platform, cache_db, manpages_db, list_all_imports,
-                        data_override=None):
-    """Индивидуальный HTML-отчёт «Анализ СФ».
+                        platform, data_override=None, reuse_cache=False,
+                        doc_cache=None, manpages_conn=None, sfa_index_conn=None,
+                        log=None, progress=None, doc_manager=None,
+                        doc_progress=None):
+    """Индивидуальный HTML-отчёт «Анализ СФ» — перенос логики
+    SfaReportGenerator.generate_report_from_json исполнения 1.
 
-    data_override — dict с данными (file_name, imports, needed_libs, file_size),
-    используется в reuse-режиме, когда JSON уже удалён.
+    Отбор функций ведётся по системным библиотекам платформы:
+      * Windows — только импорты из системных библиотек, плюс проверка по
+        индексу системных функций (sfa_function_index.db); документация —
+        Microsoft Learn (npx @microsoft/learn-cli) с кэшем mslearn_cache.db;
+      * Linux / Android — отчёт содержит полный перечень импортов;
+        документация — локальная БД man-pages (без сети); системность
+        функции псевдо-модуля (.dynsym) подтверждается наличием документации.
+
+    Поиск документации (npx) идёт параллельно через DocSearchManager:
+    сначала фильтрация и кэш/man-pages (быстро), затем пул запросов для
+    функций без документации, затем сборка отчёта в исходном порядке.
+
+    Args:
+        data_override: данные (file_name, imports, needed_libs, ...) для
+            reuse-режима, когда JSON уже удалён.
+        reuse_cache: True — не вызывать npx, только кэш.
+        doc_cache: открытый _DocCache (создаётся на весь прогон).
+        manpages_conn: открытое соединение БД man-pages (для Linux/Android).
+        sfa_index_conn: открытое соединение индекса системных функций.
+        log: колбэк журнала (sfa_debug.log).
+        progress: колбэк (func_name, idx, total_in_file) — проход по импортам.
+        doc_manager: DocSearchManager для параллельного поиска (Windows).
+        doc_progress: колбэк (func_name, done, total) — получение документации.
+    Returns:
+        dict статистики или None, если генерация отменена.
     """
+    if log is None:
+        log = lambda msg: None
     if data_override is not None:
         data = data_override
     else:
         with open(json_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
+    platform = _normalize_platform(platform or "Windows")
+    use_manpages = platform == "Linux / Android"
+    list_all_imports = use_manpages
+    docs_available = platform == "Windows"
+
     file_name = os.path.basename(data.get("file_name", str(json_path)))
     imports = data.get("imports", [])
     needed_libs = data.get("needed_libs", []) or []
-
-    docs_available = False
-    if platform in ("Linux", "Linux / Android"):
-        docs_available = manpages_db is not None and os.path.isfile(manpages_db)
-    else:
-        docs_available = cache_db is not None and os.path.isfile(cache_db)
-
-    system_calls = []
-    found_count = 0
-    notfound_count = 0
     total_imports = len(imports)
-    system_names = set()
-    system_libs = set()
-    system_notfound_names = set()
+    valid_imports = sum(1 for imp in imports if imp.get("name"))
+    log(f"[INFO] Processing {json_path}")
+    log(f"[INFO] Found {total_imports} imports in {file_name}")
 
-    if platform in ("Linux", "Linux / Android") and not data.get("is_elf"):
-        # Не ELF — используем импорты
-        pass
+    # ─── Фаза 1: фильтрация; кэш/man-pages сразу, npx — в пул менеджера ───
+    rows = []       # строки после фильтров (в исходном порядке импортов)
+    pending = {}    # func_name -> future поиска MS Learn (без дубликатов)
+    skipped = 0
+    skipped_not_in_index = 0
 
-    for imp in imports:
-        name = imp.get("name", "")
-        dll = imp.get("module", "")
-        if not name:
+    for idx, imp in enumerate(imports):
+        func_name = imp.get("name")
+        if not func_name:
             continue
-        is_system = _is_system_module(dll, platform)
-        sr = _lookup_doc(name, platform, cache_db, manpages_db)
-        found = sr is not None
-        if found:
-            found_count += 1
+        module = imp.get("module", "") or ""
+
+        # Псевдо-модуль ELF (.dynsym): библиотека неизвестна — системность
+        # определяется по наличию документации.
+        is_pseudo_module = module.strip().lower() in (".dynsym", ".dynsec", "unknown", "")
+        module_is_system = _is_system_module(module, platform)
+
+        # Фильтр 1 (Windows): несистемные библиотеки пропускаются. Для
+        # псевдо-модулей проверка откладывается до поиска документации.
+        # Linux/Android фильтр не применяется — список импортов выводится целиком.
+        if not list_all_imports and not module_is_system and not is_pseudo_module:
+            log(f"[DEBUG] {func_name} ({module}) — не системная библиотека ({platform})")
+            skipped += 1
+            continue
+
+        # Фильтр 2 (Windows): функция должна быть в индексе системных функций.
+        if (not list_all_imports and sfa_index_conn is not None
+                and not is_pseudo_module
+                and not _sfa_index_is_known(sfa_index_conn, func_name)):
+            log(f"[DEBUG] {func_name} — нет в индексе системных функций")
+            skipped_not_in_index += 1
+            skipped += 1
+            continue
+
+        if progress is not None:
+            progress(func_name, idx, total_imports)
+
+        dll_name = module or "—"
+        if dll_name.strip().lower() in (".dynsym", ".dynsec", "unknown"):
+            dll_name = "—"
+
+        results = None
+        found = False
+        needs_doc = False
+        if doc_cache is not None and doc_cache.has_function(func_name):
+            results = doc_cache.get_results(func_name)
+            cached_dll = doc_cache.get_dll_name(func_name)
+            if cached_dll:
+                dll_name = cached_dll
+            found = bool(results)
+            log(f"[INFO] Using cached results for {func_name} (count: {len(results)})")
+        elif use_manpages:
+            if manpages_conn is not None:
+                page = _manpages_get_page(manpages_conn, func_name)
+                if page:
+                    results = [page]
+                    found = True
+                    log(f"[INFO] man-pages: {func_name} → {page['title']}")
+                else:
+                    log(f"[INFO] man-pages: страница для {func_name} не найдена")
+            else:
+                log(f"[INFO] {func_name}: БД man-pages недоступна")
+        elif reuse_cache and doc_manager is not None:
+            # Reuse-режим с добором: кэш неполон (записи от прошлых прогонов,
+            # поиск мог быть прерван) — недостающую документацию ищем в npx,
+            # как в исполнении 1. Функция уходит в пул вместе с остальными.
+            if func_name not in pending:
+                fut = doc_manager.submit(func_name)
+                if fut is None:
+                    log(f"[INFO] {func_name}: поиск отменён")
+                else:
+                    pending[func_name] = fut
+            needs_doc = True
+        elif reuse_cache:
+            # Reuse-режим без менеджера поиска (npx недоступен): функция
+            # остаётся not-found.
+            log(f"[INFO] {func_name} не в кэше (reuse_cache=True) — пропуск")
+        elif not docs_available:
+            log(f"[INFO] {func_name}: поиск документации недоступен для {platform}")
+        elif doc_manager is not None:
+            # Документации нет в кэше — поиск уйдёт в пул параллельно.
+            if func_name not in pending:
+                fut = doc_manager.submit(func_name)
+                if fut is None:
+                    log(f"[INFO] {func_name}: поиск отменён")
+                else:
+                    pending[func_name] = fut
+            needs_doc = results is None and not found
         else:
-            notfound_count += 1
-        if is_system:
-            system_names.add(name)
-            system_libs.add(dll)
-            if not found:
-                system_notfound_names.add(name)
-        system_calls.append({
-            "dll": dll or "—",
-            "name": name,
-            "is_system": is_system,
+            log(f"[INFO] {func_name}: поиск документации недоступен")
+
+        rows.append({
+            "func": func_name,
+            "module": module,
+            "address": imp.get("address", ""),
+            "dll": dll_name,
+            "is_pseudo": is_pseudo_module,
+            "module_is_system": module_is_system,
+            "results": results,
             "found": found,
-            "search_results": [sr] if sr else [],
+            "needs_doc": needs_doc,
         })
 
-    # ELF: нужные библиотеки (DT_NEEDED) — системные библиотеки, добавляем их функции
-    if data.get("is_elf"):
-        for lib in needed_libs:
-            if _is_system_module(lib, platform):
-                system_libs.add(lib)
+    # ─── Фаза 2: параллельное ожидание поисков документации ───
+    resolved = {}   # func_name -> (results, dll_from_markdown)
+    if pending:
+        fut_to_func = {fut: fn for fn, fut in pending.items()}
+        done_docs = 0
+        for fut in as_completed(list(fut_to_func)):
+            if _cancel_requested(doc_manager):
+                break
+            func_name = fut_to_func[fut]
+            try:
+                results = fut.result()
+            except Exception as e:
+                log(f"[ERROR] Doc search failed for {func_name}: {e}")
+                results = []
+            done_docs += 1
+            if doc_progress is not None:
+                doc_progress(func_name, done_docs, len(pending))
+            dll_from_md = ""
+            if results:
+                dll_from_md = _extract_dll(results)
+                if doc_cache is not None:
+                    try:
+                        doc_cache.save_results(func_name, results, dll_name=dll_from_md)
+                        log(f"[INFO] Fetched and cached {len(results)} results for {func_name}")
+                    except Exception as e:
+                        log(f"[WARN] Failed to save cache: {e}")
+            resolved[func_name] = (results, dll_from_md)
+
+        if _cancel_requested(doc_manager):
+            log("[INFO] Cancelled: doc search stopped")
+            return None
+
+    # ─── Фаза 3: сборка строк отчёта в исходном порядке импортов ───
+    entries = []
+    for row in rows:
+        func_name = row["func"]
+        dll_name = row["dll"]
+        results = row["results"]
+        found = row["found"]
+        if row["needs_doc"]:
+            results, dll_from_md = resolved.get(func_name, ([], ""))
+            found = bool(results)
+            if dll_from_md:
+                dll_name = dll_from_md
+
+        # Системность: известная системная библиотека либо псевдо-модуль,
+        # для которого нашлась документация.
+        if row["module_is_system"]:
+            is_system_call = True
+        elif row["is_pseudo"]:
+            is_system_call = found
+        else:
+            is_system_call = False
+
+        # Псевдо-модуль без документации в Windows-режиме в отчёт не попадает.
+        if not list_all_imports and row["is_pseudo"] and not found:
+            log(f"[INFO] {func_name}: не подтверждена как системная (нет документации)")
+            skipped += 1
+            continue
+
+        entries.append({
+            "name": func_name,
+            "dll": dll_name,
+            "address": row["address"],
+            "module": row["module"],
+            "search_results": results or [],
+            "found": found,
+            "is_system": is_system_call,
+        })
+
+    log(f"[INFO] Generated {len(entries)} rows "
+        f"({sum(1 for e in entries if e['is_system'])} system; "
+        f"skipped {skipped} as non-system, {skipped_not_in_index} not in index)")
+
+    # Счётчики для индексного отчёта ведутся по системным функциям (для
+    # Linux/Android в частном отчёте перечислены все импорты — без этого
+    # «документация не найдена» смешивало бы системные функции с чужими).
+    system_entries = [e for e in entries if e["is_system"]]
+    system_found = [e for e in system_entries if e["found"]]
+    found_count = len(system_found)
+    notfound_count = len(system_entries) - found_count
+    notfound_names = {e["name"] for e in entries if not e["found"]}
+    system_notfound_names = {e["name"] for e in system_entries if not e["found"]}
+    # Системные библиотеки модуля: для ELF источник — зависимости (DT_NEEDED);
+    # в list_all-режиме дополняем библиотеками подтверждённых системных строк.
+    system_libs = {lib for lib in needed_libs if _is_system_module(lib, platform)}
+    if list_all_imports:
+        for e in system_entries:
+            dll = e["dll"]
+            if dll and dll != "—" and _is_system_module(dll, platform):
+                system_libs.add(dll)
 
     ctx = {
         "file_name": file_name,
-        "back_link": "index.html",
+        "back_link": _back_link(output_html, reports_dir),
         "platform": _platform_label(platform),
-        "system_calls": system_calls,
+        "system_calls": entries,
         "list_all_imports": list_all_imports,
         "docs_available": docs_available,
         "marked_js": _marked_js(),
     }
     text = render_template("sfa_report.html", **ctx)
-
-    # Считаем статистику для индекса
-    stats = {
-        "found_count": found_count,
-        "notfound_count": notfound_count,
-        "total_imports": total_imports,
-        "system_count": len(system_names),
-        "system_names": system_names,
-        "system_libs": system_libs,
-        "system_notfound_names": system_notfound_names,
-    }
-
     os.makedirs(os.path.dirname(output_html), exist_ok=True)
     with open(output_html, "w", encoding="utf-8") as f:
         f.write(text)
-    # Статистика сохраняется в sidecar-файл рядом (для индекса)
-    stats_path = output_html + ".stats.json"
-    with open(stats_path, "w", encoding="utf-8") as f:
-        json.dump({k: (sorted(v) if isinstance(v, set) else v) for k, v in stats.items()},
-                  f, ensure_ascii=False)
-    return stats
+    log(f"[INFO] Report saved to {output_html}")
+
+    return {
+        "found_count": found_count,
+        "notfound_count": notfound_count,
+        "total_count": len(entries),
+        "notfound_names": notfound_names,
+        "total_imports": valid_imports,
+        "system_count": len(system_entries),
+        "system_names": {e["name"] for e in system_entries},
+        "system_libs": system_libs,
+        "system_notfound_names": system_notfound_names,
+    }
 
 
 def _platform_label(platform):
@@ -915,6 +1864,7 @@ def read_index_json_paths(index_db):
 
 
 def run_generate(args):
+    global _DOC_MANAGER
     input_dir = Path(args.input_dir)
     reports_dir = Path(args.reports_dir)
 
@@ -994,7 +1944,6 @@ def run_generate(args):
             done += 1
             emit_progress(done, total, "")
 
-        from datetime import datetime
         index_path = generate_analysis_index(
             str(reports_dir), str(input_dir), report_links, global_modules,
             ida_info or {}, internal_set=internal_set, total_files=total_files,
@@ -1008,7 +1957,7 @@ def run_generate(args):
 
     elif args.kind == "sfa":
         sfa_index_db = reports_dir / "sfa_function_index.db"
-        platform = args.platform
+        platform = _normalize_platform(args.platform)
 
         if args.reuse_cache:
             # Читаем пути из index-БД (JSON могут быть удалены)
@@ -1016,13 +1965,14 @@ def run_generate(args):
             if not json_files:
                 emit_error("Индекс БД устарел или не содержит данных. Выполните полный анализ для перестроения индекса.")
                 return
-            # платформа из индекса
+            # Платформа берётся из индекса: при перегенерации должны
+            # использоваться те же словари, что и в анализе.
             try:
                 conn = sqlite3.connect(str(sfa_index_db))
                 row = conn.execute("SELECT value FROM meta WHERE key='platform'").fetchone()
                 conn.close()
                 if row and row[0]:
-                    platform = row[0]
+                    platform = _normalize_platform(row[0])
             except Exception:
                 pass
         else:
@@ -1037,12 +1987,50 @@ def run_generate(args):
             except Exception as e:
                 emit_error(f"Ошибка сканирования системных функций: {e}")
 
-        cache_db = reports_dir / "mslearn_cache.db" if (reports_dir / "mslearn_cache.db").is_file() else None
-        manpages_db = Path(args.manpages_db) if args.manpages_db and Path(args.manpages_db).is_file() else None
-        if args.manpages_db and not (Path(args.manpages_db).is_file()):
-            p2 = Path(args.manpages_db) / "manpages.db"
-            if p2.is_file():
-                manpages_db = p2
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        log = _SfaLog(reports_dir)
+
+        # Кэш документации MS Learn открывается/создаётся всегда (как в
+        # исполнении 1): в него складываются результаты npx-поиска, из него
+        # берётся документация в reuse-режиме.
+        doc_cache = None
+        try:
+            doc_cache = _DocCache(reports_dir / "mslearn_cache.db")
+            log.log(f"[INFO] MS Learn cache: {reports_dir / 'mslearn_cache.db'} ({doc_cache.count()} функций)")
+        except Exception as e:
+            log.log(f"[WARN] Failed to open cache DB: {e}")
+
+        # Путь к man-pages: из настроек, затем рядом с папкой отчётов и выше.
+        manpages_conn = _manpages_open(
+            [args.manpages_db,
+             reports_dir / "manpages.db",
+             reports_dir.parent / "manpages.db"],
+            log.log)
+
+        sfa_index_conn = _sfa_index_open(sfa_index_db)
+
+        # npx нужен только как фолбэк: основной путь — прямой MCP-вызов
+        # (learn.microsoft.com/api/mcp), которому Node.js не требуется.
+        npx_ready = _find_npx() is not None
+        if platform == "Windows" and not npx_ready and not _mcp_ping():
+            emit_error("npx (Node.js) не найден и Microsoft Learn MCP недоступен — "
+                       "документация будет отсутствовать.")
+
+        # Менеджер параллельного поиска документации (Windows): 4 постоянных
+        # потока, прямой MCP-вызов (фолбэк — npx), отмена с прерыванием
+        # запросов. Создаётся и в reuse-режиме — для добора отсутствующей
+        # в кэше документации.
+        doc_manager = None
+        if platform == "Windows":
+            doc_manager = DocSearchManager(log.log, max_workers=4)
+            _DOC_MANAGER = doc_manager
+            if args.reuse_cache:
+                emit_progress(0, 0, "Перегенерация из кэша (недостающая документация будет найдена автоматически)…")
+
+        if not args.reuse_cache:
+            _, funcs_cnt = _sfa_index_totals(sfa_index_conn)
+            emit_progress(0, max(len(json_files), 1),
+                          f"Найдено {funcs_cnt} системных функций. Генерация HTML…")
 
         total = len(json_files)
         done = 0
@@ -1050,13 +2038,11 @@ def run_generate(args):
         ida_info = {}
         total_size = 0
         total_imports_all = 0
-        global_found = 0
-        global_notfound = 0
         gsf, gsl, gsn = set(), set(), set()
 
-        list_all = platform in ("Linux", "Linux / Android")
-
         for jp in sorted(json_files, key=lambda p: p.stat().st_size if p.exists() else 0, reverse=True):
+            if _cancel_requested(doc_manager):
+                break
             if not jp.exists() and not args.reuse_cache:
                 done += 1
                 emit_progress(done, total, f"{os.path.basename(str(jp))} — ошибка")
@@ -1099,11 +2085,28 @@ def run_generate(args):
             out_rel = rel.with_suffix(".sfa.html")
             output_html = reports_dir / out_rel
 
+            # Пофункционный прогресс внутри текущего файла (как в исполнении 1)
+            def on_func(func_name, func_idx, total_in_file):
+                emit_progress(done, total,
+                              f"{rel.as_posix()} → {func_name} ({func_idx + 1}/{total_in_file})")
+
+            # Прогресс получения документации (параллельный поиск MS Learn)
+            def on_doc(func_name, done_docs, total_docs):
+                emit_progress(done, total,
+                              f"{rel.as_posix()} → документация: {func_name} ({done_docs}/{total_docs})")
+
             stats = generate_sfa_report(
                 str(jp), str(output_html), str(reports_dir), str(input_dir),
-                platform, str(cache_db) if cache_db else None,
-                str(manpages_db) if manpages_db else None, list_all,
-                data_override=data if args.reuse_cache and not jp.exists() else None)
+                platform,
+                data_override=data if args.reuse_cache and not jp.exists() else None,
+                reuse_cache=args.reuse_cache,
+                doc_cache=doc_cache, manpages_conn=manpages_conn,
+                sfa_index_conn=sfa_index_conn, log=log.log, progress=on_func,
+                doc_manager=doc_manager, doc_progress=on_doc)
+
+            if stats is None:
+                # Отмена: без сводного отчёта и результата
+                break
 
             file_size = int(data.get("file_size") or 0)
             if not file_size and source_full.exists():
@@ -1130,8 +2133,6 @@ def run_generate(args):
                 ida_info = data["ida_info"]
             total_size += file_size
             total_imports_all += stats["total_imports"]
-            global_found += stats["found_count"]
-            global_notfound += stats["notfound_count"]
             gsf.update(stats["system_names"])
             gsl.update(stats["system_libs"])
             gsn.update(stats["system_notfound_names"])
@@ -1144,22 +2145,183 @@ def run_generate(args):
             done += 1
             emit_progress(done, total, f"{os.path.basename(str(jp))} — готов")
 
+        # Отмена во время генерации: гасим поиск и выходим без результата
+        if _cancel_requested(doc_manager):
+            if doc_manager is not None:
+                doc_manager.cancel()
+            if doc_cache is not None:
+                doc_cache.close()
+            if manpages_conn is not None:
+                manpages_conn.close()
+            if sfa_index_conn is not None:
+                sfa_index_conn.close()
+            log.close()
+            emit_error("Генерация отчётов СФ отменена пользователем.")
+            return
+
+        # Счётчики сводного отчёта — по уникальным множествам; пустые
+        # дополняются из индекса (аналог фолбэка исполнения 1).
+        total_system_modules = len(gsl)
+        total_system_functions = len(gsf)
+        idx_modules, idx_functions = _sfa_index_totals(sfa_index_conn)
+        if not total_system_modules:
+            total_system_modules = idx_modules
+        if not total_system_functions:
+            total_system_functions = idx_functions
+
         report_links.sort(key=lambda r: r["display_name"])
-        from datetime import datetime
         index_path = generate_sfa_index(
             str(reports_dir), str(input_dir), report_links, ida_info,
             total_files=total, total_size_bytes=total_size,
-            total_system_modules=len(gsl), total_system_functions=len(gsf),
+            total_system_modules=total_system_modules,
+            total_system_functions=total_system_functions,
             total_system_notfound=len(gsn), total_imports=total_imports_all,
             generation_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             platform=platform)
+
+        if doc_manager is not None:
+            doc_manager.shutdown()
+            _DOC_MANAGER = None
+        if doc_cache is not None:
+            doc_cache.close()
+        if manpages_conn is not None:
+            manpages_conn.close()
+        if sfa_index_conn is not None:
+            sfa_index_conn.close()
+        log.close()
         emit_result({
             "reports_dir": str(reports_dir), "input_dir": str(input_dir),
             "index_path": str(index_path), "generated_count": len(report_links),
             "total_files": total, "total_size_bytes": total_size,
-            "total_system_modules": len(gsl), "total_system_functions": len(gsf),
+            "total_system_modules": total_system_modules,
+            "total_system_functions": total_system_functions,
             "total_system_notfound": len(gsn), "total_imports": total_imports_all,
             "platform": platform,
+        })
+
+    elif args.kind == "sfa-docs":
+        """Предварительный поиск документации MS Learn — выполняется по кнопке
+        «Запустить анализ СФ» (после анализа и экспорта), чтобы генерация
+        отчётов СФ шла только по кэшу, без вызовов npx и консольных окон.
+        Прогресс — по функциям; отмена — через stdin (CANCEL)."""
+        sfa_index_db = reports_dir / "sfa_function_index.db"
+        platform = _normalize_platform(args.platform)
+        json_files = [Path(p) for p in _split(args.json_paths)] if args.json_paths else \
+            _collect_export_jsons(args.json_dir, args.json_paths)
+        if not json_files:
+            emit_error("Нет JSON-файлов экспорта. Сначала выполните анализ.")
+            return
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        log = _SfaLog(reports_dir)
+
+        if platform != "Windows":
+            # Linux/Android: документация локальная (man-pages), ищется
+            # непосредственно при генерации отчёта — предварительный поиск не нужен.
+            log.close()
+            emit_result({"searched": 0, "found": 0, "cached_total": 0,
+                         "total_funcs": 0, "platform": platform})
+            return
+
+        emit_progress(0, 1, "Сканирование системных функций…")
+        try:
+            build_sfa_index(sfa_index_db, json_files, platform)
+        except Exception as e:
+            emit_error(f"Ошибка сканирования системных функций: {e}")
+
+        sfa_index_conn = _sfa_index_open(sfa_index_db)
+        doc_cache = None
+        try:
+            doc_cache = _DocCache(reports_dir / "mslearn_cache.db")
+            log.log(f"[INFO] MS Learn cache: {reports_dir / 'mslearn_cache.db'} ({doc_cache.count()} функций)")
+        except Exception as e:
+            log.log(f"[WARN] Failed to open cache DB: {e}")
+
+        # npx — только фолбэк: основной путь поиска — прямой MCP-вызов
+        if _find_npx() is None and not _mcp_ping():
+            emit_error("npx (Node.js) не найден и Microsoft Learn MCP недоступен — "
+                       "функции будут отмечены как «без документации».")
+
+        # Уникальные функции, требующие документации: из системных модулей и
+        # псевдо-модулей (.dynsym), за вычетом уже кэшированных.
+        funcs = []
+        seen = set()
+        for jp in sorted(json_files, key=lambda p: p.stat().st_size if p.exists() else 0, reverse=True):
+            if _cancel_requested(None):
+                break
+            try:
+                with open(jp, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                continue
+            for imp in data.get("imports", []):
+                fn = imp.get("name")
+                if not fn or fn in seen:
+                    continue
+                module = (imp.get("module") or "").strip()
+                is_pseudo = module.lower() in (".dynsym", ".dynsec", "unknown", "")
+                if not is_pseudo and not _is_system_module(module, platform):
+                    continue
+                if (not is_pseudo and sfa_index_conn is not None
+                        and not _sfa_index_is_known(sfa_index_conn, fn)):
+                    continue
+                if doc_cache is not None and doc_cache.has_function(fn):
+                    continue
+                seen.add(fn)
+                funcs.append(fn)
+
+        total_funcs = len(funcs)
+        log.log(f"[INFO] Doc pre-search: {total_funcs} functions to search")
+        emit_progress(0, max(total_funcs, 1), f"Функций к поиску: {total_funcs}")
+
+        manager = DocSearchManager(log.log, max_workers=4)
+        _DOC_MANAGER = manager
+        done = 0
+        found_cnt = 0
+        futs = {}
+        for fn in funcs:
+            fut = manager.submit(fn)
+            if fut is None:
+                break
+            futs[fut] = fn
+
+        for fut in as_completed(list(futs)) if futs else []:
+            if _cancel_requested(manager):
+                break
+            fn = futs[fut]
+            try:
+                results = fut.result()
+            except Exception as e:
+                log.log(f"[ERROR] Doc search failed for {fn}: {e}")
+                results = []
+            done += 1
+            if results:
+                found_cnt += 1
+                if doc_cache is not None:
+                    try:
+                        doc_cache.save_results(fn, results, dll_name=_extract_dll(results))
+                    except Exception:
+                        pass
+            emit_progress(done, max(total_funcs, 1), f"Документация: {fn}")
+
+        cancelled = _cancel_requested(manager)
+        if cancelled:
+            manager.cancel()
+        else:
+            manager.shutdown()
+        _DOC_MANAGER = None
+        cached_total = doc_cache.count() if doc_cache is not None else 0
+        if doc_cache is not None:
+            doc_cache.close()
+        if sfa_index_conn is not None:
+            sfa_index_conn.close()
+        log.close()
+        if cancelled:
+            emit_error("Поиск документации отменён пользователем.")
+            return
+        emit_result({
+            "reports_dir": str(reports_dir), "input_dir": str(input_dir),
+            "searched": done, "found": found_cnt, "cached_total": cached_total,
+            "total_funcs": total_funcs, "platform": platform,
         })
 
     elif args.kind == "diff":
@@ -1182,7 +2344,6 @@ def run_generate(args):
             done += 1
             emit_progress(done, total, jf.name)
 
-        from datetime import datetime
         ida_version = ""
         try:
             cand = list(left.glob("*.export.json")) or list(Path(args.json_dir).glob("*.export.json"))
@@ -1206,7 +2367,7 @@ def main():
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("generate")
-    p.add_argument("--kind", required=True, choices=["analysis", "sfa", "diff"])
+    p.add_argument("--kind", required=True, choices=["analysis", "sfa", "sfa-docs", "diff"])
     p.add_argument("--input-dir", required=True)
     p.add_argument("--reports-dir", required=True)
     p.add_argument("--json-dir", required=True)
@@ -1218,6 +2379,12 @@ def main():
     p.add_argument("--manpages-db", default="")
     p.add_argument("--json-paths", default="")
     args = parser.parse_args()
+
+    # Слежение за stdin для мягкой отмены (GUI присылает CANCEL)
+    try:
+        threading.Thread(target=_watch_cancel_stdin, daemon=True).start()
+    except Exception:
+        pass
 
     try:
         if args.command == "generate":

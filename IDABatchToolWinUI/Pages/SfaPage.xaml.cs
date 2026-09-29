@@ -13,9 +13,14 @@ public sealed partial class SfaPage : Page
 {
     private readonly AppConfig _cfg;
     private bool _analysisInProgress;
+    private bool _analysisCancelled;
     private bool _htmlInProgress;
+    private bool _htmlCancelled;
+    private bool _docsInProgress;
+    private bool _docsCancelled;
     private AnalysisWorker? _worker;
     private HtmlGenWorker? _htmlWorker;
+    private HtmlGenWorker? _docsWorker;
     private List<FileItem> _cachedFiles = new();
     private bool _exportAllAfterAnalysis;
 
@@ -36,7 +41,16 @@ public SfaPage()
         Loaded += (_, _) => RefreshFileList();
     }
 
-    public bool IsAnalysisRunning() => _analysisInProgress || _htmlInProgress;
+    public bool IsAnalysisRunning() => _analysisInProgress || _htmlInProgress || _docsInProgress;
+
+    /// <summary>Индикатор занятости (как SetProgressRunning на вкладке
+    /// «Общий анализ»): пока идёт любая фаза — полоса анимируется, точные
+    /// счётчики видны в строке статуса над ней. Без анимации полоса стоит
+    /// на месте, пока IDA/npx обрабатывает очередной файл, и выглядит «замороженной».</summary>
+    private void SetSfaProgressRunning(bool running)
+    {
+        SfaProcessProgress.IsIndeterminate = running;
+    }
 
     // ──────────────────────────────────────────────
     //  Список файлов
@@ -188,11 +202,13 @@ public SfaPage()
         }
 
         _analysisInProgress = true;
+        _analysisCancelled = false;
         SfaStartButton.IsEnabled = false;
         SfaCancelButton.IsEnabled = true;
         SfaGenerateHtmlButton.IsEnabled = false;
         SfaProcessStatusText.Text = exportOnly ? "Фаза: экспорт в JSON..." : "Фаза: анализ файлов...";
         SfaProcessProgress.Value = 0;
+        SetSfaProgressRunning(true);
         SfaErrorLogTextBox.Text = "";
 
         _worker = new AnalysisWorker(
@@ -242,6 +258,7 @@ public SfaPage()
         SfaCancelButton.IsEnabled = false;
         SfaProcessStatusText.Text = $"Завершено. Обработано: {succeeded}/{total}";
         SfaProcessProgress.Value = 100;
+        SetSfaProgressRunning(false);
 
         if (_exportAllAfterAnalysis && succeeded > 0)
         {
@@ -253,13 +270,75 @@ public SfaPage()
         }
 
         var inputDir = SfaInputDirTextBox.Text.Trim();
-        if (!string.IsNullOrEmpty(inputDir) && Directory.Exists(inputDir))
-        {
-            var anyJson = ExecutableFinder.SafeEnumerateFiles(inputDir).Any(f => f.EndsWith(".export.json", StringComparison.OrdinalIgnoreCase));
-            SfaGenerateHtmlButton.IsEnabled = anyJson;
-        }
+        var anyJson = !string.IsNullOrEmpty(inputDir) && Directory.Exists(inputDir) &&
+            ExecutableFinder.SafeEnumerateFiles(inputDir).Any(f => f.EndsWith(".export.json", StringComparison.OrdinalIgnoreCase));
+        SfaGenerateHtmlButton.IsEnabled = anyJson;
         _worker = null;
         RefreshFileList();
+
+        // Поиск документации MS Learn — фаза кнопки «Запустить анализ СФ»
+        // (после анализа и экспорта), чтобы генерация отчёта шла по кэшу
+        // без вызовов npx. Linux/Android использует man-pages при генерации.
+        if (_analysisCancelled)
+        {
+            _analysisCancelled = false;
+            return;
+        }
+        if (anyJson && (SelectedPlatformKey() ?? "Windows") == "Windows")
+            _ = StartDocsSearchAsync();
+    }
+
+    /// <summary>Поиск документации MS Learn по всем export.json — выполняется
+    /// сразу после анализа СФ, параллельно, с тихими вызовами npx.</summary>
+    private async Task StartDocsSearchAsync()
+    {
+        var inputDir = SfaInputDirTextBox.Text.Trim();
+        if (string.IsNullOrEmpty(inputDir) || !Directory.Exists(inputDir)) return;
+
+        var sfaReports = Path.Combine(inputDir, "SFAReports");
+        var jsonFiles = ExecutableFinder.SafeEnumerateFiles(inputDir)
+            .Where(f => f.EndsWith(".export.json", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (jsonFiles.Length == 0) return;
+
+        _docsInProgress = true;
+        _docsCancelled = false;
+        SfaStartButton.IsEnabled = false;
+        SfaCancelButton.IsEnabled = true;
+        SfaGenerateHtmlButton.IsEnabled = false;
+        SfaProcessProgress.Value = 0;
+        SfaProcessProgress.Maximum = 1;
+        SetSfaProgressRunning(true);
+        SfaProcessStatusText.Text = "Поиск документации MS Learn...";
+        SfaErrorLogTextBox.Text = "";
+
+        _docsWorker = new HtmlGenWorker("sfa-docs", deleteJson: false, reuseCache: false,
+            SelectedPlatformKey() ?? "Windows");
+        _docsWorker.ProgressUpdated += (cur, total, msg) => RunOnUi(() =>
+        {
+            if (total > 0) { SfaProcessProgress.Maximum = total; SfaProcessProgress.Value = cur; }
+            SfaProcessStatusText.Text = msg.Length > 0
+                ? $"Поиск документации: {cur}/{total} — {msg}"
+                : $"Поиск документации: {cur}/{total}";
+        });
+        _docsWorker.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
+        _docsWorker.Finished += result => RunOnUi(() => OnDocsFinished(result));
+
+        await Task.Run(() => _docsWorker.Run(inputDir, sfaReports, inputDir, null, null, null, jsonFiles));
+    }
+
+    private void OnDocsFinished(HtmlGenResult result)
+    {
+        _docsInProgress = false;
+        SfaStartButton.IsEnabled = true;
+        SfaCancelButton.IsEnabled = false;
+        SfaGenerateHtmlButton.IsEnabled = true;
+        SfaProcessProgress.Value = SfaProcessProgress.Maximum;
+        SetSfaProgressRunning(false);
+        SfaProcessStatusText.Text = _docsCancelled
+            ? "Поиск документации отменён"
+            : $"Документация готова: найдено {result.FoundCount} из {result.SearchedCount}"
+              + (result.CachedTotal > 0 ? $" (в кэше {result.CachedTotal} функций)" : "");
+        _docsWorker = null;
     }
 
     private Task StartExportOnlyAsync(List<string> idbFiles)
@@ -279,8 +358,27 @@ public SfaPage()
 
     private void CancelAnalysis()
     {
-        _worker?.Cancel();
-        SfaProcessStatusText.Text = "Отмена...";
+        if (_docsInProgress)
+        {
+            // Фаза поиска документации: мост убивает процессы npx и завершается.
+            _docsCancelled = true;
+            _docsWorker?.Cancel();
+            SfaProcessStatusText.Text = "Отмена поиска документации...";
+        }
+        else if (_htmlInProgress)
+        {
+            // Фаза генерации отчётов: мягкая отмена — мост останавливает
+            // поиск документации и завершает все процессы npx.
+            _htmlCancelled = true;
+            _htmlWorker?.Cancel();
+            SfaProcessStatusText.Text = "Отмена генерации отчёта...";
+        }
+        else
+        {
+            _analysisCancelled = true;
+            _worker?.Cancel();
+            SfaProcessStatusText.Text = "Отмена...";
+        }
         SfaCancelButton.IsEnabled = false;
     }
 
@@ -350,13 +448,15 @@ public SfaPage()
         if (!reuseCache) Directory.CreateDirectory(sfaReports);
 
         _htmlInProgress = true;
+        _htmlCancelled = false;
         SfaStartButton.IsEnabled = false;
-        SfaCancelButton.IsEnabled = false;
+        SfaCancelButton.IsEnabled = true;   // отмена доступна и во время генерации
         SfaGenerateHtmlButton.IsEnabled = false;
         SfaProcessProgress.Value = 0;
         SfaProcessProgress.Maximum = Math.Max(jsonFiles.Length, 1);
+        SetSfaProgressRunning(true);
         SfaProcessStatusText.Text = reuseCache
-            ? $"Перегенерация HTML-отчётов СФ из кэша…\n{sfaReports}"
+            ? $"Перегенерация HTML-отчётов СФ из кэша (с добором недостающей документации)…\n{sfaReports}"
             : $"Генерация HTML-отчётов СФ…\nРезультаты: {sfaReports}";
         SfaErrorLogTextBox.Text = "";
 
@@ -372,7 +472,10 @@ public SfaPage()
                 : $"Генерация HTML: {cur}/{total}";
         });
         _htmlWorker.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
-        _htmlWorker.Finished += OnHtmlFinished;
+        // Finished приходит из фонового потока Task.Run: без RunOnUi обработчик
+        // трогал UI (кнопки, прогресс, ContentDialog) из не-UI потока —
+        // приложение падало аварийно в момент завершения/отмены генерации.
+        _htmlWorker.Finished += result => RunOnUi(() => OnHtmlFinished(result));
 
         await Task.Run(() => _htmlWorker.Run(inputDir, sfaReports, inputDir, null, null,
             manpagesDb, jsonFiles));
@@ -397,8 +500,11 @@ public SfaPage()
         SfaCancelButton.IsEnabled = false;
         SfaGenerateHtmlButton.IsEnabled = true;
         SfaProcessProgress.Value = SfaProcessProgress.Maximum;
-        SfaProcessStatusText.Text = "Готово";
+        SetSfaProgressRunning(false);
+        SfaProcessStatusText.Text = _htmlCancelled ? "Генерация отменена" : "Готово";
         _htmlWorker = null;
+
+        if (_htmlCancelled) return;
 
         if (result.IndexPath != null || result.ReportsDir != null)
             await UiDialogs.InfoAsync("Готово",
@@ -452,7 +558,10 @@ public SfaPage()
         var dlg = new ContentDialog
         {
             Title = "Существующий кэш MS Learn",
-            Content = $"Найдена папка SFAReports с ранее сформированным кэшем документации ({sizeKb:F1} КБ).",
+            Content = $"Найдена папка SFAReports с ранее сформированным кэшем документации ({sizeKb:F1} КБ).\n\n" +
+                      "Перегенерация из кэша использует сохранённую документацию; " +
+                      "если в кэше её не хватает (например, поиск прерывался), " +
+                      "недостающие функции будут доискаться автоматически.",
             PrimaryButtonText = "Выполнить полный анализ",
             SecondaryButtonText = "Перегенерировать HTML из кэша",
             CloseButtonText = "Отмена",

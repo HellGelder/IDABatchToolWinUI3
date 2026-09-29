@@ -61,13 +61,20 @@ public static class PythonHelper
 {
     public static string ResolvePython()
     {
-        // Приоритет: pythonw.exe в PATH → python.exe → зарегистрированный в системе
+        // 1) Python, положенный рядом с приложением (Tools\Python) — для
+        //    переносимой поставки без установленного Python в системе.
+        var portable = Path.Combine(AppConstants.WinUiDir, "Tools", "Python");
+        foreach (var name in new[] { "pythonw.exe", "python.exe" })
+        {
+            var cand = Path.Combine(portable, name);
+            if (File.Exists(cand)) return cand;
+        }
+        // 2) pythonw.exe/python.exe в PATH → 3) Py Launcher
         foreach (var name in new[] { "pythonw.exe", "python.exe" })
         {
             var found = FindInPath(name);
             if (found != null) return found;
         }
-        // Py Launcher
         foreach (var name in new[] { "pyw.exe", "py.exe" })
         {
             var found = FindInPath(name);
