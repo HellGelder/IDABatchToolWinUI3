@@ -67,59 +67,45 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Параметры: левый + правый в ряд -->
-                <Grid ColumnSpacing="8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
+                <!-- Автоопределение платформы: неотключаемый инфобар под тремапом -->
+                <InfoBar x:Name="PlatformInfoBar" IsOpen="False" IsClosable="False"
+                         Severity="Informational"
+                         Shadow="{StaticResource SharedShadow}" Loaded="ShadowRect_Loaded" />
 
-                    <!-- Целевая платформа (радиокнопки друг под другом) -->
-                    <Border Grid.Column="0" Style="{StaticResource GroupBoxStyle}" Shadow="{StaticResource SharedShadow}"
-                            Loaded="ShadowRect_Loaded">
-                        <StackPanel Spacing="6">
-                            <TextBlock Text="Целевая платформа" Style="{StaticResource GroupHeaderStyle}" />
-                            <RadioButton x:Name="PlatformWindows" GroupName="AnalysisPlatform" Content="Windows"
-                                         IsChecked="True"
-                                         ToolTipService.ToolTip="Платформа: Windows&#10;Анализируемые расширения: .exe, .dll, .sys, .ocx, .cpl, .scr, .drv, .efi" />
-                            <RadioButton x:Name="PlatformLinuxAndroid" GroupName="AnalysisPlatform" Content="Linux / Android"
-                                         ToolTipService.ToolTip="Платформа: Linux / Android&#10;Расширения: .elf, .so, .o, .ko, .dex" />
-                            <RadioButton x:Name="PlatformMacIos" GroupName="AnalysisPlatform" Content="macOS / iOS"
-                                         ToolTipService.ToolTip="Платформа: macOS / iOS&#10;Расширения: .mach-o, .dylib, .bundle, .app" />
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Параметры сканирования (чекбоксы) -->
-                    <Border Grid.Column="1" Style="{StaticResource GroupBoxStyle}" Shadow="{StaticResource SharedShadow}"
-                            Loaded="ShadowRect_Loaded">
-                        <StackPanel Spacing="6">
-                            <TextBlock Text="Параметры" Style="{StaticResource GroupHeaderStyle}" />
-                            <CheckBox x:Name="CleanupCheck" Content="Удалять .asm и .log после успешного анализа"
-                                          IsChecked="True" VerticalAlignment="Center" VerticalContentAlignment="Center" />
-                            <CheckBox x:Name="TempCleanupCheck" Content="Удалять временные файлы IDA (.id0, .id1, .nam, .til)"
-                                          IsChecked="True" VerticalAlignment="Center" VerticalContentAlignment="Center" />
-                            <CheckBox x:Name="PseudocodeCheck" Content="Включить псевдокод в JSON-экспорт"
-                                          IsChecked="True" VerticalAlignment="Center" VerticalContentAlignment="Center" />
-                            <CheckBox x:Name="DeleteJsonCheck" Content="Удалить JSON-файлы после создания отчётов"
-                                          IsChecked="True" VerticalAlignment="Center" VerticalContentAlignment="Center" />
-                        </StackPanel>
-                    </Border>
-                </Grid>
-
-                <!-- Потоки IDA (нижний, во всю ширину) -->
+                <!-- Параметры (во всю ширину): чекбоксы 2+2, ниже — потоки IDA -->
                 <Border Style="{StaticResource GroupBoxStyle}" Shadow="{StaticResource SharedShadow}"
                         Loaded="ShadowRect_Loaded">
                     <StackPanel Spacing="6">
-                        <TextBlock Text="Потоки IDA" Style="{StaticResource GroupHeaderStyle}" />
+                        <TextBlock Text="Параметры" Style="{StaticResource GroupHeaderStyle}" />
+                        <Grid ColumnSpacing="20">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="6">
+                                <CheckBox x:Name="CleanupCheck" Content="Удалять .asm и .log после успешного анализа"
+                                          IsChecked="True" />
+                                <CheckBox x:Name="TempCleanupCheck" Content="Удалять временные файлы IDA (.id0, .id1, .nam, .til)"
+                                          IsChecked="True" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Spacing="6">
+                                <CheckBox x:Name="PseudocodeCheck" Content="Включить псевдокод в JSON-экспорт"
+                                          IsChecked="True" />
+                                <CheckBox x:Name="DeleteJsonCheck" Content="Удалить JSON-файлы после создания отчётов"
+                                          IsChecked="True" />
+                            </StackPanel>
+                        </Grid>
                         <Grid ColumnSpacing="10">
                             <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Slider x:Name="MaxIdaSlider" Grid.Column="0" Minimum="1" Maximum="32" Value="4"
+                            <TextBlock Grid.Column="0" Text="Потоков IDA:" VerticalAlignment="Center" FontSize="13" />
+                            <Slider x:Name="MaxIdaSlider" Grid.Column="1" Minimum="1" Maximum="32" Value="4"
                                     StepFrequency="1" TickFrequency="4"
                                     ToolTipService.ToolTip="Максимальное количество одновременно работающих экземпляров IDA." />
-                            <TextBlock Grid.Column="1" Text="{Binding ElementName=MaxIdaSlider, Path=Value}"
+                            <TextBlock Grid.Column="2" Text="{Binding ElementName=MaxIdaSlider, Path=Value}"
                                        VerticalAlignment="Center" MinWidth="24" TextAlignment="Center"
                                        FontSize="13" FontWeight="SemiBold" />
                         </Grid>

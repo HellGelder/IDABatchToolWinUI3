@@ -56,21 +56,14 @@ public SfaPage()
     //  Список файлов
     // ──────────────────────────────────────────────
 
-    private string? SelectedPlatformKey()
-    {
-        if (SfaPlatformWindows.IsChecked == true) return "Windows";
-        if (SfaPlatformLinuxAndroid.IsChecked == true) return "Linux / Android";
-        if (SfaPlatformMacIos.IsChecked == true) return "macOS / iOS";
-        return null;
-    }
+    // Платформа определяется автоматически по содержимому папки (без выбора пользователем)
+    private string _detectedPlatform = "Windows";
 
-    private string[] SelectedExtensions() => PlatformInfo.ExtsFor(SelectedPlatformKey());
-
-    private void SetPlatformRadio(string key)
+    private void UpdatePlatformBar(string key)
     {
-        if (key == "Windows") SfaPlatformWindows.IsChecked = true;
-        else if (key == "Linux / Android") SfaPlatformLinuxAndroid.IsChecked = true;
-        else if (key == "macOS / iOS") SfaPlatformMacIos.IsChecked = true;
+        _detectedPlatform = key;
+        SfaPlatformInfoBar.Message = $"Платформа: {key} (расширения: {PlatformInfo.ExtsDisplay(key)})";
+        SfaPlatformInfoBar.IsOpen = true;
     }
 
     private void RefreshFileList()
@@ -81,10 +74,15 @@ public SfaPage()
             _cachedFiles = new List<FileItem>();
             SfaTreemap.SetData(_cachedFiles);
             SfaGenerateHtmlButton.IsEnabled = false;
+            SfaPlatformInfoBar.IsOpen = false;
             return;
         }
 
-        var extensions = SelectedExtensions();
+        // Поиск сразу по всем расширениям всех платформ: платформа определяется
+        // по фактическому содержимому папки. Раньше поиск шёл по расширениям
+        // текущей платформы, поэтому папка только с .so-файлами давала пустой
+        // список и детект не выполнялся.
+        var extensions = PlatformInfo.AllExtensions();
         var files = ExecutableFinder.FindExecutables(inputDir, extensions);
 
         foreach (var ext in ArchiveHandler.ArchiveExtensions)
@@ -107,11 +105,12 @@ public SfaPage()
         {
             SfaTreemap.SetData(new List<FileItem>());
             SfaGenerateHtmlButton.IsEnabled = false;
+            SfaPlatformInfoBar.IsOpen = false;
             return;
         }
 
-        var detected = PlatformInfo.DetectByFiles(_cachedFiles.Select(f => Path.GetExtension(f.Path).ToLowerInvariant()));
-        SetPlatformRadio(detected);
+        // Платформа — по фактическим файлам (расширения, при их отсутствии — сигнатуры)
+        UpdatePlatformBar(PlatformInfo.DetectPlatform(_cachedFiles.Select(f => f.Path)));
 
         SfaTreemap.SetData(_cachedFiles);
         SfaGenerateHtmlButton.IsEnabled = _cachedFiles.Any(f => File.Exists(f.ExpectedI64Path));
@@ -284,7 +283,7 @@ public SfaPage()
             _analysisCancelled = false;
             return;
         }
-        if (anyJson && (SelectedPlatformKey() ?? "Windows") == "Windows")
+        if (anyJson && _detectedPlatform == "Windows")
             _ = StartDocsSearchAsync();
     }
 
@@ -312,7 +311,7 @@ public SfaPage()
         SfaErrorLogTextBox.Text = "";
 
         _docsWorker = new HtmlGenWorker("sfa-docs", deleteJson: false, reuseCache: false,
-            SelectedPlatformKey() ?? "Windows");
+            _detectedPlatform);
         _docsWorker.ProgressUpdated += (cur, total, msg) => RunOnUi(() =>
         {
             if (total > 0) { SfaProcessProgress.Maximum = total; SfaProcessProgress.Value = cur; }
@@ -463,7 +462,7 @@ public SfaPage()
         var manpagesDb = ResolveManpagesDb(sfaReports);
 
         _htmlWorker = new HtmlGenWorker("sfa", SfaDeleteJsonCheck.IsChecked == true,
-            reuseCache, SelectedPlatformKey() ?? "Windows");
+            reuseCache, _detectedPlatform);
         _htmlWorker.ProgressUpdated += (cur, total, msg) => RunOnUi(() =>
         {
             if (total > 0) { SfaProcessProgress.Maximum = total; SfaProcessProgress.Value = cur; }
@@ -483,7 +482,10 @@ public SfaPage()
 
     private string ResolveManpagesDb(string sfaReports)
     {
-        var cfgPath = _cfg.ManPagesDbPath;
+        // Страница кэшируется, её _cfg — снимок из конструктора: путь, заданный
+        // в настройках после создания страницы (например, сразу после скачивания
+        // man-pages), сюда бы не попал. Читаем свежий конфиг с диска.
+        var cfgPath = ConfigService.Load().ManPagesDbPath;
         if (!string.IsNullOrWhiteSpace(cfgPath))
         {
             var p = Path.GetFullPath(cfgPath);

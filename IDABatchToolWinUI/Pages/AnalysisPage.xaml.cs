@@ -63,21 +63,14 @@ public sealed partial class AnalysisPage : Page
     //  Список файлов
     // ──────────────────────────────────────────────
 
-    private string? SelectedPlatformKey()
-    {
-        if (PlatformWindows.IsChecked == true) return "Windows";
-        if (PlatformLinuxAndroid.IsChecked == true) return "Linux / Android";
-        if (PlatformMacIos.IsChecked == true) return "macOS / iOS";
-        return null;
-    }
+    // Платформа определяется автоматически по содержимому папки (без выбора пользователем)
+    private string _detectedPlatform = "Windows";
 
-    private string[] SelectedExtensions() => PlatformInfo.ExtsFor(SelectedPlatformKey());
-
-    private void SetPlatformRadio(string key)
+    private void UpdatePlatformBar(string key)
     {
-        if (key == "Windows") PlatformWindows.IsChecked = true;
-        else if (key == "Linux / Android") PlatformLinuxAndroid.IsChecked = true;
-        else if (key == "macOS / iOS") PlatformMacIos.IsChecked = true;
+        _detectedPlatform = key;
+        PlatformInfoBar.Message = $"Платформа: {key} (расширения: {PlatformInfo.ExtsDisplay(key)})";
+        PlatformInfoBar.IsOpen = true;
     }
 
     private async void BrowseDir_Click(object sender, RoutedEventArgs e)
@@ -91,10 +84,15 @@ public sealed partial class AnalysisPage : Page
             _cachedFiles = new List<FileItem>();
             Treemap.SetData(_cachedFiles);
             GenerateHtmlButton.IsEnabled = false;
+            PlatformInfoBar.IsOpen = false;
             return;
         }
 
-        var extensions = SelectedExtensions();
+        // Поиск сразу по всем расширениям всех платформ: платформа определяется
+        // по фактическому содержимому папки, а не по заранее выбранной настройке.
+        // Раньше поиск шёл по расширениям текущей платформы, поэтому папка,
+        // например, только с .so-файлами давала пустой список и детект не выполнялся.
+        var extensions = PlatformInfo.AllExtensions();
         var files = ExecutableFinder.FindExecutables(inputDir, extensions);
 
         // Архивы: распаковываем рядом и ищем внутри
@@ -125,19 +123,12 @@ public sealed partial class AnalysisPage : Page
         {
             Treemap.SetData(new List<FileItem>());
             GenerateHtmlButton.IsEnabled = false;
+            PlatformInfoBar.IsOpen = false;
             return;
         }
 
-        var detected = PlatformInfo.DetectByFiles(_cachedFiles.Select(f => Path.GetExtension(f.Path).ToLowerInvariant()));
-        SetPlatformRadio(detected);
-
-        // Повторный поиск, если расширения изменились после определения платформы
-        var newExts = SelectedExtensions();
-        if (!newExts.SequenceEqual(extensions))
-        {
-            var refiles = ExecutableFinder.FindExecutables(inputDir, newExts);
-            _cachedFiles = refiles.Distinct().Select(MakeItem).ToList();
-        }
+        // Платформа — по фактическим файлам (расширения, при их отсутствии — сигнатуры)
+        UpdatePlatformBar(PlatformInfo.DetectPlatform(_cachedFiles.Select(f => f.Path)));
 
         Treemap.SetData(_cachedFiles);
         GenerateHtmlButton.IsEnabled = _cachedFiles.Any(f => File.Exists(f.ExpectedI64Path));
@@ -420,7 +411,7 @@ public sealed partial class AnalysisPage : Page
         ProcessStatusText.Text = "Генерация HTML-отчётов...";
         ErrorLogTextBox.Text = "";
 
-        _htmlWorker = new HtmlGenWorker("analysis", DeleteJsonCheck.IsChecked == true, false, SelectedPlatformKey() ?? "Windows");
+        _htmlWorker = new HtmlGenWorker("analysis", DeleteJsonCheck.IsChecked == true, false, _detectedPlatform);
         _htmlWorker.ProgressUpdated += (cur, total, msg) => RunOnUi(() =>
         {
             ProcessStatusText.Text = msg.Length > 0

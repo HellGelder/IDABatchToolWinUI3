@@ -33,6 +33,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
@@ -60,77 +61,51 @@
                 </StackPanel>
             </Border>
 
-            <!-- Параметры сканирования -->
-            <Border Grid.Row="2" Style="{StaticResource GroupBoxStyle}">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="Параметры сканирования" Style="{StaticResource GroupHeaderStyle}" />
+            <!-- Автоопределение платформы: неотключаемый инфобар под тремапом -->
+            <InfoBar Grid.Row="2" x:Name="SfaPlatformInfoBar" IsOpen="False" IsClosable="False"
+                     Severity="Informational" />
+
+            <!-- Параметры (во всю ширину): чекбоксы 2+2, ниже — потоки IDA -->
+            <Border Grid.Row="3" Style="{StaticResource GroupBoxStyle}">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Параметры" Style="{StaticResource GroupHeaderStyle}" />
                     <Grid ColumnSpacing="20">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0" Spacing="8">
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Целевая платформа" FontWeight="SemiBold" FontSize="13" />
-                                <Grid>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <RadioButton x:Name="SfaPlatformWindows" Grid.Row="0" Grid.Column="0"
-                                                 GroupName="SfaPlatform" Content="Windows" IsChecked="True"
-                                                 Margin="0,0,16,2" Padding="2,2,2,2"
-                                                 ToolTipService.ToolTip="Платформа: Windows&#10;Расширения: .exe, .dll, .sys, .ocx, .cpl, .scr, .drv, .efi" />
-                                    <RadioButton x:Name="SfaPlatformLinuxAndroid" Grid.Row="0" Grid.Column="1"
-                                                 GroupName="SfaPlatform" Content="Linux / Android"
-                                                 Margin="0,0,0,2" Padding="2,2,2,2"
-                                                 ToolTipService.ToolTip="Платформа: Linux / Android&#10;Расширения: .elf, .so, .o, .ko, .dex" />
-                                    <RadioButton x:Name="SfaPlatformMacIos" Grid.Row="1" Grid.Column="0"
-                                                 GroupName="SfaPlatform" Content="macOS / iOS"
-                                                 Padding="2,2,2,2"
-                                                 ToolTipService.ToolTip="Платформа: macOS / iOS&#10;Расширения: .mach-o, .dylib, .bundle, .app" />
-                                </Grid>
-                            </StackPanel>
-
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Потоков IDA:" FontSize="13" />
-                                <Grid ColumnSpacing="6">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <Slider x:Name="SfaMaxIdaSlider" Grid.Column="0" Minimum="1" Maximum="32" Value="4"
-                                            StepFrequency="1" TickFrequency="4"
-                                            ToolTipService.ToolTip="Максимальное количество одновременно работающих экземпляров IDA." />
-                                    <TextBlock Grid.Column="1" Text="{Binding ElementName=SfaMaxIdaSlider, Path=Value}"
-                                               VerticalAlignment="Center" MinWidth="20" TextAlignment="Center"
-                                               FontSize="13" FontWeight="SemiBold" />
-                                </Grid>
-                            </StackPanel>
-                        </StackPanel>
-
-                        <StackPanel Grid.Column="1" Spacing="2">
-                            <TextBlock Text="Флаги анализа" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,4" />
+                        <StackPanel Grid.Column="0" Spacing="6">
                             <CheckBox x:Name="SfaCleanupCheck" Content="Удалять .asm и .log после успешного анализа"
                                       IsChecked="True" Padding="2,1,2,1" />
                             <CheckBox x:Name="SfaTempCleanupCheck" Content="Удалять временные файлы IDA (.id0, .id1, .nam, .til)"
                                       IsChecked="True" Padding="2,1,2,1" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="6">
                             <CheckBox x:Name="SfaPseudocodeCheck" Content="Включить псевдокод в JSON-экспорт"
                                       IsChecked="True" Padding="2,1,2,1" />
                             <CheckBox x:Name="SfaDeleteJsonCheck" Content="Удалить JSON-файлы после создания отчётов"
                                       IsChecked="True" Padding="2,1,2,1" />
                         </StackPanel>
                     </Grid>
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Потоков IDA:" VerticalAlignment="Center" FontSize="13" />
+                        <Slider x:Name="SfaMaxIdaSlider" Grid.Column="1" Minimum="1" Maximum="32" Value="4"
+                                StepFrequency="1" TickFrequency="4"
+                                ToolTipService.ToolTip="Максимальное количество одновременно работающих экземпляров IDA." />
+                        <TextBlock Grid.Column="2" Text="{Binding ElementName=SfaMaxIdaSlider, Path=Value}"
+                                   VerticalAlignment="Center" MinWidth="20" TextAlignment="Center"
+                                   FontSize="13" FontWeight="SemiBold" />
+                    </Grid>
                 </StackPanel>
             </Border>
 
             <!-- Процесс анализа СФ -->
-            <Border Grid.Row="3" Style="{StaticResource GroupBoxStyle}">
+            <Border Grid.Row="4" Style="{StaticResource GroupBoxStyle}">
                 <StackPanel Spacing="6">
                     <TextBlock Text="Процесс анализа СФ" Style="{StaticResource GroupHeaderStyle}" />
                     <TextBlock x:Name="SfaProcessStatusText" Text="Готов к запуску" FontSize="12"
@@ -154,7 +129,7 @@
             </Border>
 
             <!-- Ошибки -->
-            <Border Grid.Row="4" Style="{StaticResource GroupBoxStyle}">
+            <Border Grid.Row="5" Style="{StaticResource GroupBoxStyle}">
                 <StackPanel Spacing="4">
                     <TextBlock Text="Сообщения об ошибках" Style="{StaticResource GroupHeaderStyle}" />
                     <TextBox x:Name="SfaErrorLogTextBox" AcceptsReturn="True" TextWrapping="Wrap"

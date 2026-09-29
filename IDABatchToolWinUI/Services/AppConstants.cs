@@ -113,9 +113,12 @@ public static class PlatformInfo
     // Для macOS оставим пустое расширение в списке — файлы без расширения проверяются по сигнатуре,
     // как в оригинале (там в exts есть "").
 
-    public static string[] ExtsFor(string? key)
+    public static string[] Keys => Platforms.Keys.ToArray();
+
+    /// <summary>Все расширения всех платформ одним списком (без дубликатов) —
+    /// для поиска файлов, когда платформа ещё не определена.</summary>
+    public static string[] AllExtensions()
     {
-        if (key != null && Platforms.TryGetValue(key, out var d)) return d.Exts;
         var all = new List<string>();
         foreach (var pl in Platforms.Values)
             foreach (var e in pl.Exts)
@@ -123,16 +126,55 @@ public static class PlatformInfo
         return all.ToArray();
     }
 
-    public static string[] Keys => Platforms.Keys.ToArray();
+    /// <summary>Отображение расширений платформы для инфобара: «.exe, .dll, …».</summary>
+    public static string ExtsDisplay(string key) =>
+        Platforms.TryGetValue(key, out var d) ? string.Join(", ", d.Exts) : "";
 
-    /// <summary>Определяет платформу по расширениям файлов (по числу совпадений).</summary>
-    public static string DetectByFiles(IEnumerable<string> suffixes)
+    /// <summary>
+    /// Определяет платформу по фактическим файлам: по расширениям; файлы
+    /// без расширения — по сигнатуре (PE / ELF / Mach-O). При равных счётчиках
+    /// и при пустом результате возвращается Windows (как и раньше).
+    /// </summary>
+    public static string DetectPlatform(IEnumerable<string> paths)
     {
         var counts = new Dictionary<string, int> { ["Windows"] = 0, ["Linux / Android"] = 0, ["macOS / iOS"] = 0 };
-        foreach (var s in suffixes.Select(x => x.ToLowerInvariant()))
+        foreach (var p in paths)
+        {
+            var ext = Path.GetExtension(p).ToLowerInvariant();
+            if (ext == "")
+            {
+                var sig = ClassifyBySignature(p);
+                if (sig != null) counts[sig]++;
+                continue;
+            }
             foreach (var (key, d) in Platforms)
-                if (d.Exts.Contains(s)) counts[key]++;
+            {
+                if (d.Exts.Contains(ext)) { counts[key]++; break; }
+            }
+        }
         var best = counts.OrderByDescending(kv => kv.Value).First().Key;
         return counts[best] > 0 ? best : "Windows";
+    }
+
+    private static string? ClassifyBySignature(string path)
+    {
+        try
+        {
+            using var fs = File.OpenRead(path);
+            Span<byte> header = stackalloc byte[4];
+            int n = fs.Read(header);
+            if (n < 4) return null;
+            if (header[0] == 0x7F && header[1] == (byte)'E' && header[2] == (byte)'L' && header[3] == (byte)'F')
+                return "Linux / Android";
+            if (header[0] == (byte)'M' && header[1] == (byte)'Z') return "Windows";
+            var magic = BitConverter.ToUInt32(header);
+            if (magic is 0xFEEDFACE or 0xFEEDFACF or 0xCAFEBABE or 0xCEFAEDFE or 0xCFFAEDFE)
+                return "macOS / iOS";
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }
