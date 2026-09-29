@@ -106,12 +106,30 @@ def emit_result(obj):
         pass
 
 
-def normalize_display_name(name):
-    """Нормализация имени модуля для классификации."""
-    n = str(name or "").strip()
-    n = re.sub(r"\.(dll|exe|sys|ocx|so|dylib|bundle)$", "", n, flags=re.IGNORECASE)
-    n = re.sub(r"^lib", "", n)
-    return n
+def normalize_display_name(module_name):
+    """Каноническая нормализация имени модуля для отображения в отчётах.
+
+    Как в исполнении 1 (reporting/utils.py): убирает путь, специфичные
+    суффиксы платформ (.dylib, .framework), префикс ``@rpath/``. Имя
+    сохраняет расширение и версии (``libcrypto.so.1.1`` остаётся
+    ``libcrypto.so.1.1``) — на такие ключи завязаны словари
+    классификатора и определение внутренних модулей.
+    """
+    if not module_name:
+        return ""
+    module_name = str(module_name)
+    # Берём только имя файла из пути
+    if '\\' in module_name or '/' in module_name:
+        module_name = module_name.replace('\\', '/').split('/')[-1]
+    if module_name.endswith('.dylib'):
+        module_name = module_name[:-6]
+    elif module_name.endswith('.framework'):
+        module_name = module_name[:-10]
+    elif '.dylib' in module_name:
+        module_name = module_name.split('.dylib')[0]
+    if module_name.startswith('@rpath/'):
+        module_name = module_name[7:]
+    return module_name
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -128,8 +146,10 @@ _UNKNOWN_DESC = "Неопознанный модуль"
 
 
 def _classify_module(mod_name):
-    """Категория и описание модуля: сначала словари классификатора,
-    при отсутствии записи — эвристика по имени."""
+    """Категория и описание модуля — семантика исполнения 1
+    (generator.generate_index): композитный классификатор по всем
+    платформенным словарям + словари категорий. Без эвристических
+    категорий: модуль вне словарей — «Неопознанные модули»."""
     try:
         desc = _classifier_describe(mod_name)
         cat, cat_desc = get_module_category_and_description(mod_name)
@@ -139,47 +159,7 @@ def _classify_module(mod_name):
             return cat, cat_desc
     except Exception:
         pass
-    return _classify_module_heuristic(mod_name)
-
-
-def _classify_module_heuristic(mod_name):
-    """Эвристическая классификация по имени (фолбэк для модулей,
-    отсутствующих в словарях классификатора)."""
-    n = mod_name.lower()
-    if n in ("kernel32", "kernelbase", "ntdll", "user32", "gdi32", "advapi32",
-             "ole32", "oleaut32", "comdlg32", "shell32", "shlwapi", "winmm",
-             "ws2_32", "wininet", "urlmon", "crypt32", "bcrypt", "ncrypt",
-             "psapi", "dbghelp", "version", "setupapi", "cfgmgr32", "wintrust"):
-        return "Системные библиотеки Windows", "Ядро Windows API."
-    if n.startswith("api-ms-win") or n.startswith("ext-ms-win"):
-        return "Системные библиотеки Windows", "API-наборы (API Sets)."
-    if n.startswith("libc") or n.startswith("libm") or n.startswith("libpthread") \
-            or n.startswith("libdl") or n.startswith("librt") or n.startswith("libutil") \
-            or n.startswith("libgcc") or n in ("ld-linux", "linux-vdso"):
-        return "Библиотеки C/C++ (Linux)", "Стандартная библиотека C и низкоуровневые библиотеки Linux."
-    if n.startswith("libstdc++") or n.startswith("libc++") or n.startswith("libgomp"):
-        return "Библиотеки C/C++ (Linux)", "Стандартная библиотека C++."
-    if n.startswith("libz") or n in ("z", "libbz2", "liblzma", "liblz4", "libzstd"):
-        return "Сжатие и архивы", "Библиотеки сжатия."
-    if n.startswith("libssl") or n.startswith("libcrypto"):
-        return "Криптография", "OpenSSL/TLS."
-    if n.startswith("libcurl") or n.startswith("libhttp") or n.startswith("libxml") \
-            or n.startswith("libjson") or n.startswith("libyaml"):
-        return "Сетевые протоколы и данные", "Работа с сетью и форматами данных."
-    if n.startswith("libsqlite") or n.startswith("sqlite") or n.startswith("libpq"):
-        return "Базы данных", "Библиотеки БД."
-    if n.startswith("libgtk") or n.startswith("libqt") or n.startswith("libx11") \
-            or n.startswith("libwayland") or n.startswith("libglib"):
-        return "Графика и GUI", "Библиотеки графического интерфейса."
-    if n.startswith("libpcap") or n.startswith("pcap") or n.startswith("libnet"):
-        return "Сетевые протоколы и данные", "Захват сетевых пакетов."
-    if n.startswith("libudev") or n.startswith("libusb") or n.startswith("libpci"):
-        return "Оборудование", "Работа с устройствами."
-    if n in ("libandroid_runtime", "libandroid", "libbinder") or n.startswith("libandroid"):
-        return "Библиотеки Android", "Системные библиотеки Android."
-    if n.startswith("libfmj") or n.startswith("libiot") or n.startswith("liblog"):
-        return "Библиотеки Android", "Служебные библиотеки Android."
-    return "Прочие", "Дополнительные модули."
+    return "Неопознанные модули", _UNKNOWN_DESC
 
 
 def _api_to_release(api):
@@ -251,14 +231,101 @@ def _file_info_entries(data):
 #  Генератор «Общий анализ» (индивидуальные отчёты + индекс)
 # ─────────────────────────────────────────────────────────────────
 
+def _build_internal_set(input_dir):
+    """Внутренние модули проекта: имена всех файлов исследуемой директории
+    (аналог _build_internal_set исполнения 1)."""
+    internal = set()
+    root = Path(input_dir) if input_dir else None
+    if root is None or not root.is_dir():
+        return internal
+    try:
+        for f in root.rglob('*'):
+            if f.is_file():
+                internal.add(f.name.lower())
+                internal.add(f.stem.lower())
+    except OSError:
+        pass
+    return internal
+
+
+# Метки и цвета категорий зависимостей в индивидуальных отчётах —
+# как в исполнении 1 (BaseReportGenerator.CATEGORY_LABELS / CATEGORY_COLORS).
+_CATEGORY_LABELS = {
+    "Системные библиотеки ОС": "System",
+    "Криптография и безопасность": "Crypto",
+    "Сеть и коммуникации": "Network",
+    "Графика и мультимедиа": "Graphics",
+    "Среды выполнения, научные и ML-библиотеки": "Runtime",
+    "Работа с данными, архивация и XML": "Data",
+    "Внутренние модули проекта": "Internal",
+    "Неопознанные модули": "Unknown",
+}
+
+_CATEGORY_COLORS = {
+    "System": "#4CAF50",
+    "Crypto": "#FF9800",
+    "Network": "#2196F3",
+    "Graphics": "#9C27B0",
+    "Runtime": "#00BCD4",
+    "Data": "#795548",
+    "Internal": "#607D8B",
+    "Unknown": "#F44336",
+}
+
+
+def _is_internal_module(module_name, internal_set):
+    """Проверка «свой/чужой»: полное имя или имя без расширения (как в исп1)."""
+    if internal_set is None:
+        return False
+    name_lower = module_name.lower()
+    stem = os.path.splitext(module_name)[0].lower()
+    return name_lower in internal_set or stem in internal_set
+
+
+def _classify_with_context(module_name, internal_set):
+    """Описание модуля с учётом внутреннего набора (как _classify_with_context исп1)."""
+    if _is_internal_module(module_name, internal_set):
+        return "Собственный модуль проекта (внутренняя библиотека)"
+    try:
+        desc = _classifier_describe(module_name)
+        if desc:
+            return desc
+    except Exception:
+        pass
+    return "Неопознанный модуль"
+
+
+def _classify_full(module_name, internal_set):
+    """(метка категории, описание) для карточки зависимостей (как в исп1)."""
+    desc = _classify_with_context(module_name, internal_set)
+    if "Собственный модуль" in desc:
+        return "Internal", desc
+    cat_ru, _ = get_module_category_and_description(module_name)
+    return _CATEGORY_LABELS.get(cat_ru, "Unknown"), desc
+
+
 def generate_analysis_report(json_path, output_html, input_dir, internal_set):
     """Генерирует индивидуальный HTML-отчёт «Общий анализ»."""
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    file_name = os.path.basename(data.get("file_name", str(json_path)))
+    # Заголовок отчёта — полный исходный путь (как в исполнении 1).
+    file_name = data.get("file_name") or os.path.basename(str(json_path))
     imports = data.get("imports", [])
     exports = data.get("exports", [])
+
+    # Ссылка «Назад к сводному отчёту» — по глубине вложенности отчёта
+    # относительно reports_dir (compute_back_link исполнения 1):
+    # IDAReports/bin/x.html -> ../index.html.
+    reports_dir = Path(output_html).parent
+    while not (reports_dir / "index.html").exists() and reports_dir.parent != reports_dir:
+        reports_dir = reports_dir.parent
+    try:
+        rel = Path(output_html).resolve().relative_to(reports_dir.resolve())
+    except ValueError:
+        rel = Path(os.path.basename(str(output_html)))
+    depth = len(rel.parent.parts) if str(rel.parent) not in (".", "") else 0
+    back_link = ("../" * depth) + "index.html"
 
     module_deps = []
     seen = set()
@@ -268,9 +335,11 @@ def generate_analysis_report(json_path, output_html, input_dir, internal_set):
             if name in seen:
                 continue
             seen.add(name)
-            cat, desc = _classify_module(name)
-            module_deps.append({"name": name, "count": 0, "category": cat,
-                                "description": desc, "color": "#8b5cf6"})
+            cat_label, desc = _classify_full(name, internal_set)
+            color = _CATEGORY_COLORS.get(cat_label, "#9E9E9E")
+            module_deps.append({"name": name, "count": 0, "category": cat_label,
+                                "description": desc, "color": color})
+        module_deps = sorted(module_deps, key=lambda x: (x["category"], x["name"]))
     else:
         from collections import Counter
         cnt = Counter()
@@ -282,13 +351,11 @@ def generate_analysis_report(json_path, output_html, input_dir, internal_set):
                 continue
             cnt[normalize_display_name(mod)] += 1
         for name, c in cnt.most_common():
-            is_internal = name.lower() in (internal_set or set())
-            cat = "Внутренние модули" if is_internal else "Системные библиотеки"
-            if not is_internal:
-                cat, desc = _classify_module(name)
-            module_deps.append({"name": name, "count": c, "category": cat,
-                                "description": "" if is_internal else desc,
-                                "color": "#8b5cf6" if not is_internal else "#10b981"})
+            cat_label, desc = _classify_full(name, internal_set)
+            color = _CATEGORY_COLORS.get(cat_label, "#9E9E9E")
+            module_deps.append({"name": name, "count": c, "category": cat_label,
+                                "description": desc, "color": color})
+        module_deps = sorted(module_deps, key=lambda x: (x["category"], x["name"]))
 
     functions = []
     for func in data.get("functions", []):
@@ -303,7 +370,7 @@ def generate_analysis_report(json_path, output_html, input_dir, internal_set):
 
     ctx = {
         "file_name": file_name,
-        "back_link": "index.html",
+        "back_link": back_link,
         "file_info": _file_info_entries(data),
         "module_deps": module_deps,
         "imports": imports,
@@ -364,7 +431,7 @@ def _sorted_category_groups(categories):
     """Порядок категорий сводного индекса — как в исполнении 1: внутренние первыми,
     затем по алфавиту, «Неопознанные модули» в конце; модули внутри категории по алфавиту."""
     grouped = []
-    internal = categories.pop("Внутренние модули", None)
+    internal = categories.pop("Внутренние модули проекта", None)
     if internal:
         internal["modules"] = sorted(internal["modules"], key=lambda x: x["name"].lower())
         grouped.append(internal)
@@ -385,8 +452,8 @@ def generate_analysis_index(reports_dir, input_dir, report_links, global_modules
     и описание у каждого модуля (как в исполнении 1, generator.generate_index)."""
     categories = {}
     for mod in global_modules:
-        if internal_set and mod.lower() in internal_set:
-            cat = "Внутренние модули"
+        if _is_internal_module(mod, internal_set):
+            cat = "Внутренние модули проекта"
             desc = "Собственный модуль проекта (внутренняя библиотека)"
             cat_desc = "Библиотеки и исполняемые файлы, находящиеся внутри исследуемой директории."
         else:
@@ -1559,7 +1626,7 @@ def generate_diff_report(json_path, output_html, reports_dir, input_dir, interna
         "secondary": secondary,
         "real_primary": data.get("real_primary", ""),
         "real_secondary": data.get("real_secondary", ""),
-        "back_link": "index.html",
+        "back_link": _back_link(output_html, reports_dir),
         "error": data.get("error"),
         "file1": data.get("file1", {}),
         "file2": data.get("file2", {}),
@@ -1744,11 +1811,11 @@ CREATE TABLE IF NOT EXISTS meta (
 
 
 def _normalize_module_key(module):
-    """Канонический ключ модуля: без расширения, нижний регистр."""
-    m = str(module or "").strip()
-    m = re.sub(r"\.(dll|exe|sys|ocx|so|dylib|bundle)$", "", m, flags=re.IGNORECASE)
-    m = re.sub(r"^lib", "", m)
-    return m.lower()
+    """Канонический ключ модуля — как в исполнении 1
+    (classifier.naming.normalize_module_name): путь, одно платформенное
+    расширение, нижний регистр; версии сохраняются (libc.so.6 → libc.so.6)."""
+    from classifier.naming import normalize_module_name
+    return normalize_module_name(module)
 
 
 def build_sfa_index(index_db, json_files, platform):
@@ -1874,8 +1941,8 @@ def run_generate(args):
             emit_error("Нет JSON-файлов экспорта. Сначала выполните анализ.")
             return
         reports_dir.mkdir(parents=True, exist_ok=True)
-        internal_set = set()
-        # _build_internal_set аналог: внутренние модули — файлы в input_dir без расширения целевых
+        # Внутренние модули проекта — все файлы исследуемой директории (как в исполнении 1).
+        internal_set = _build_internal_set(input_dir)
         total = len(json_files)
         done = 0
         report_links = []
