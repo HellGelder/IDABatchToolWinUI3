@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Text;
-using System.Text.Json;
 using IDABatchToolWinUI.Services;
 
 namespace IDABatchToolWinUI.Workers;
@@ -15,6 +14,9 @@ public sealed class ManPagesSyncWorker : IDisposable
     private readonly string _dbPath;
     private Process? _proc;
     private readonly string _bridge;
+    private bool _finished;
+    private string _doneMessage = "";
+    private string _lastError = "";
 
     public event Action<string, int>? Progress;   // (сообщение, проценты)
     public event Action<string>? ErrorOccurred;
@@ -26,12 +28,33 @@ public sealed class ManPagesSyncWorker : IDisposable
         _bridge = Path.Combine(AppConstants.WinUiDir, "_python", "manpages_bridge.py");
     }
 
-    public void Start()
+    /// <summary>
+    /// Запуск синхронизации: управление возвращается сразу, события приходят асинхронно.
+    /// Раньше Start() был синхронным и вызывался с UI-потока: WaitForExit замораживал окно
+    /// на всю загрузку, а ожидание stdout-задачи на заблокированном UI-потоке давало дедлок.
+    /// </summary>
+    public void Start() => _ = RunSafeAsync();
+
+    private Task RunSafeAsync()
+    {
+        try
+        {
+            return RunAsync();
+        }
+        catch (Exception e)
+        {
+            ErrorOccurred?.Invoke($"Синхронизация man-pages: {e.Message}");
+            Finish(false, e.Message);
+            return Task.CompletedTask;
+        }
+    }
+
+    private async Task RunAsync()
     {
         if (!File.Exists(_bridge))
         {
             ErrorOccurred?.Invoke($"Скрипт синхронизации man-pages не найден: {_bridge}");
-            Finished?.Invoke(false, "Скрипт не найден");
+            Finish(false, "Скрипт не найден");
             return;
         }
 
@@ -52,43 +75,78 @@ public sealed class ManPagesSyncWorker : IDisposable
         psi.ArgumentList.Add(_bridge);
         psi.ArgumentList.Add(_dbPath);
 
-        _proc = Process.Start(psi);
-        if (_proc == null)
+        Process proc;
+        try
         {
-            ErrorOccurred?.Invoke("Не удалось запустить синхронизацию man-pages.");
-            Finished?.Invoke(false, "Процесс не запущен");
+            proc = Process.Start(psi) ?? throw new InvalidOperationException("Process.Start вернул null");
+        }
+        catch (Exception e)
+        {
+            ErrorOccurred?.Invoke($"Не удалось запустить синхронизацию man-pages: {e.Message}");
+            Finish(false, "Процесс не запущен");
+            return;
+        }
+        _proc = proc;
+
+        // stderr читается параллельно: без читателя заполненный буфер канала
+        // подвешивал бы сам мост (Python блокируется на записи в stderr).
+        var stderrTask = proc.StandardError.ReadToEndAsync();
+
+        await ReadStdoutAsync(proc);
+
+        try { await proc.WaitForExitAsync(); } catch { /* процесс убит при отмене */ }
+
+        // Успех — только при явном DONE/OK от моста: при ошибке мост печатает
+        // ERROR и завершается с кодом 0, поэтому одного кода выхода мало.
+        var ok = proc.ExitCode == 0 && !string.IsNullOrEmpty(_doneMessage);
+        if (ok)
+        {
+            Finish(true, _doneMessage);
             return;
         }
 
-        var stdout = ReadStdoutAsync();
-        var stderrTask = _proc.StandardError.ReadToEndAsync();
-        _proc.WaitForExit();
-        stdout.GetAwaiter().GetResult();
+        string stderr = "";
+        try { stderr = (await stderrTask).Trim(); } catch { /* канал закрыт */ }
+        var msg = _lastError.Length > 0 ? _lastError
+            : stderr.Length > 0 ? stderr
+            : $"Процесс завершился с кодом {proc.ExitCode}";
+        Finish(false, msg);
     }
 
-    private async Task ReadStdoutAsync()
+    private async Task ReadStdoutAsync(Process proc)
     {
-        string? line;
-        while ((line = await _proc!.StandardOutput.ReadLineAsync()) != null)
+        try
         {
-            if (line.StartsWith("PROGRESS ", StringComparison.Ordinal))
+            string? line;
+            while ((line = await proc.StandardOutput.ReadLineAsync()) != null)
             {
-                var rest = line.Substring(9);
-                var sp = rest.IndexOf(' ');
-                if (sp > 0 && int.TryParse(rest[..sp], out var pct))
-                    Progress?.Invoke(rest[(sp + 1)..], pct);
+                if (line.StartsWith("PROGRESS ", StringComparison.Ordinal))
+                {
+                    var rest = line.Substring(9);
+                    var sp = rest.IndexOf(' ');
+                    if (sp > 0 && int.TryParse(rest[..sp], out var pct))
+                        Progress?.Invoke(rest[(sp + 1)..], pct);
+                }
+                else if (line.StartsWith("ERROR ", StringComparison.Ordinal))
+                {
+                    _lastError = line.Substring(6);
+                    ErrorOccurred?.Invoke(_lastError);
+                }
+                else if (line.StartsWith("DONE ", StringComparison.Ordinal))
+                    _doneMessage = line.Substring(5);
+                else if (line.StartsWith("OK ", StringComparison.Ordinal))
+                    _doneMessage = line.Substring(3);
             }
-            else if (line.StartsWith("ERROR ", StringComparison.Ordinal))
-                ErrorOccurred?.Invoke(line.Substring(6));
-            else if (line.StartsWith("DONE ", StringComparison.Ordinal))
-                _doneMessage = line.Substring(5);
-            else if (line.StartsWith("OK ", StringComparison.Ordinal))
-                _doneMessage = line.Substring(3);
         }
-        Finished?.Invoke(_proc!.ExitCode == 0, _doneMessage);
+        catch { /* процесс завершён/убит — канал закрыт */ }
     }
 
-    private string _doneMessage = "";
+    private void Finish(bool ok, string message)
+    {
+        if (_finished) return;
+        _finished = true;
+        Finished?.Invoke(ok, message);
+    }
 
     public void Cancel()
     {
