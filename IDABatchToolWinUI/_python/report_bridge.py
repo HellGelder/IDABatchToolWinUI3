@@ -12,8 +12,6 @@
     RESULT <json>
 """
 import argparse
-import hashlib
-import html
 import json
 import os
 import re
@@ -52,32 +50,49 @@ for _stream in (sys.stdout, sys.stderr):
 #  Рендер шаблонов — готовый Jinja2 (внешняя зависимость, НЕ исполнение 1)
 # ─────────────────────────────────────────────────────────────────
 
-def inline_vendor(name):
+def inline_vendor(name, _cache={}):
     """Содержимое вендорного asset из vendor/ для инлайн-встраивания.
 
     Встраивание идёт через контекст шаблона, а не {% include %}: в
     минифицированных JS/CSS встречаются последовательности ``{{``/``%}``,
-    которые Jinja приняла бы за собственный синтаксис.
+    которые Jinja приняла бы за собственный синтаксис. Содержимое
+    кэшируется: marked.min.js читается на диск для каждого SFA-отчёта.
     """
+    if name in _cache:
+        return _cache[name]
     path = os.path.join(VENDOR_DIR, name)
     try:
         with open(path, encoding="utf-8") as f:
-            return f.read()
+            content = f.read()
     except OSError:
-        return ""
+        content = ""
+    _cache[name] = content
+    return content
+
+
+# Один Environment на процесс: пересоздание на каждый вызов render_template
+# перекомпилировало шаблоны заново для каждого отчёта.
+_JINJA_ENV = None
+
+
+def _jinja_env():
+    global _JINJA_ENV
+    if _JINJA_ENV is None:
+        from jinja2 import Environment, FileSystemLoader, select_autoescape
+        env = Environment(
+            loader=FileSystemLoader(TEMPLATES_DIR),
+            autoescape=select_autoescape(enabled_extensions=("html",), default=True),
+            trim_blocks=True,
+            lstrip_blocks=True,
+        )
+        env.globals["inline_vendor"] = inline_vendor
+        _JINJA_ENV = env
+    return _JINJA_ENV
 
 
 def render_template(name, **ctx):
     """Рендерит шаблон templates/<name> движком Jinja2 с авто-escape."""
-    from jinja2 import Environment, FileSystemLoader, select_autoescape
-    env = Environment(
-        loader=FileSystemLoader(TEMPLATES_DIR),
-        autoescape=select_autoescape(enabled_extensions=("html",), default=True),
-        trim_blocks=True,
-        lstrip_blocks=True,
-    )
-    env.globals["inline_vendor"] = inline_vendor
-    template = env.get_template(name)
+    template = _jinja_env().get_template(name)
     return template.render(**ctx)
 
 
@@ -104,6 +119,18 @@ def emit_result(obj):
         print("RESULT " + json.dumps(obj, ensure_ascii=False, default=str), flush=True)
     except Exception:
         pass
+
+
+def _stat_size_safe(path):
+    """Размер файла в байтах; 0, если файл исчез или недоступен.
+
+    exists() + stat() в одном выражении — гонка: файл может пропасть
+    между проверкой и stat(), и OSError при сортировке валил весь прогон.
+    """
+    try:
+        return path.stat().st_size
+    except OSError:
+        return 0
 
 
 def normalize_display_name(module_name):
@@ -304,7 +331,7 @@ def _classify_full(module_name, internal_set):
     return _CATEGORY_LABELS.get(cat_ru, "Unknown"), desc
 
 
-def generate_analysis_report(json_path, output_html, input_dir, internal_set, reports_dir=None):
+def generate_analysis_report(json_path, output_html, internal_set, reports_dir=None):
     """Генерирует индивидуальный HTML-отчёт «Общий анализ»."""
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -414,10 +441,8 @@ def _is_placeholder_section(name):
 def _category_description(cat):
     """Описание категории из словарей классификатора (пусто для эвристических категорий)."""
     try:
-        from classifier.categories import _CATEGORIES
-        info = _CATEGORIES.get(cat)
-        if info:
-            return info.get("description", "")
+        from classifier.categories import get_category_description
+        return get_category_description(cat)
     except Exception:
         pass
     return ""
@@ -714,8 +739,7 @@ class McpDocClient:
     и сохраняется обратно — последующие прогоны переиспользуют её.
     """
 
-    def __init__(self, log=None):
-        self._log = log or (lambda msg: None)
+    def __init__(self):
         self._session_id = ""
         self._tool = ""
         self._lock = threading.Lock()
@@ -745,7 +769,10 @@ class McpDocClient:
         """Достаёт result из SSE-ответа (``data: {json}``)."""
         for line in body.splitlines():
             if line.startswith("data:"):
-                data = json.loads(line[5:].strip())
+                try:
+                    data = json.loads(line[5:].strip())
+                except json.JSONDecodeError:
+                    continue  # битая SSE-строка — не валим поиск в npx-фолбэк
                 if "error" in data:
                     raise RuntimeError(data["error"].get("message", "MCP error"))
                 result = data.get("result") or {}
@@ -768,7 +795,7 @@ class McpDocClient:
         payload = {"jsonrpc": "2.0", "id": self._next_id(), "method": "tools/call",
                    "params": {"name": self._tool, "arguments": {"query": query}}}
         try:
-            status, sid, body = self._post(payload)
+            _, sid, body = self._post(payload)
         except urllib.error.HTTPError as e:
             # сессия умерла — полный handshake и повтор
             if e.code in (400, 404):
@@ -807,7 +834,7 @@ class McpDocClient:
         payload = {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
                    "params": {"name": self._tool or "microsoft_docs_search",
                               "arguments": {"query": query}}}
-        status, sid, body = self._post(payload)
+        _, sid, body = self._post(payload)
         if sid:
             self._session_id = sid
         return self._parse_payload(self._sse_text(body))
@@ -837,10 +864,10 @@ class McpDocClient:
 _MCP_CLIENT = None  # общий клиент (потокобезопасен: _search_once атомарен по lock)
 
 
-def _get_mcp_client(log=None):
+def _get_mcp_client():
     global _MCP_CLIENT
     if _MCP_CLIENT is None:
-        _MCP_CLIENT = McpDocClient(log)
+        _MCP_CLIENT = McpDocClient()
     return _MCP_CLIENT
 
 
@@ -930,7 +957,7 @@ class DocSearchManager:
         self._log(f"[INFO] Searching: {func_name} → {safe_name}")
 
         # 1) Прямой MCP-клиент (общий для всех потоков пула)
-        client = _get_mcp_client(self._log)
+        client = _get_mcp_client()
         try:
             results = client.search(safe_name)
             if self._cancelled.is_set():
@@ -1157,7 +1184,11 @@ def _manpages_open(candidates, log):
             continue
         try:
             conn = sqlite3.connect(str(p))
-            count = conn.execute("SELECT COUNT(*) FROM function_index").fetchone()[0]
+            try:
+                count = conn.execute("SELECT COUNT(*) FROM function_index").fetchone()[0]
+            except sqlite3.Error:
+                conn.close()
+                raise
         except sqlite3.Error as e:
             log(f"[WARN] БД man-pages не читается ({p}): {e}")
             continue
@@ -1201,11 +1232,12 @@ def _sfa_index_open(index_db):
     p = Path(index_db)
     if not p.is_file():
         return None
+    conn = sqlite3.connect(str(p))
     try:
-        conn = sqlite3.connect(str(p))
         conn.execute("SELECT 1 FROM system_functions LIMIT 1").fetchone()
         return conn
     except sqlite3.Error:
+        conn.close()
         return None
 
 
@@ -1421,13 +1453,15 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
             log(f"[INFO] {func_name}: поиск документации недоступен для {platform}")
         elif doc_manager is not None:
             # Документации нет в кэше — поиск уйдёт в пул параллельно.
+            # (На этой ветке results/found гарантированно не установлены,
+            # так что needs_doc всегда True — как в reuse-ветке выше.)
             if func_name not in pending:
                 fut = doc_manager.submit(func_name)
                 if fut is None:
                     log(f"[INFO] {func_name}: поиск отменён")
                 else:
                     pending[func_name] = fut
-            needs_doc = results is None and not found
+            needs_doc = True
         else:
             log(f"[INFO] {func_name}: поиск документации недоступен")
 
@@ -1570,14 +1604,7 @@ def _platform_label(platform):
 
 def _marked_js():
     """Встроенный marked.min.js (без внешних файлов)."""
-    try:
-        full = os.path.join(TEMPLATES_DIR, "..", "vendor", "marked.min.js")
-        if os.path.isfile(full):
-            with open(full, "r", encoding="utf-8") as f:
-                return f.read()
-    except Exception:
-        pass
-    return ""
+    return inline_vendor("marked.min.js")
 
 
 def generate_sfa_index(reports_dir, input_dir, report_links, ida_info,
@@ -1607,7 +1634,7 @@ def generate_sfa_index(reports_dir, input_dir, report_links, ida_info,
 #  Генератор «Сравнение» (diff)
 # ─────────────────────────────────────────────────────────────────
 
-def generate_diff_report(json_path, output_html, reports_dir, input_dir, internal_set):
+def generate_diff_report(json_path, output_html, reports_dir):
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     if not isinstance(data, dict):
@@ -1624,8 +1651,10 @@ def generate_diff_report(json_path, output_html, reports_dir, input_dir, interna
         "real_secondary": data.get("real_secondary", ""),
         "back_link": _back_link(output_html, reports_dir),
         "error": data.get("error"),
-        "file1": data.get("file1", {}),
-        "file2": data.get("file2", {}),
+        # `or {}` — ключ может присутствовать со значением null (generate_diff_index
+        # защищается от того же случая isinstance-проверкой).
+        "file1": data.get("file1") or {},
+        "file2": data.get("file2") or {},
         "total_functions1": data.get("total_functions1", 0),
         "total_functions2": data.get("total_functions2", 0),
         "global_hex_diff": data.get("global_hex_diff", []),
@@ -1844,9 +1873,9 @@ def build_sfa_index(index_db, json_files, platform):
             if not file_size:
                 alongside = jp.parent / Path(file_name).name
                 if alongside.exists():
-                    file_size = alongside.stat().st_size
+                    file_size = _stat_size_safe(alongside)
             if not file_size and src.exists():
-                file_size = src.stat().st_size
+                file_size = _stat_size_safe(src)
 
             conn.execute("DELETE FROM file_imports WHERE json_path = ?", (jp_str,))
             conn.execute("DELETE FROM file_libs WHERE json_path = ?", (jp_str,))
@@ -1947,7 +1976,7 @@ def run_generate(args):
         total_files = 0
         total_size = 0
 
-        for jp in sorted(json_files, key=lambda p: p.stat().st_size if p.exists() else 0, reverse=True):
+        for jp in sorted(json_files, key=_stat_size_safe, reverse=True):
             try:
                 with open(jp, "r", encoding="utf-8") as f:
                     data = json.load(f)
@@ -1980,8 +2009,16 @@ def run_generate(args):
                 rel = Path(original)
             out_rel = rel.with_suffix(rel.suffix + ".html")
             output_html = reports_dir / out_rel
-            generate_analysis_report(str(jp), str(output_html), str(input_dir), internal_set,
-                                     reports_dir=str(reports_dir))
+            # Per-file guard (как в diff-ветке): один битый JSON/шаблон не должен
+            # валить весь прогон — остальные отчёты генерируются дальше.
+            try:
+                generate_analysis_report(str(jp), str(output_html), internal_set,
+                                         reports_dir=str(reports_dir))
+            except Exception as e:
+                emit_error(f"Ошибка генерации отчёта {jp.name}: {e}")
+                done += 1
+                emit_progress(done, total, "")
+                continue
 
             link = out_rel.as_posix()
             display = rel.as_posix()
@@ -1989,9 +2026,9 @@ def run_generate(args):
             if not file_size:
                 alongside = jp.parent / original
                 if alongside.exists():
-                    file_size = alongside.stat().st_size
+                    file_size = _stat_size_safe(alongside)
                 elif source_full.exists():
-                    file_size = source_full.stat().st_size
+                    file_size = _stat_size_safe(source_full)
 
             report_links.append({"filename": link, "display_name": display})
             global_modules.update(modules)
@@ -2033,8 +2070,10 @@ def run_generate(args):
             # использоваться те же словари, что и в анализе.
             try:
                 conn = sqlite3.connect(str(sfa_index_db))
-                row = conn.execute("SELECT value FROM meta WHERE key='platform'").fetchone()
-                conn.close()
+                try:
+                    row = conn.execute("SELECT value FROM meta WHERE key='platform'").fetchone()
+                finally:
+                    conn.close()
                 if row and row[0]:
                     platform = _normalize_platform(row[0])
             except Exception:
@@ -2104,7 +2143,7 @@ def run_generate(args):
         total_imports_all = 0
         gsf, gsl, gsn = set(), set(), set()
 
-        for jp in sorted(json_files, key=lambda p: p.stat().st_size if p.exists() else 0, reverse=True):
+        for jp in sorted(json_files, key=_stat_size_safe, reverse=True):
             if _cancel_requested(doc_manager):
                 break
             if not jp.exists() and not args.reuse_cache:
@@ -2159,14 +2198,22 @@ def run_generate(args):
                 emit_progress(done, total,
                               f"{rel.as_posix()} → документация: {func_name} ({done_docs}/{total_docs})")
 
-            stats = generate_sfa_report(
-                str(jp), str(output_html), str(reports_dir), str(input_dir),
-                platform,
-                data_override=data if args.reuse_cache and not jp.exists() else None,
-                reuse_cache=args.reuse_cache,
-                doc_cache=doc_cache, manpages_conn=manpages_conn,
-                sfa_index_conn=sfa_index_conn, log=log.log, progress=on_func,
-                doc_manager=doc_manager, doc_progress=on_doc)
+            # Per-file guard: один битый JSON/шаблон не валит весь прогон СФ
+            # (stats is None — отмена; исключение — продолжаем с другими файлами).
+            try:
+                stats = generate_sfa_report(
+                    str(jp), str(output_html), str(reports_dir), str(input_dir),
+                    platform,
+                    data_override=data if args.reuse_cache and not jp.exists() else None,
+                    reuse_cache=args.reuse_cache,
+                    doc_cache=doc_cache, manpages_conn=manpages_conn,
+                    sfa_index_conn=sfa_index_conn, log=log.log, progress=on_func,
+                    doc_manager=doc_manager, doc_progress=on_doc)
+            except Exception as e:
+                emit_error(f"Ошибка генерации отчёта {os.path.basename(str(jp))}: {e}")
+                done += 1
+                emit_progress(done, total, "")
+                continue
 
             if stats is None:
                 # Отмена: без сводного отчёта и результата
@@ -2174,15 +2221,17 @@ def run_generate(args):
 
             file_size = int(data.get("file_size") or 0)
             if not file_size and source_full.exists():
-                file_size = source_full.stat().st_size
+                file_size = _stat_size_safe(source_full)
             if not file_size:
                 # для reuse — из index БД
                 try:
                     conn = sqlite3.connect(str(sfa_index_db))
-                    row = conn.execute(
-                        "SELECT file_size FROM file_imports WHERE json_path = ? LIMIT 1",
-                        (str(jp),)).fetchone()
-                    conn.close()
+                    try:
+                        row = conn.execute(
+                            "SELECT file_size FROM file_imports WHERE json_path = ? LIMIT 1",
+                            (str(jp),)).fetchone()
+                    finally:
+                        conn.close()
                     if row and row[0]:
                         file_size = row[0]
                 except Exception:
@@ -2309,7 +2358,7 @@ def run_generate(args):
         # псевдо-модулей (.dynsym), за вычетом уже кэшированных.
         funcs = []
         seen = set()
-        for jp in sorted(json_files, key=lambda p: p.stat().st_size if p.exists() else 0, reverse=True):
+        for jp in sorted(json_files, key=_stat_size_safe, reverse=True):
             if _cancel_requested(None):
                 break
             try:
@@ -2402,7 +2451,7 @@ def run_generate(args):
         for jf in sorted(json_files):
             html_path = reports_dir / (jf.stem.replace(".diff", "") + ".html")
             try:
-                generate_diff_report(str(jf), str(html_path), str(reports_dir), str(left), None)
+                generate_diff_report(str(jf), str(html_path), str(reports_dir))
             except Exception as e:
                 emit_error(f"Ошибка генерации отчёта {jf.name}: {e}")
             done += 1

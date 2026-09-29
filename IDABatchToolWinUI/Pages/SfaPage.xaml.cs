@@ -23,6 +23,8 @@ public sealed partial class SfaPage : Page
     private HtmlGenWorker? _docsWorker;
     private List<FileItem> _cachedFiles = new();
     private bool _exportAllAfterAnalysis;
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _refreshTimer;
+    private int _refreshGeneration;
 
 public SfaPage()
     {
@@ -37,6 +39,12 @@ public SfaPage()
         SfaCancelButton.Click += (_, _) => CancelAnalysis();
         SfaGenerateHtmlButton.Click += GenerateHtml_Click;
         SfaInputDirTextBox.TextChanged += (_, _) => RefreshFileList();
+
+        // Скан папки — в фоне с дебаунсом TextChanged (как на вкладке «Общий анализ»).
+        _refreshTimer = DispatcherQueue.CreateTimer();
+        _refreshTimer.Interval = TimeSpan.FromMilliseconds(400);
+        _refreshTimer.IsRepeating = false;
+        _refreshTimer.Tick += (_, _) => _ = RefreshFileListAsync();
 
         Loaded += (_, _) => RefreshFileList();
     }
@@ -68,15 +76,50 @@ public SfaPage()
 
     private void RefreshFileList()
     {
+        // Перезапуск дебаунса: применяется последний вариант пути
+        _refreshTimer.Stop();
+        _refreshTimer.Start();
+    }
+
+    private async Task RefreshFileListAsync()
+    {
+        var gen = ++_refreshGeneration;
         var inputDir = SfaInputDirTextBox.Text.Trim();
-        if (string.IsNullOrEmpty(inputDir) || !Directory.Exists(inputDir))
+
+        List<FileItem> files;
+        try
         {
-            _cachedFiles = new List<FileItem>();
-            SfaTreemap.SetData(_cachedFiles);
+            files = await Task.Run(() => ScanInputFiles(inputDir));
+        }
+        catch (Exception)
+        {
+            if (gen != _refreshGeneration) return;
+            files = new List<FileItem>();
+        }
+        if (gen != _refreshGeneration) return; // уже запрошен более свежий скан
+
+        _cachedFiles = files;
+
+        if (_cachedFiles.Count == 0)
+        {
+            SfaTreemap.SetData(new List<FileItem>());
             SfaGenerateHtmlButton.IsEnabled = false;
             SfaPlatformInfoBar.IsOpen = false;
             return;
         }
+
+        // Платформа — по фактическим файлам (расширения, при их отсутствии — сигнатуры)
+        UpdatePlatformBar(PlatformInfo.DetectPlatform(_cachedFiles.Select(f => f.Path)));
+
+        SfaTreemap.SetData(_cachedFiles);
+        SfaGenerateHtmlButton.IsEnabled = _cachedFiles.Any(f => File.Exists(f.ExpectedI64Path));
+    }
+
+    /// <summary>Поиск исполняемых файлов и распаковка архивов — вне UI-потока.</summary>
+    private static List<FileItem> ScanInputFiles(string inputDir)
+    {
+        if (string.IsNullOrEmpty(inputDir) || !Directory.Exists(inputDir))
+            return new List<FileItem>();
 
         // Поиск сразу по всем расширениям всех платформ: платформа определяется
         // по фактическому содержимому папки. Раньше поиск шёл по расширениям
@@ -99,21 +142,7 @@ public SfaPage()
             }
         }
 
-        _cachedFiles = files.Distinct().Select(MakeItem).ToList();
-
-        if (_cachedFiles.Count == 0)
-        {
-            SfaTreemap.SetData(new List<FileItem>());
-            SfaGenerateHtmlButton.IsEnabled = false;
-            SfaPlatformInfoBar.IsOpen = false;
-            return;
-        }
-
-        // Платформа — по фактическим файлам (расширения, при их отсутствии — сигнатуры)
-        UpdatePlatformBar(PlatformInfo.DetectPlatform(_cachedFiles.Select(f => f.Path)));
-
-        SfaTreemap.SetData(_cachedFiles);
-        SfaGenerateHtmlButton.IsEnabled = _cachedFiles.Any(f => File.Exists(f.ExpectedI64Path));
+        return files.Distinct().Select(MakeItem).ToList();
     }
 
     private static FileItem MakeItem(string path)

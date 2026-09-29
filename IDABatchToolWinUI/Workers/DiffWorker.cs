@@ -76,6 +76,25 @@ public sealed class DiffWorker : IDisposable
 
     private async Task RunCore(CancellationToken ct)
     {
+        // Страховка: любое исключение из фаз не должно терять Finished —
+        // иначе страница навсегда остаётся в состоянии «выполняется».
+        try
+        {
+            await RunCoreInner(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            Abort();
+        }
+        catch (Exception e)
+        {
+            ErrorOccurred?.Invoke($"Критическая ошибка сравнения: {e.Message}");
+            Abort();
+        }
+    }
+
+    private async Task RunCoreInner(CancellationToken ct)
+    {
         var total = Pairs.Count;
         if (total == 0) { Finished?.Invoke(0, 0); return; }
 
@@ -514,6 +533,7 @@ public sealed class DiffWorker : IDisposable
                 leftDir: LeftDir, rightDir: RightDir, manpagesDb: null,
                 jsonPaths: jsonFiles), ct);
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception e)
         {
             ErrorOccurred?.Invoke($"Ошибка генерации отчётов: {e.Message}");
@@ -824,6 +844,7 @@ public sealed class DiffWorker : IDisposable
                 leftDir: LeftDir, rightDir: RightDir, manpagesDb: null,
                 jsonPaths: jsonFiles), ct);
         }
+        catch (OperationCanceledException) { throw; }
         catch (Exception e)
         {
             ErrorOccurred?.Invoke($"Ошибка генерации отчётов (доанализ): {e.Message}");
@@ -1295,16 +1316,19 @@ public sealed class DiffWorker : IDisposable
         var matches = diffData.TryGetValue("matched_functions", out var m) && m is List<object?> ml
             ? ml.OfType<Dictionary<string, object?>>().ToList() : new List<Dictionary<string, object?>>();
 
+        // Индекс по именам: линейный FirstOrDefault на каждую пару давал O(n²)
+        // на больших экспортах (тысячи функций × тысячи совпадений).
+        var idx1 = BuildNameIndex(primFuncs);
+        var idx2 = BuildNameIndex(secFuncs);
+
         var allT1 = new Dictionary<string, long>();
         var allT2 = new Dictionary<string, long>();
         foreach (var mf in matches)
         {
             var a1 = Convert.ToString(mf["address1"]) ?? "";
             var a2 = Convert.ToString(mf["address2"]) ?? "";
-            var f1 = FindFunc(primFuncs, a1, Convert.ToString(mf.GetValue("name1")))
-                ?? FindFuncByName(primFuncs, Convert.ToString(mf.GetValue("name1")));
-            var f2 = FindFunc(secFuncs, a2, Convert.ToString(mf.GetValue("name2")))
-                ?? FindFuncByName(secFuncs, Convert.ToString(mf.GetValue("name2")));
+            var f1 = LookupFunc(primFuncs, idx1, a1, Convert.ToString(mf.GetValue("name1")));
+            var f2 = LookupFunc(secFuncs, idx2, a2, Convert.ToString(mf.GetValue("name2")));
 
             mf["pseudocode1"] = f1?.GetValue("pseudocode") ?? "";
             mf["pseudocode2"] = f2?.GetValue("pseudocode") ?? "";
@@ -1370,21 +1394,36 @@ public sealed class DiffWorker : IDisposable
     private static void AddTo(Dictionary<string, long> d, string key, long value)
         => d[key] = (d.TryGetValue(key, out var v) ? v : 0) + value;
 
-    private static Dictionary<string, object?>? FindFunc(
-        Dictionary<string, Dictionary<string, object?>> funcs, string addr, string? name)
+    /// <summary>Индекс функций по имени (первая встретившаяся — как при линейном поиске).</summary>
+    private static Dictionary<string, Dictionary<string, object?>> BuildNameIndex(
+        Dictionary<string, Dictionary<string, object?>> funcs)
     {
-        if (funcs.TryGetValue(addr, out var f)) return f;
-        return FindFuncByName(funcs, name);
+        var idx = new Dictionary<string, Dictionary<string, object?>>(StringComparer.Ordinal);
+        foreach (var f in funcs.Values)
+        {
+            var nm = Convert.ToString(f.GetValue("name"))?.Trim();
+            if (string.IsNullOrEmpty(nm)) continue;
+            if (!idx.ContainsKey(nm)) idx[nm] = f;
+            if (nm.StartsWith("sub_", StringComparison.Ordinal))
+            {
+                var bare = nm["sub_".Length..];
+                if (!idx.ContainsKey(bare)) idx[bare] = f;
+            }
+        }
+        return idx;
     }
 
-    private static Dictionary<string, object?>? FindFuncByName(
-        Dictionary<string, Dictionary<string, object?>> funcs, string? name)
+    /// <summary>Функция по адресу, при промахе — по имени (напрямую и без префикса sub_).</summary>
+    private static Dictionary<string, object?>? LookupFunc(
+        Dictionary<string, Dictionary<string, object?>> funcs,
+        Dictionary<string, Dictionary<string, object?>> nameIndex,
+        string addr, string? name)
     {
+        if (addr.Length > 0 && funcs.TryGetValue(addr, out var f)) return f;
         if (string.IsNullOrEmpty(name)) return null;
-        var n = name.StartsWith("sub_") ? name["sub_".Length..] : name;
-        return funcs.Values.FirstOrDefault(v =>
-            Convert.ToString(v.GetValue("name")) == n ||
-            Convert.ToString(v.GetValue("name")) == name);
+        var n = name.StartsWith("sub_", StringComparison.Ordinal) ? name["sub_".Length..] : name;
+        return nameIndex.TryGetValue(n, out var r) ? r
+            : nameIndex.TryGetValue(name, out var r2) ? r2 : null;
     }
 
     private static List<object?> ComputePseudocodeDiff(string l1, string l2)
@@ -1427,9 +1466,10 @@ public sealed class DiffWorker : IDisposable
         {
             if (i < a.Count && j < b.Count && a[i] == b[j])
             {
-                int s = i;
+                int s = i, sj = j;
                 while (i < a.Count && j < b.Count && a[i] == b[j]) { i++; j++; }
-                ops.Add(("equal", s, i, j - (i - s) - (j - (i - s)) /*placeholder*/, j));
+                // J1 — начало равного участка в b: у обоих файлов участок одной длины.
+                ops.Add(("equal", s, i, sj, j));
             }
             else if (i < a.Count && j < b.Count)
             {
@@ -1466,11 +1506,15 @@ public sealed class DiffWorker : IDisposable
         var rows = new List<object?>();
         long matchingBytes = 0;
 
-        // Индекс 16-байтовых ключей data2
-        var startIndex = new Dictionary<string, List<int>>();
+        // Индекс 16-байтовых ключей data2: пара ulong вместо base64-строки —
+        // на каждую позицию бывшая строка давала десятки миллионов аллокаций.
+        static (ulong Lo, ulong Hi) Key16(byte[] d, int pos)
+            => (BitConverter.ToUInt64(d, pos), BitConverter.ToUInt64(d, pos + 8));
+
+        var startIndex = new Dictionary<(ulong Lo, ulong Hi), List<int>>();
         for (int pos = 0; pos + minMatch <= d2.Length; pos++)
         {
-            var key = Convert.ToBase64String(d2, pos, minMatch);
+            var key = Key16(d2, pos);
             if (!startIndex.TryGetValue(key, out var l)) { l = new List<int>(); startIndex[key] = l; }
             l.Add(pos);
         }
@@ -1482,7 +1526,7 @@ public sealed class DiffWorker : IDisposable
             int maxLen = 0, bestPos2 = -1;
             if (d1.Length - p1 >= minMatch)
             {
-                var key = Convert.ToBase64String(d1, p1, minMatch);
+                var key = Key16(d1, p1);
                 if (startIndex.TryGetValue(key, out var positions))
                 {
                     foreach (var pc in positions)
@@ -1496,7 +1540,6 @@ public sealed class DiffWorker : IDisposable
 
             if (maxLen >= minMatch && bestPos2 >= 0)
             {
-                var block = d1.Skip(p1).Take(maxLen).ToArray();
                 if (p1 == bestPos2)
                 {
                     // equal — сжато
@@ -1537,12 +1580,13 @@ public sealed class DiffWorker : IDisposable
             else
             {
                 int actual = Math.Min(minMatch, d1.Length - p1);
+                var chunk = d1.Skip(p1).Take(actual).ToArray();
                 rows.Add(new Dictionary<string, object?>
                 {
                     ["type"] = "deleted",
                     ["addr"] = $"{p1:x8}",
-                    ["left_bytes"] = MakeHexBytes(d1.Skip(p1).Take(actual).ToArray()),
-                    ["left_ascii"] = MakeAscii(d1.Skip(p1).Take(actual).ToArray()),
+                    ["left_bytes"] = MakeHexBytes(chunk),
+                    ["left_ascii"] = MakeAscii(chunk),
                 });
                 p1 += actual;
             }
@@ -1640,7 +1684,16 @@ public sealed class DiffWorker : IDisposable
         PairProcessStarted?.Invoke(relKey, proc.Id);
         var so = proc.StandardOutput.ReadToEndAsync();
         var se = proc.StandardError.ReadToEndAsync();
-        await proc.WaitForExitAsync(ct);
+        try
+        {
+            await proc.WaitForExitAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // Отмена: гасим дерево процессов, иначе idat.exe остаётся висеть.
+            try { proc.Kill(entireProcessTree: true); } catch { /* уже завершён */ }
+            throw;
+        }
         await Task.WhenAll(so, se);
         return new ProcResult(proc.ExitCode, await so, await se);
     }
@@ -1664,6 +1717,12 @@ public sealed class DiffWorker : IDisposable
         {
             try { proc.Kill(entireProcessTree: true); } catch { }
             return new ProcResult(-1, await so, await se);
+        }
+        catch (OperationCanceledException)
+        {
+            // Отмена: гасим дерево процессов, иначе экспорт Diaphora остаётся висеть.
+            try { proc.Kill(entireProcessTree: true); } catch { }
+            throw;
         }
         await Task.WhenAll(so, se);
         return new ProcResult(proc.ExitCode, await so, await se);

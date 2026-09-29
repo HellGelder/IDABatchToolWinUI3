@@ -44,6 +44,7 @@ public sealed partial class MainWindow : Window
 
         NavView.SelectedItem = NavAnalysis;
         NavFrame.Navigate(typeof(AnalysisPage));
+        _analysisPage = NavFrame.Content as AnalysisPage;
     }
 
     private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -71,7 +72,6 @@ public sealed partial class MainWindow : Window
             case "analysis":
                 if (_analysisPage == null)
                 {
-                    _analysisPage = new AnalysisPage();
                     NavFrame.Navigate(typeof(AnalysisPage));
                     _analysisPage = NavFrame.Content as AnalysisPage;
                 }
@@ -83,7 +83,6 @@ public sealed partial class MainWindow : Window
             case "diff":
                 if (_diffPage == null)
                 {
-                    _diffPage = new DiffPage();
                     NavFrame.Navigate(typeof(DiffPage));
                     _diffPage = NavFrame.Content as DiffPage;
                 }
@@ -95,7 +94,6 @@ public sealed partial class MainWindow : Window
             case "sfa":
                 if (_sfaPage == null)
                 {
-                    _sfaPage = new SfaPage();
                     NavFrame.Navigate(typeof(SfaPage));
                     _sfaPage = NavFrame.Content as SfaPage;
                 }
@@ -107,9 +105,11 @@ public sealed partial class MainWindow : Window
             case "settings":
                 if (NavFrame.Content is not SettingsPage)
                 {
-                    var settings = new SettingsPage();
-                    settings.ConfigChanged += cfg => ThemeHelper.Apply(this, cfg.Theme);
                     NavFrame.Navigate(typeof(SettingsPage));
+                    // Подписка — на фактический контент Frame, а не на временный
+                    // экземпляр: иначе событие изменения конфигурации не доходило.
+                    if (NavFrame.Content is SettingsPage sp)
+                        sp.ConfigChanged += cfg => ThemeHelper.Apply(this, cfg.Theme);
                 }
                 break;
         }

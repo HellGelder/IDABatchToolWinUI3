@@ -134,7 +134,8 @@ public sealed class HtmlGenWorker : IDisposable
 
         if (_proc.ExitCode != 0 && result.GeneratedCount == 0)
         {
-            var err = stderrTask.Result.Trim();
+            string err = "";
+            try { err = stderrTask.Result.Trim(); } catch { /* канал закрыт */ }
             if (!string.IsNullOrEmpty(err)) ErrorOccurred?.Invoke(err);
         }
         Finished?.Invoke(result);

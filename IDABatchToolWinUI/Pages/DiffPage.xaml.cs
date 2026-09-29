@@ -16,8 +16,9 @@ public sealed partial class DiffPage : Page
     private bool _diffInProgress;
     private DiffWorker? _worker;
     private string? _outputDir;
-    private List<DiffPair> _allPairs = new();
     private readonly Dictionary<string, TextBlock> _stageLabels = new();
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _analyzeTimer;
+    private int _analyzeGeneration;
 
 public DiffPage()
     {
@@ -35,6 +36,12 @@ public DiffPage()
 
         LeftDirTextBox.TextChanged += (_, _) => AnalyzeDirectories();
         RightDirTextBox.TextChanged += (_, _) => AnalyzeDirectories();
+
+        // Рекурсивный скан двух директорий — в фоне; TextChanged дебаунсится.
+        _analyzeTimer = DispatcherQueue.CreateTimer();
+        _analyzeTimer.Interval = TimeSpan.FromMilliseconds(400);
+        _analyzeTimer.IsRepeating = false;
+        _analyzeTimer.Tick += (_, _) => _ = AnalyzeDirectoriesAsync();
 
         Loaded += (_, _) => AnalyzeDirectories();
     }
@@ -59,34 +66,69 @@ public DiffPage()
         UpdateSelectedCount();
     }
 
-    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
-    {
-        for (int i = 0; i < Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
-        {
-            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(parent, i);
-            if (child is T t) return t;
-            if (FindVisualChild<T>(child) is { } deeper) return deeper;
-        }
-        return null;
-    }
-
     // ──────────────────────────────────────────────
     //  Анализ директорий
     // ──────────────────────────────────────────────
 
     private void AnalyzeDirectories()
     {
+        // Перезапуск дебаунса: применяется последний вариант путей
+        _analyzeTimer.Stop();
+        _analyzeTimer.Start();
+    }
+
+    private async Task AnalyzeDirectoriesAsync()
+    {
+        var gen = ++_analyzeGeneration;
         var left = LeftDirTextBox.Text.Trim();
         var right = RightDirTextBox.Text.Trim();
 
-        _allPairs = new List<DiffPair>();
-        if (!Directory.Exists(left) || !Directory.Exists(right))
+        DirScanResult scan;
+        try
+        {
+            scan = await Task.Run(() => ScanPairs(left, right));
+        }
+        catch (Exception)
+        {
+            if (gen != _analyzeGeneration) return;
+            scan = new DirScanResult(false, new List<PairRowViewModel>(), 0, 0, 0, 0);
+        }
+        if (gen != _analyzeGeneration) return; // уже запрошен более свежий скан
+
+        if (!scan.DirsExist)
         {
             MapStatusLabel.Text = "Укажите обе директории для анализа.";
             StartDiffButton.IsEnabled = false;
             PairsListView.ItemsSource = null;
             return;
         }
+
+        PairsListView.ItemsSource = scan.Rows;
+        ApplyInitialStatuses(scan.Rows);
+
+        if (scan.Rows.Count > 0)
+        {
+            var selected = scan.Rows.Count(r => r.IsSelected);
+            var msg = $"✅ {scan.Rows.Count} пар сопоставлено, выбрано: {selected}";
+            if (scan.OnlyLeft > 0) msg += $" (+{scan.OnlyLeft} только слева)";
+            if (scan.OnlyRight > 0) msg += $" (+{scan.OnlyRight} только справа)";
+            MapStatusLabel.Text = msg;
+            StartDiffButton.IsEnabled = selected > 0;
+        }
+        else
+        {
+            MapStatusLabel.Text = $"❌ Нет совпадений: {scan.LeftCount} слева, {scan.RightCount} справа.";
+            StartDiffButton.IsEnabled = false;
+        }
+    }
+
+    private sealed record DirScanResult(
+        bool DirsExist, List<PairRowViewModel> Rows, int LeftCount, int RightCount, int OnlyLeft, int OnlyRight);
+
+    private static DirScanResult ScanPairs(string left, string right)
+    {
+        if (!Directory.Exists(left) || !Directory.Exists(right))
+            return new DirScanResult(false, new List<PairRowViewModel>(), 0, 0, 0, 0);
 
         var leftMap = new Dictionary<string, string>();
         foreach (var p in SafeFindI64(left))
@@ -102,11 +144,10 @@ public DiffPage()
         var onlyLeft = leftSet.Except(rightSet).Count();
         var onlyRight = rightSet.Except(leftSet).Count();
 
-        _allPairs = common.Select(rel => new DiffPair(leftMap[rel], rightMap[rel], rel)).ToList();
-
         var rows = new List<PairRowViewModel>();
-        foreach (var pair in _allPairs)
+        foreach (var rel in common)
         {
+            var pair = new DiffPair(leftMap[rel], rightMap[rel], rel);
             long size = File.Exists(pair.Primary) ? new FileInfo(pair.Primary).Length : 0;
             var sizeText = size < 1024 * 1024 ? $"{size / 1024} KB" : $"{size / 1024.0 / 1024.0:F1} MB";
             rows.Add(new PairRowViewModel
@@ -116,23 +157,7 @@ public DiffPage()
             });
         }
 
-        PairsListView.ItemsSource = rows;
-        ApplyInitialStatuses(rows);
-
-        if (common.Count > 0)
-        {
-            var selected = rows.Count(r => r.IsSelected);
-            var msg = $"✅ {common.Count} пар сопоставлено, выбрано: {selected}";
-            if (onlyLeft > 0) msg += $" (+{onlyLeft} только слева)";
-            if (onlyRight > 0) msg += $" (+{onlyRight} только справа)";
-            MapStatusLabel.Text = msg;
-            StartDiffButton.IsEnabled = selected > 0;
-        }
-        else
-        {
-            MapStatusLabel.Text = $"❌ Нет совпадений: {leftSet.Count} слева, {rightSet.Count} справа.";
-            StartDiffButton.IsEnabled = false;
-        }
+        return new DirScanResult(true, rows, leftSet.Count, rightSet.Count, onlyLeft, onlyRight);
     }
 
     private void UpdateSelectedCount()

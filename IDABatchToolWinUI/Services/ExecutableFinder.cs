@@ -6,15 +6,6 @@ namespace IDABatchToolWinUI.Services;
 /// </summary>
 public static class ExecutableFinder
 {
-    public static bool IsMachO(ReadOnlySpan<byte> magic4)
-    {
-        if (magic4.Length < 4) return false;
-        var magic = BitConverter.ToUInt32(magic4[..4]);
-        return magic is 0xFEEDFACE or 0xFEEDFACF or 0xCAFEBABE or 0xCEFAEDFE or 0xCFFAEDFE;
-    }
-
-    private static uint ReadUInt32LE(ReadOnlySpan<byte> b) => BitConverter.ToUInt32(b[..4]);
-
     public static bool IsExecutable(string filePath)
     {
         try

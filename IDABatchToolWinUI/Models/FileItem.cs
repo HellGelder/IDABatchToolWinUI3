@@ -9,7 +9,6 @@ public sealed class FileItem
     public required string Path { get; init; }
     public long Size { get; set; }
     public AnalysisStatus Status { get; set; } = AnalysisStatus.NotAnalyzed;
-    public string StatusText => Status.ToText();
 
     /// <summary>Путь к ожидаемой базе .i64 рядом с файлом.</summary>
     public string ExpectedI64Path => System.IO.Path.Combine(

@@ -16,8 +16,6 @@ public sealed class AppConfig
     public string LogLevel { get; set; } = "INFO";
     public string Theme { get; set; } = "light";
     public string ManPagesDbPath { get; set; } = "";
-
-    public AppConfig Clone() => (AppConfig)MemberwiseClone();
 }
 
 public static class ConfigService

@@ -16,13 +16,21 @@
     ERROR <message>
     DONE <path>
 """
+import io
 import os
 import re
 import sqlite3
 import sys
 import tarfile
-import tempfile
 from pathlib import Path
+
+# Переносимая поставка: если мост запущен от Tools\Python рядом с приложением,
+# подключаем соседний site-packages (requests), иначе он не виден.
+# Вставка пути — ДО import requests, иначе фолбэк никогда не срабатывает.
+_SP = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    "..", "..", "Tools", "Python", "site-packages"))
+if os.path.isdir(_SP) and _SP not in sys.path:
+    sys.path.insert(0, _SP)
 
 try:
     import requests
@@ -33,14 +41,6 @@ MANPAGES_VERSION = "6.9"
 MANPAGES_ARCHIVE_URL = f"https://www.kernel.org/pub/linux/docs/man-pages/man-pages-{MANPAGES_VERSION}.tar.xz"
 
 _SECTION_RE = re.compile(r"man/man([23])/(.+)\.([23][a-z]*)$")
-
-# Переносимая поставка: если мост запущен от Tools\Python рядом с приложением,
-# подключаем соседний site-packages (requests), иначе он не виден.
-import sys as _sys
-_SP = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                    "..", "..", "Tools", "Python", "site-packages"))
-if os.path.isdir(_SP) and _SP not in _sys.path:
-    _sys.path.insert(0, _SP)
 
 # Протокол обмена с GUI (PROGRESS/ERROR/DONE) — строго UTF-8: без этого
 # pythonw пишет в канал в системной кодировке (cp1251), и русские сообщения
@@ -73,20 +73,6 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 """
 
-# Стандартные секции/разделы man-страниц (для извлечения title/summary/library)
-_SECTION_HEADINGS = {
-    "NAME": "title",
-    "SYNOPSIS": "synopsis",
-    "LIBRARY": "library",
-    "DESCRIPTION": "description",
-    "VERSIONS": "versions",
-    "CONFORMING TO": "conforming",
-    "NOTES": "notes",
-    "BUGS": "bugs",
-    "EXAMPLES": "examples",
-    "SEE ALSO": "see_also",
-}
-
 
 def prog(pct, msg):
     try:
@@ -107,14 +93,6 @@ def done(msg):
         print(f"DONE {msg}", flush=True)
     except Exception:
         pass
-
-
-def _strip_roff_macro(line):
-    """Убирает простые roff-макросы (.SH, .TH, .B и т.п.) в начале строки."""
-    m = re.match(r"^\.\w+(?:\s+(.*))?$", line.strip())
-    if m:
-        return (m.group(1) or "").strip()
-    return line.strip()
 
 
 def _parse_roff_text(text):
@@ -215,74 +193,65 @@ def import_archive(db_path, payload, progress_callback=None):
     try:
         conn.executescript(_SCHEMA_SQL)
 
-        # читаем архив
-        with tempfile.NamedTemporaryFile(suffix=".tar.xz", delete=False) as tmp:
-            tmp.write(payload)
-            tmp_path = tmp.name
-
         inserts_pages = 0
         inserts_funcs = 0
-        try:
-            with tarfile.open(tmp_path, "r:xz") as tar:
-                members = [m for m in tar.getmembers() if m.isfile()]
-                total = len(members)
-                for idx, m in enumerate(members):
-                    name = m.name.replace("\\", "/")
-                    rel = _SECTION_RE.search(name)
-                    if not rel:
+        # Архив целиком в памяти — без временного файла на диске
+        # (класс ошибок «забытый tmp-файл» исчезает).
+        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:xz") as tar:
+            members = [m for m in tar.getmembers() if m.isfile()]
+            total = len(members)
+            for idx, m in enumerate(members):
+                name = m.name.replace("\\", "/")
+                rel = _SECTION_RE.search(name)
+                if not rel:
+                    continue
+                section = rel.group(1)
+                fname = rel.group(2)
+
+                # читаем содержимое и извлекаем NAME / LIBRARY
+                try:
+                    f = tar.extractfile(m)
+                    if f is None:
                         continue
-                    section = rel.group(1)
-                    fname = rel.group(2)
+                    content = f.read().decode("utf-8", errors="replace")
+                except Exception:
+                    continue
 
-                    # читаем содержимое и извлекаем NAME / LIBRARY
-                    try:
-                        f = tar.extractfile(m)
-                        if f is None:
-                            continue
-                        content = f.read().decode("utf-8", errors="replace")
-                    except Exception:
+                md = _parse_roff_text(content)
+                secs = _extract_sections(md)
+                title, summary = _title_from_name(secs.get("NAME", ""))
+                library = secs.get("LIBRARY", "")[:200]
+
+                page_name = fname
+                conn.execute(
+                    "INSERT OR REPLACE INTO pages "
+                    "(page_name, section, title, library, summary, markdown) "
+                    "VALUES (?,?,?,?,?,?)",
+                    (page_name, section, ", ".join(title), library, summary, md))
+                inserts_pages += 1
+
+                for fn in title:
+                    fn = fn.strip()
+                    if not fn or not re.match(r"^[a-zA-Z_][\w]*$", fn):
                         continue
-
-                    md = _parse_roff_text(content)
-                    secs = _extract_sections(md)
-                    title, summary = _title_from_name(secs.get("NAME", ""))
-                    library = secs.get("LIBRARY", "")[:200]
-
-                    page_name = fname
                     conn.execute(
-                        "INSERT OR REPLACE INTO pages "
-                        "(page_name, section, title, library, summary, markdown) "
-                        "VALUES (?,?,?,?,?,?)",
-                        (page_name, section, ", ".join(title), library, summary, md))
-                    inserts_pages += 1
+                        "INSERT OR REPLACE INTO function_index (func_name, page_name, section) "
+                        "VALUES (?,?,?)", (fn, page_name, section))
+                    inserts_funcs += 1
 
-                    for fn in title:
-                        fn = fn.strip()
-                        if not fn or not re.match(r"^[a-zA-Z_][\w]*$", fn):
-                            continue
-                        conn.execute(
-                            "INSERT OR REPLACE INTO function_index (func_name, page_name, section) "
-                            "VALUES (?,?,?)", (fn, page_name, section))
-                        inserts_funcs += 1
+                if progress_callback and (idx % 50 == 0 or idx == total - 1):
+                    progress_callback(idx + 1, total, f"Разбор {page_name}")
 
-                    if progress_callback and (idx % 50 == 0 or idx == total - 1):
-                        progress_callback(idx + 1, total, f"Разбор {page_name}")
-
-            conn.execute(
-                "INSERT OR REPLACE INTO meta (key, value) VALUES ('manpages_version', ?)",
-                (MANPAGES_VERSION,))
-            conn.execute(
-                "INSERT OR REPLACE INTO meta (key, value) VALUES ('imported_functions', ?)",
-                (str(inserts_funcs),))
-            conn.execute(
-                "INSERT OR REPLACE INTO meta (key, value) VALUES ('imported_pages', ?)",
-                (str(inserts_pages),))
-            conn.commit()
-        finally:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
+        conn.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES ('manpages_version', ?)",
+            (MANPAGES_VERSION,))
+        conn.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES ('imported_functions', ?)",
+            (str(inserts_funcs),))
+        conn.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES ('imported_pages', ?)",
+            (str(inserts_pages),))
+        conn.commit()
     finally:
         conn.close()
     return inserts_funcs
@@ -318,8 +287,10 @@ def main():
         # проверка
         try:
             conn = sqlite3.connect(db_path)
-            c = conn.execute("SELECT COUNT(*) FROM function_index").fetchone()[0]
-            conn.close()
+            try:
+                c = conn.execute("SELECT COUNT(*) FROM function_index").fetchone()[0]
+            finally:
+                conn.close()
         except Exception:
             c = count
 

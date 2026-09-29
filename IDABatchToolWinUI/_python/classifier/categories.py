@@ -1,5 +1,5 @@
 """Логика классификации и группировка модулей по категориям."""
-from typing import Dict, Optional, Tuple
+from typing import Tuple
 
 # Импортируем словари для категорий
 from .windows import (
@@ -168,15 +168,25 @@ _CATEGORIES = {
 
 
 def get_module_category_and_description(module_name: str) -> Tuple[str, str]:
-    """Возвращает категорию и описание категории (используется в отчётах)."""
-    from .platform_classifier import _normalize_name
+    """Возвращает категорию и описание категории (используется в отчётах).
 
-    norm = _normalize_name(module_name)
-    for category, info in _CATEGORIES.items():
-        for d in info["dicts"]:
-            if norm in [_normalize_name(k) for k in d.keys()]:
-                return category, info["description"]
+    Поиск по кэшированной карте «нормализованный ключ → категория»:
+    перестройка всех нормализованных ключей на каждый вызов давала O(n²)
+    на сотнях модулей отчёта. Приоритет категорий и результат — те же,
+    что при переборе словарей: первая категория из ``_CATEGORIES``.
+    """
+    from .naming import normalize_module_name
+
+    category = _build_category_key_map().get(normalize_module_name(module_name))
+    if category is not None:
+        return category, _CATEGORIES[category]["description"]
     return "Неопознанные модули", ""
+
+
+def get_category_description(category: str) -> str:
+    """Словесное описание категории (пусто для неизвестной категории)."""
+    info = _CATEGORIES.get(category)
+    return info.get("description", "") if info else ""
 
 
 # Кэш: нормализованный ключ модуля → название категории.
@@ -203,16 +213,3 @@ def _build_category_key_map() -> dict[str, str]:
                 mapping.setdefault(normalize_module_name(key), category)
     _CATEGORY_KEY_MAP = mapping
     return mapping
-
-
-def get_module_category(module_name: str) -> str:
-    """Возвращает короткое название категории модуля (или пустую строку).
-
-    Быстрая кэшированная альтернатива ``get_module_category_and_description``,
-    когда нужно только название категории.
-    """
-    from .naming import normalize_module_name
-
-    if not module_name:
-        return ""
-    return _build_category_key_map().get(normalize_module_name(module_name), "")

@@ -86,10 +86,14 @@ public sealed class AnalysisWorker : IDisposable
             {
                 results = await _runner.AnalyzeBatchAsync(_files, null, _cleanup, _tempCleanup, ct);
             }
+            catch (OperationCanceledException)
+            {
+                results = new Dictionary<string, bool>();
+            }
             catch (Exception e)
             {
                 ErrorOccurred?.Invoke($"Критическая ошибка при анализе: {e.Message}");
-                results = _files.ToDictionary(f => f, _ => false);
+                results = _files.Distinct().ToDictionary(f => f, _ => false);
             }
             succeededFiles = results.Where(kv => kv.Value).Select(kv => kv.Key).ToList();
         }
@@ -112,7 +116,7 @@ public sealed class AnalysisWorker : IDisposable
                 }
 
                 // Либо исходный файл (экспорт из стартового диалога) — база рядом с ним.
-                var dir = Path.GetDirectoryName(f)!;
+                var dir = Path.GetDirectoryName(f) ?? "";
                 var i64 = Path.Combine(dir, name + ".i64");
                 if (File.Exists(i64)) succeededFiles.Add(i64);
                 else
@@ -148,9 +152,17 @@ public sealed class AnalysisWorker : IDisposable
             _runner.FileStartCallback = n => ExportFileStarted?.Invoke(n);
             _runner.FileDoneCallback = (n, ok) => ExportFileCompleted?.Invoke(n, ok);
 
-            var exportResults = await _runner.RunScriptOnBatchAsync(succeededFiles, script, null, args, ct);
-            foreach (var (idb, ok) in exportResults)
-                if (!ok) ErrorOccurred?.Invoke($"Ошибка экспорта для {Path.GetFileName(idb)}");
+            try
+            {
+                var exportResults = await _runner.RunScriptOnBatchAsync(succeededFiles, script, null, args, ct);
+                foreach (var (idb, ok) in exportResults)
+                    if (!ok) ErrorOccurred?.Invoke($"Ошибка экспорта для {Path.GetFileName(idb)}");
+            }
+            catch (OperationCanceledException) { /* отмена — статусы расставит EndSession */ }
+            catch (Exception e)
+            {
+                ErrorOccurred?.Invoke($"Критическая ошибка при экспорте: {e.Message}");
+            }
         }
         else
         {
@@ -166,7 +178,7 @@ public sealed class AnalysisWorker : IDisposable
             if (name.EndsWith(".i64", StringComparison.OrdinalIgnoreCase)
                 || name.EndsWith(".idb", StringComparison.OrdinalIgnoreCase))
                 name = name[..^4];
-            var dir = Path.GetDirectoryName(f)!;
+            var dir = Path.GetDirectoryName(f) ?? "";
             if (File.Exists(Path.Combine(dir, name + ".i64"))) successOriginal++;
         }
         Finished?.Invoke(successOriginal, _files.Count);

@@ -19,6 +19,8 @@ public sealed partial class AnalysisPage : Page
     private List<FileItem> _cachedFiles = new();
     private bool _exportAllAfterAnalysis;
     private TaskManagerWindow? _taskManagerWindow;
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _refreshTimer;
+    private int _refreshGeneration;
 
     public AnalysisPage()
     {
@@ -34,6 +36,13 @@ public sealed partial class AnalysisPage : Page
         CancelButton.Click += Cancel_Click;
         GenerateHtmlButton.Click += GenerateHtml_Click;
         InputDirTextBox.TextChanged += (_, _) => RefreshFileList();
+
+        // Скан папки (включая распаковку архивов) идёт в фоне; TextChanged
+        // дебаунсится, чтобы не пересканировать диск на каждый символ пути.
+        _refreshTimer = DispatcherQueue.CreateTimer();
+        _refreshTimer.Interval = TimeSpan.FromMilliseconds(400);
+        _refreshTimer.IsRepeating = false;
+        _refreshTimer.Tick += (_, _) => _ = RefreshFileListAsync();
 
         Loaded += OnLoaded;
     }
@@ -78,15 +87,54 @@ public sealed partial class AnalysisPage : Page
 
     private void RefreshFileList()
     {
+        // Перезапуск дебаунса: применяется последний вариант пути
+        _refreshTimer.Stop();
+        _refreshTimer.Start();
+    }
+
+    private async Task RefreshFileListAsync()
+    {
+        var gen = ++_refreshGeneration;
         var inputDir = InputDirTextBox.Text.Trim();
-        if (string.IsNullOrEmpty(inputDir) || !Directory.Exists(inputDir))
+
+        List<FileItem> files;
+        List<string> errors;
+        try
         {
-            _cachedFiles = new List<FileItem>();
-            Treemap.SetData(_cachedFiles);
+            (files, errors) = await Task.Run(() => ScanInputFiles(inputDir));
+        }
+        catch (Exception e)
+        {
+            if (gen != _refreshGeneration) return;
+            files = new List<FileItem>();
+            errors = new List<string> { $"Ошибка чтения папки: {e.Message}" };
+        }
+        if (gen != _refreshGeneration) return; // уже запрошен более свежий скан
+
+        foreach (var err in errors) AppendError(err);
+        _cachedFiles = files;
+
+        if (_cachedFiles.Count == 0)
+        {
+            Treemap.SetData(new List<FileItem>());
             GenerateHtmlButton.IsEnabled = false;
             PlatformInfoBar.IsOpen = false;
             return;
         }
+
+        // Платформа — по фактическим файлам (расширения, при их отсутствии — сигнатуры)
+        UpdatePlatformBar(PlatformInfo.DetectPlatform(_cachedFiles.Select(f => f.Path)));
+
+        Treemap.SetData(_cachedFiles);
+        GenerateHtmlButton.IsEnabled = _cachedFiles.Any(f => File.Exists(f.ExpectedI64Path));
+    }
+
+    /// <summary>Поиск исполняемых файлов и распаковка архивов — вне UI-потока.</summary>
+    private static (List<FileItem> Files, List<string> Errors) ScanInputFiles(string inputDir)
+    {
+        var errors = new List<string>();
+        if (string.IsNullOrEmpty(inputDir) || !Directory.Exists(inputDir))
+            return (new List<FileItem>(), errors);
 
         // Поиск сразу по всем расширениям всех платформ: платформа определяется
         // по фактическому содержимому папки, а не по заранее выбранной настройке.
@@ -112,26 +160,12 @@ public sealed partial class AnalysisPage : Page
                 }
                 else if (ext == ".dmg")
                 {
-                    AppendError($"Не удалось извлечь {Path.GetFileName(archive)}. Убедитесь, что 7z установлен и доступен в PATH.");
+                    errors.Add($"Не удалось извлечь {Path.GetFileName(archive)}. Убедитесь, что 7z установлен и доступен в PATH.");
                 }
             }
         }
 
-        _cachedFiles = files.Distinct().Select(MakeItem).ToList();
-
-        if (_cachedFiles.Count == 0)
-        {
-            Treemap.SetData(new List<FileItem>());
-            GenerateHtmlButton.IsEnabled = false;
-            PlatformInfoBar.IsOpen = false;
-            return;
-        }
-
-        // Платформа — по фактическим файлам (расширения, при их отсутствии — сигнатуры)
-        UpdatePlatformBar(PlatformInfo.DetectPlatform(_cachedFiles.Select(f => f.Path)));
-
-        Treemap.SetData(_cachedFiles);
-        GenerateHtmlButton.IsEnabled = _cachedFiles.Any(f => File.Exists(f.ExpectedI64Path));
+        return (files.Distinct().Select(MakeItem).ToList(), errors);
     }
 
     private static FileItem MakeItem(string path)

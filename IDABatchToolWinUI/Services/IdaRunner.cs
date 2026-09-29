@@ -26,8 +26,6 @@ public sealed class IdaRunner : IDisposable
     /// <summary>(имя цели, PID процесса IDA, managed thread id) — вызывается сразу после запуска процесса.</summary>
     public Action<string, int, int>? ProcessStartedCallback { get; set; }
 
-    private readonly SemaphoreSlim _gate = new(1, 1);
-
     public IdaRunner(string idatPath, int maxWorkers)
     {
         IdatPath = idatPath;
@@ -39,7 +37,7 @@ public sealed class IdaRunner : IDisposable
         IReadOnlyList<string> files, string? outputDir,
         bool cleanup, bool tempCleanup, CancellationToken ct)
     {
-        var results = await RunInParallelAsync(files, outputDir, "analyze", ct);
+        var results = await RunInParallelAsync(files, outputDir, ct);
         if (ct.IsCancellationRequested) return results;
 
         if (cleanup || tempCleanup)
@@ -81,7 +79,8 @@ public sealed class IdaRunner : IDisposable
         foreach (var f in idbFiles)
         {
             if (ct.IsCancellationRequested) break;
-            await sem.WaitAsync(ct);
+            // Без ct в WaitAsync: при отмене исключение не рвёт цикл (см. RunInParallelAsync).
+            await sem.WaitAsync(CancellationToken.None);
             var file = f;
             tasks.Add(Task.Run(async () =>
             {
@@ -104,14 +103,14 @@ public sealed class IdaRunner : IDisposable
                     }
                 }
                 finally { sem.Release(); }
-            }, ct));
+            }, CancellationToken.None));
         }
         try { await Task.WhenAll(tasks); } catch { /* отмена/ошибки уже учтены */ }
         return results;
     }
 
     private async Task<Dictionary<string, bool>> RunInParallelAsync(
-        IReadOnlyList<string> files, string? outputDir, string kind, CancellationToken ct)
+        IReadOnlyList<string> files, string? outputDir, CancellationToken ct)
     {
         // Жадный алгоритм: крупные файлы первыми
         var ordered = files
@@ -129,14 +128,14 @@ public sealed class IdaRunner : IDisposable
         foreach (var f in ordered)
         {
             if (ct.IsCancellationRequested) break;
-            await sem.WaitAsync(ct);
+            // Без ct в WaitAsync: при отмене исключение не рвёт цикл и не оставляет
+            // уже запущенные задачи с освобождаемым semaphore-ом.
+            await sem.WaitAsync(CancellationToken.None);
             tasks.Add(Task.Run(async () =>
             {
                 try
                 {
-                    bool ok = kind == "analyze"
-                        ? await AnalyzeFileAsync(f, outputDir, ct)
-                        : throw new InvalidOperationException();
+                    bool ok = await AnalyzeFileAsync(f, outputDir, ct);
                     lock (results)
                     {
                         results[f] = ok;
@@ -146,7 +145,7 @@ public sealed class IdaRunner : IDisposable
                     }
                 }
                 finally { sem.Release(); }
-            }, ct));
+            }, CancellationToken.None));
         }
         try { await Task.WhenAll(tasks); } catch { /* отмена */ }
         return results;
@@ -266,5 +265,5 @@ public sealed class IdaRunner : IDisposable
         }
     }
 
-    public void Dispose() => _gate.Dispose();
+    public void Dispose() { }
 }

@@ -155,9 +155,3 @@ public sealed class ManPagesSyncWorker : IDisposable
 
     public void Dispose() => _proc?.Dispose();
 }
-
-public static class ManPagesBridgeScript
-{
-    // Дублируется в _python/manpages_bridge.py — путь к БД передаётся аргументом.
-    public const string ManpagesArchiveUrl = "https://www.kernel.org/pub/linux/docs/man-pages/man-pages.tar.gz";
-}

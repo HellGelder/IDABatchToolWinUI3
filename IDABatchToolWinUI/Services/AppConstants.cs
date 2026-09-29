@@ -55,7 +55,6 @@ public static class AnalysisStatusExtensions
     };
 }
 
-/// <summary>Описания целевых платформ и их расширений.</summary>
 /// <summary>Поиск интерпретатора Python для запуска скриптов (pythonw предпочтительнее — без консоли).</summary>
 public static class PythonHelper
 {

@@ -144,13 +144,18 @@ public static class AnalysisMonitor
             return _entries.ToList();
     }
 
-    /// <summary>«file.exe.i64» → «file.exe»; полный путь → только имя.</summary>
+    /// <summary>«file.exe.i64» → «file.exe» (и .idb); полный путь → только имя.</summary>
     public static string NormalizeName(string name)
     {
         name = Path.GetFileName(name.Trim());
-        const string i64 = ".i64";
-        if (name.EndsWith(i64, StringComparison.OrdinalIgnoreCase))
-            name = name[..^i64.Length];
+        foreach (var suffix in new[] { ".i64", ".idb" })
+        {
+            if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                name = name[..^suffix.Length];
+                break;
+            }
+        }
         return name;
     }
 

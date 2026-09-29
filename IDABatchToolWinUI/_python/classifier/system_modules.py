@@ -42,17 +42,24 @@ def _collect_keys(dicts: Iterable[Mapping[str, str]]) -> frozenset[str]:
     return frozenset(keys)
 
 
-# Нормализованные ключи системных модулей по платформам.
-WINDOWS_SYSTEM_MODULE_KEYS: frozenset[str] = _collect_keys([WINDOWS_MODULES])
-LINUX_SYSTEM_MODULE_KEYS: frozenset[str] = _collect_keys([LINUX_MODULES, ANDROID_MODULES])
-MACOS_SYSTEM_MODULE_KEYS: frozenset[str] = _collect_keys([MACOS_MODULES])
+# Нормализованные ключи системных модулей по платформам — строятся лениво:
+# module_name_aliases по всем словарям на import-е оплачивался даже прогонами,
+# где is_system_module не вызывается ни разу.
+_SYSTEM_KEYS: dict[str, frozenset[str]] = {}
 
-# Ключи платформ совпадают с PLATFORM_EXTENSIONS из ui/constants.py.
-_PLATFORM_KEYS: dict[str, frozenset[str]] = {
-    "Windows": WINDOWS_SYSTEM_MODULE_KEYS,
-    "Linux / Android": LINUX_SYSTEM_MODULE_KEYS,
-    "macOS / iOS": MACOS_SYSTEM_MODULE_KEYS,
-}
+
+def _system_keys(platform: str) -> frozenset[str]:
+    """Нормализованные ключи системных модулей платформы (с кэшем)."""
+    keys = _SYSTEM_KEYS.get(platform)
+    if keys is None:
+        if platform == "Windows":
+            keys = _collect_keys([WINDOWS_MODULES])
+        elif platform == "Linux / Android":
+            keys = _collect_keys([LINUX_MODULES, ANDROID_MODULES])
+        else:
+            keys = _collect_keys([MACOS_MODULES])
+        _SYSTEM_KEYS[platform] = keys
+    return keys
 
 # Допустимые нестрогие обозначения платформы.
 _PLATFORM_ALIASES: dict[str, str] = {
@@ -102,15 +109,17 @@ def is_system_module(module_name: str, platform: str = "Windows") -> bool:
         return False
 
     platform = normalize_platform(platform)
-    keys = _PLATFORM_KEYS.get(platform)
 
-    if keys is None:
+    if platform not in ("Windows", "Linux / Android", "macOS / iOS"):
         # Неизвестная платформа — ищем по всем системным словарям.
-        if any(a in WINDOWS_SYSTEM_MODULE_KEYS for a in aliases):
+        win = _system_keys("Windows")
+        lin = _system_keys("Linux / Android")
+        mac = _system_keys("macOS / iOS")
+        if any(a in win for a in aliases):
             return True
-        if any(a in LINUX_SYSTEM_MODULE_KEYS for a in aliases):
+        if any(a in lin for a in aliases):
             return True
-        return any(a in MACOS_SYSTEM_MODULE_KEYS for a in aliases)
+        return any(a in mac for a in aliases)
 
     # API Sets относятся только к Windows и задаются префиксом.
     if platform == "Windows":
@@ -118,10 +127,4 @@ def is_system_module(module_name: str, platform: str = "Windows") -> bool:
         if any(primary.startswith(prefix) for prefix in _API_SET_PREFIXES):
             return True
 
-    return any(alias in keys for alias in aliases)
-
-
-def system_module_keys(platform: str) -> frozenset[str]:
-    """Возвращает набор нормализованных ключей системных модулей платформы."""
-    platform = normalize_platform(platform)
-    return _PLATFORM_KEYS.get(platform, frozenset())
+    return any(alias in _system_keys(platform) for alias in aliases)

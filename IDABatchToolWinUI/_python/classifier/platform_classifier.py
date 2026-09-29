@@ -2,8 +2,7 @@
 from __future__ import annotations
 
 import re
-import logging
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 
 from .windows import WINDOWS_MODULES
 from .linux import LINUX_MODULES
@@ -15,8 +14,6 @@ from .third_party_platforms import (
     THIRD_PARTY_LINUX,
     THIRD_PARTY_MACOS,
 )
-
-logger = logging.getLogger(__name__)
 
 # Единая точка нормализации имён модулей (используется и классификатором,
 # и индексом системных функций, и генераторами отчётов).
@@ -95,19 +92,14 @@ class CompositeClassifier:
         return "Неопознанный модуль"
 
 
-_composite = CompositeClassifier()
+# Классификатор строится лениво: merge и нормализация всех словарей трёх
+# платформ на import-е оплачивались даже прогонами, где classify_module
+# не вызывается ни разу (например, --kind diff).
+_composite: CompositeClassifier | None = None
 
 
 def classify_module(module_name: str) -> str:
+    global _composite
+    if _composite is None:
+        _composite = CompositeClassifier()
     return _composite.classify(module_name)
-
-
-def get_platform_classifier(platform: str) -> BasePlatformClassifier:
-    if platform == "Windows":
-        return WindowsClassifier()
-    elif platform == "Linux / Android":
-        return LinuxClassifier()
-    elif platform == "macOS / iOS":
-        return MacOSClassifier()
-    else:
-        raise ValueError(f"Unknown platform: {platform}")
