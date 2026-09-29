@@ -20,6 +20,8 @@
     -->
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- Иконка exe (ярлык, проводник, панель задач). Значок окна задаёт MainWindow (TitleBar.IconSource). -->
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
