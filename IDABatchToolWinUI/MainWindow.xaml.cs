@@ -45,6 +45,19 @@ public sealed partial class MainWindow : Window
         NavView.SelectedItem = NavAnalysis;
         NavFrame.Navigate(typeof(AnalysisPage));
         _analysisPage = NavFrame.Content as AnalysisPage;
+
+        // Проверка Python-окружения — после показа окна; диалог только при нехватке.
+        Activated += OnFirstActivated;
+    }
+
+    private bool _envCheckStarted;
+
+    private void OnFirstActivated(object sender, WindowActivatedEventArgs args)
+    {
+        if (_envCheckStarted) return;
+        _envCheckStarted = true;
+        Activated -= OnFirstActivated;
+        _ = PythonEnvironment.EnsureEnvironmentAsync();
     }
 
     private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)

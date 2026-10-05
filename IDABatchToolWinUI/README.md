@@ -91,18 +91,20 @@ dotnet publish -c Release -r win-x64
 # варианты RID: win-x86, win-x64, win-arm64 (по умолчанию — архитектура машины)
 ```
 
-Публикация с указанием RID — self-contained: .NET-рантайм едет в комплекте, .NET Desktop Runtime на целевой машине не нужен (framework-dependent вариант — publish без RID). `PublishReadyToRun` и `PublishTrimmed` **намеренно отключены** — они ломают WinRT-проецирование в рантайме (см. [Известные особенности](#известные-особенности-и-ограничения)). После обновления контентных файлов в `_python/`/`scripts/` не забывайте, что их включение в сборку задаётся явными масками `<Content>` в `IDABatchToolWinUI.csproj`.
+**Self-contained задан явно**: `make-portable.ps1` публикует с `-p:SelfContained=true`. Полагаться на умолчание «RID ⇒ self-contained» нельзя — без явного флага publish выходит framework-dependent (без рантайма .NET), и на машине без .NET 9 приложение требует его установки. Признак самодостаточной сборки: `coreclr.dll`/`hostfxr.dll` рядом с exe (zip ≈ 94 МБ, распаковано ≈ 240 МБ). `PublishReadyToRun` и `PublishTrimmed` **намеренно отключены** — они ломают WinRT-проецирование в рантайме (см. [Известные особенности](#известные-особенности-и-ограничения)). После обновления контентных файлов в `_python/`/`scripts/` не забывайте, что их включение в сборку задаётся явными масками `<Content>` в `IDABatchToolWinUI.csproj`.
 
 ### Готовая переносимая сборка (make-portable.ps1)
 
 Скрипт собирает поставку с чистым корнем: publish → перекладка всего содержимого в `app\` → компиляция лончера → `bindiff.exe` в корень → zip.
 
 ```powershell
-.\make-portable.ps1                # полный цикл: dist\portable\ + dist\IDABatchTool-portable-<rid>.zip
+.\make-portable.ps1                # полный цикл: dist\portable\ + dist\IDABatchToolWinUI-<версия>.zip
 .\make-portable.ps1 -NoPublish     # пересобрать раскладку из готового publish
 .\make-portable.ps1 -NoZip         # без архивирования
 .\make-portable.ps1 -Rid win-arm64 # другой RID
 ```
+
+Архив именуется по версии файла из csproj: `IDABatchToolWinUI-1.1.0.0.zip`. Скрипт встраивает в поставку `Tools\Python` из корня проекта, если он там есть; в корень пакета кладутся `README.txt` (требования), `version.txt` (журнал сборок) и `install-prereqs.ps1` — автоустановка Python-окружения. Приложение при запуске проверяет наличие Python и пакетов `jinja2`/`requests`; если чего-то нет — предлагает запустить автоустановку (при полном окружении никаких окон не появляется).
 
 Раскладка результата:
 

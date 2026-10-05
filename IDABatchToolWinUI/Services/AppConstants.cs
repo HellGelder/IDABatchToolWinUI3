@@ -82,6 +82,9 @@ public static class PythonHelper
         return "pythonw.exe";
     }
 
+    /// <summary>Публичный поиск exe по PATH (для проверки окружения).</summary>
+    public static string? FindOnPath(string exe) => FindInPath(exe);
+
     private static string? FindInPath(string exe)
     {
         var pathVar = Environment.GetEnvironmentVariable("PATH") ?? "";

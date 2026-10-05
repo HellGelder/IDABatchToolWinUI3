@@ -41,7 +41,9 @@ Write-Host "Версия сборки: $AppVersion"
 
 # ── 1. Publish ──────────────────────────────────────────────────────────────
 if (-not $NoPublish) {
-    dotnet publish "$root\IDABatchToolWinUI.csproj" -c $Configuration -r $Rid
+    # SelfContained обязателен явно: без него publish выходит framework-dependent
+    # (без рантайма .NET) и на чистой машине требует установки .NET.
+    dotnet publish "$root\IDABatchToolWinUI.csproj" -c $Configuration -r $Rid -p:SelfContained=true
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish завершился с кодом $LASTEXITCODE" }
 }
 
@@ -75,11 +77,24 @@ else {
     Write-Warning "bindiff.exe не найден в publish — корень будет без него (поиск BinDiff: конфиг/реестр/PATH)"
 }
 
-# ── 3.5. Краткий readme и журнал версий — в корень поставки ────────────────
-foreach ($doc in @("README.txt", "version.txt")) {
+# ── 3.5. Документация поставки: readme, журнал версий, автоустановка Python ─
+foreach ($doc in @("README.txt", "version.txt", "install-prereqs.ps1")) {
     $src = Join-Path $root $doc
     if (Test-Path $src) { Copy-Item $src (Join-Path $staging $doc) -Force }
     else { Write-Warning "$doc не найден в проекте — в поставку не попал" }
+}
+
+# ── 3.6. Python-окружение: встроить Tools\Python из проекта, если есть ─────
+$toolsSrc = Join-Path $root "Tools\Python"
+if (Test-Path (Join-Path $toolsSrc "python.exe")) {
+    $toolsDst = Join-Path $appDir "Tools\Python"
+    if (Test-Path $toolsDst) { Remove-Item $toolsDst -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path (Split-Path $toolsDst) | Out-Null
+    Copy-Item $toolsSrc $toolsDst -Recurse -Force
+    Write-Host "Python-окружение встроено в поставку (app\Tools\Python)"
+}
+else {
+    Write-Warning "Tools\Python не встроен: на целевой машине нужен Python с jinja2/requests либо автоустановка через install-prereqs.ps1 (приложение само предложит при запуске)"
 }
 
 # ── 4. Лончер ───────────────────────────────────────────────────────────────
@@ -156,10 +171,13 @@ if ($LASTEXITCODE -ne 0) { throw "Компиляция лончера не уд�
 Remove-Item $launcherCs -ErrorAction SilentlyContinue
 Write-Host "Лончер собран: $launcherExe"
 
-# ── 5. Zip ──────────────────────────────────────────────────────────────────
+# ── 5. Zip: IDABatchToolWinUI-<версия>.zip ──────────────────────────────────
 if (-not $NoZip) {
-    $zip = Join-Path $dist "IDABatchTool-portable-$Rid.zip"
+    $zip = Join-Path $dist "IDABatchToolWinUI-$AppVersion.zip"
     if (Test-Path $zip) { Remove-Item $zip -Force }
+    # старые архивы с прежним именем убираем, чтобы не путаться
+    Get-ChildItem $dist -Filter "IDABatchTool-portable-*.zip" -ErrorAction SilentlyContinue |
+        Remove-Item -Force
     Compress-Archive -Path (Join-Path $staging "*") -DestinationPath $zip -CompressionLevel Optimal
     Write-Host "Архив: $zip ($('{0:N1}' -f ((Get-Item $zip).Length / 1MB)) МБ)"
 }
@@ -169,5 +187,6 @@ Write-Host ""
 Write-Host "Готово. Корень поставки ($staging):"
 Get-ChildItem $staging | ForEach-Object {
     if ($_.PSIsContainer) { Write-Host ("  [dir ] " + $_.Name) }
-    else { Write-Host ("  [exe ] " + $_.Name + "  ($('{0:N1}' -f ($_.Length / 1KB)) КБ)") }
+    elseif ($_.Extension -eq ".exe") { Write-Host ("  [exe ] " + $_.Name + "  ($('{0:N1}' -f ($_.Length / 1KB)) КБ)") }
+    else { Write-Host ("  [file] " + $_.Name + "  ($('{0:N1}' -f ($_.Length / 1KB)) КБ)") }
 }
