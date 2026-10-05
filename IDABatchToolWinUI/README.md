@@ -91,9 +91,33 @@ dotnet publish -c Release -r win-x64
 # варианты RID: win-x86, win-x64, win-arm64 (по умолчанию — архитектура машины)
 ```
 
-В Release включены `PublishReadyToRun` и `PublishTrimmed`. **Переносимая поставка — это zip всей publish‑папки**: exe — лишь apphost‑лаунчер, рядом обязаны находиться `IDABatchToolWinUI.dll`, runtime‑сборки, `_python/` (мосты, классификатор, шаблоны, vendor), `scripts/export_data.py`, `scripts/diaphora/`, `config.yaml`, `Assets/`. Папку можно распаковать в любое место и запустить exe — установка не требуется.
+Публикация с указанием RID — self-contained: .NET-рантайм едет в комплекте, .NET Desktop Runtime на целевой машине не нужен (framework-dependent вариант — publish без RID). `PublishReadyToRun` и `PublishTrimmed` **намеренно отключены** — они ломают WinRT-проецирование в рантайме (см. [Известные особенности](#известные-особенности-и-ограничения)). После обновления контентных файлов в `_python/`/`scripts/` не забывайте, что их включение в сборку задаётся явными масками `<Content>` в `IDABatchToolWinUI.csproj`.
 
-На целевой машине нужны: .NET 9 Desktop Runtime, Python 3 с `jinja2` и `requests` (либо встроенный Python из `Tools\`), IDA Pro и BinDiff (лицензионные — в поставку не включаются), 7‑Zip только для DMG. Альтернатива framework‑dependent сборке — `-p:SelfContained=true` (runtime .NET в поставке, +150–200 МБ). После обновления контентных файлов в `_python/`/`scripts/` не забывайте, что их включение в сборку задаётся явными масками `<Content>` в `IDABatchToolWinUI.csproj`.
+### Готовая переносимая сборка (make-portable.ps1)
+
+Скрипт собирает поставку с чистым корнем: publish → перекладка всего содержимого в `app\` → компиляция лончера → `bindiff.exe` в корень → zip.
+
+```powershell
+.\make-portable.ps1                # полный цикл: dist\portable\ + dist\IDABatchTool-portable-<rid>.zip
+.\make-portable.ps1 -NoPublish     # пересобрать раскладку из готового publish
+.\make-portable.ps1 -NoZip         # без архивирования
+.\make-portable.ps1 -Rid win-arm64 # другой RID
+```
+
+Раскладка результата:
+
+```
+portable/
+├── IDABatchTool.exe               # лончер (~10 КБ): запускает app\IDABatchToolWinUI.exe
+├── bindiff.exe                    # BinDiff CLI в корне поставки
+└── app\                           # вся publish-папка: exe, все DLL, _python\, scripts\, config.yaml, Assets\
+```
+
+Лончер — 30 строк C#, компилируется системным компилятором .NET Framework (`csc.exe`, есть в любой Windows 10) с иконкой приложения и без добавления зависимостей; при отсутствии `app\IDABatchToolWinUI.exe` показывает сообщение об ошибке. Приложение внутри `app\` не меняется: оно находит свой каталог по `_python\` вверх от exe. Опциональные портативные утилиты кладутся в `app\Tools\` (`Tools\Python`, `Tools\7-Zip`). `ToolLocator` находит `bindiff.exe` и в `app\`, и в корне поставки.
+
+DLL переносятся во вложенную папку именно таким косвенным путём: WinUI 3 не поддерживает single-file publish (нативные компоненты Windows App SDK обязаны лежать файлами на диске), а runtime-сборки self-contained приложения обязаны находиться рядом с exe.
+
+На целевой машине нужны: Python 3 с `jinja2` и `requests` (либо встроенный Python из `app\Tools\Python`), IDA Pro и BinDiff (лицензионные — в поставку не включаются), 7‑Zip только для DMG.
 
 ## Портативные утилиты (Tools\)
 
@@ -286,8 +310,9 @@ IDABatchToolWinUI/
 
 # Известные особенности и ограничения
 
+- **`PublishReadyToRun` и `PublishTrimmed` отключены** (csproj, 2026-10-05): R2R-образы и триммер ломают рефлексивный механизм заворачивания управляемых объектов в WinRT-интерфейсы (`WinRT.TypeExtensions.GetAbiToProjectionVftblPtr` → `NullReferenceException` → нативный краш `0xc000027b` в `Microsoft.UI.Xaml.dll`). Симптомы на собранной поставке: пустая таблица пар на вкладке «Сравнение» и падение окна при развороте на весь экран. Подтверждено экспериментально (publish без R2R работает, с R2R — падает); R2R даёт лишь ускорение старта, поэтому отключение безопасно. Если включать обратно — обязательно перепроверять все экраны на собранной поставке, а не в Debug.
+- **`app-crash.log`** — необработанные исключения XAML (в журнале событий Windows они выглядят как немой нативный краш) дублируются в этот лог рядом с exe: тип, сообщение и стек. Полезно при диагностике проблем на машинах пользователей.
 - **Пикеры файлов/папок** — только `Microsoft.Windows.Storage.Pickers` (Windows App SDK 2.4, конструктор с `WindowId`); legacy‑пикеры с `FileTypeFilter` в этой версии вызывают `E_FAIL`.
-- **PublishTrimmed в Release** — первая Release‑сборка обязательно проверяется на реальном проекте: тримминг может отрезать используемое через рефлексию.
 - **Дубликаты имён файлов** в очереди анализа (файлы в подпапках/архивах) намеренно обновляются все — иначе «вторые» копии оставались в статусе «В ожидании».
 - **Кириллица в протоколе мостов** — только через `PYTHONUTF8=1`/`PYTHONIOENCODING=utf-8`; при отладке мостов вручную из консоли учитывайте кодировку.
 - **IDA/BinDiff не распространяются** вместе с приложением (лицензии Hex‑Rays/Google); на целевой машине нужны их установки, пути задаются в «Конфигурации».

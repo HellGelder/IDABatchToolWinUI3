@@ -37,6 +37,15 @@ public static class ToolLocator
         var proj = Path.Combine(AppConstants.WinUiDir, exeName);
         if (File.Exists(proj)) return proj;
 
+        // 4. В корне переносимой поставки: лончер и bindiff.exe лежат в корне,
+        //    всё приложение — на уровень ниже (app\).
+        var parent = Path.GetDirectoryName(AppConstants.WinUiDir.TrimEnd(Path.DirectorySeparatorChar));
+        if (!string.IsNullOrEmpty(parent))
+        {
+            var up = Path.Combine(parent, exeName);
+            if (File.Exists(up)) return up;
+        }
+
         return name;
     }
 
