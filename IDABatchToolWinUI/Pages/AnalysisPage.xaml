@@ -156,10 +156,10 @@
                 <Border Style="{StaticResource GroupBoxStyle}" Shadow="{StaticResource SharedShadow}"
                         Loaded="ShadowRect_Loaded">
                     <StackPanel Spacing="4">
-                        <TextBlock Text="Сообщения об ошибках" Style="{StaticResource GroupHeaderStyle}" />
+                        <TextBlock Text="Лог выполнения" Style="{StaticResource GroupHeaderStyle}" />
                         <TextBox x:Name="ErrorLogTextBox" AcceptsReturn="True" TextWrapping="Wrap"
-                                 IsReadOnly="True" MaxHeight="120" MinHeight="40"
-                                 PlaceholderText="Здесь будут появляться сообщения об ошибках..." />
+                                 IsReadOnly="True" MaxHeight="120" MinHeight="68"
+                                 PlaceholderText="Здесь будет появляться журнал выполнения..." />
                     </StackPanel>
                 </Border>
             </StackPanel>

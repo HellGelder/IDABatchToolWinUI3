@@ -128,3 +128,27 @@ def is_system_module(module_name: str, platform: str = "Windows") -> bool:
             return True
 
     return any(alias in _system_keys(platform) for alias in aliases)
+
+
+# Категория классификатора, по которой формируются отчёты СФ: «системные
+# библиотеки» в понимании СФ — это именно базовые библиотеки ОС (kernel32,
+# user32, gdi32, …). Криптографические (advapi32), сетевые (mpr) и runtime
+# (msvcrt) словари Windows тоже считаются системными, но относятся к другим
+# категориям — в СФ-отчёты они не включаются (иначе числа СФ-отчёта и
+# категории «Системные библиотеки ОС» в отчёте анализа ПО расходятся).
+SYSTEM_OS_CATEGORY = "Системные библиотеки ОС"
+
+
+def is_sfa_module(module_name: str, platform: str = "Windows") -> bool:
+    """Модуль входит в отчёты СФ: системная библиотека платформы категории
+    «Системные библиотеки ОС»."""
+    if not is_system_module(module_name, platform):
+        return False
+    if normalize_platform(platform) != "Windows":
+        # Для не-Windows словари категорий уже сгруппированы по назначению:
+        # ядро/линковщик/glibc → «Системные библиотеки ОС», остальные
+        # системные словари — в своих категориях, критерий совпадает.
+        return True
+    from .categories import get_module_category
+
+    return get_module_category(module_name) == SYSTEM_OS_CATEGORY

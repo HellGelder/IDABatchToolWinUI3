@@ -35,7 +35,7 @@ public sealed partial class SettingsPage : Page
         ThemeDarkButton.Click += (_, _) => SwitchTheme("dark");
 
         BrowseManPagesButton.Click += async (_, _) => await UiDialogs.PickFolderAsync(ManPagesPathTextBox);
-        CheckManPagesButton.Click += async (_, _) => await CheckManPagesAsync();
+        CheckManPagesButton.Click += async (_, _) => await CheckManPagesAsync(showPopup: true);
         SyncManPagesButton.Click += async (_, _) => await SyncManPagesAsync();
 
         LoadToUi();
@@ -293,13 +293,14 @@ public sealed partial class SettingsPage : Page
             ? p : Path.Combine(p, AppConstants.ManpagesDbFileName);
     }
 
-    private async Task CheckManPagesAsync()
+    private async Task CheckManPagesAsync(bool showPopup = false)
     {
         await Task.Run(() => { }); // краткая пауза для корректного обновления строки
         var dbPath = ManPagesDbPath();
         if (!File.Exists(dbPath))
         {
             ManPagesStatusText.Text = $"Статус: база не найдена ({dbPath}). Нажмите «Скачать и импортировать».";
+            if (showPopup) await ShowManPagesResultAsync(false, ManPagesStatusText.Text);
             return;
         }
         try
@@ -307,11 +308,28 @@ public sealed partial class SettingsPage : Page
             var (count, version, sizeMb) = await Task.Run(() => ReadManPagesInfo(dbPath));
             ManPagesStatusText.Text =
                 $"Статус: база найдена — {count} функций, man-pages {version}, {sizeMb:F1} МБ";
+            if (showPopup) await ShowManPagesResultAsync(true, ManPagesStatusText.Text);
         }
         catch
         {
             ManPagesStatusText.Text = $"Статус: файл есть, но не читается ({dbPath}).";
+            if (showPopup) await ShowManPagesResultAsync(false, ManPagesStatusText.Text);
         }
+    }
+
+    /// <summary>Всплывающее окно результата проверки БД man-pages: пользователь
+    /// жмёт «Проверить» и ждёт явного ответа, строка статуса мала и просматривается
+    /// не всегда. Автозакрытие — чтобы диалог не приходилось закрывать вручную.</summary>
+    private async Task ShowManPagesResultAsync(bool ok, string message)
+    {
+        var dlg = new ContentDialog
+        {
+            Title = ok ? "БД man-pages найдена" : "БД man-pages не найдена",
+            Content = message,
+            CloseButtonText = "ОК",
+        };
+        if (UiDialogs.XamlRoot != null) dlg.XamlRoot = UiDialogs.XamlRoot;
+        try { await dlg.ShowAsync(); } catch { /* окно закрыто пользователем */ }
     }
 
     private static (long Count, string Version, double SizeMb) ReadManPagesInfo(string dbPath)

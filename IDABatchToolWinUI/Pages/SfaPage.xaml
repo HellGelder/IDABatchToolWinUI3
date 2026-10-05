@@ -136,10 +136,10 @@
             <!-- Ошибки -->
             <Border Grid.Row="5" Style="{StaticResource GroupBoxStyle}">
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Сообщения об ошибках" Style="{StaticResource GroupHeaderStyle}" />
+                    <TextBlock Text="Лог выполнения" Style="{StaticResource GroupHeaderStyle}" />
                     <TextBox x:Name="SfaErrorLogTextBox" AcceptsReturn="True" TextWrapping="Wrap"
-                             IsReadOnly="True" MaxHeight="120" MinHeight="40"
-                             PlaceholderText="Ошибки..." />
+                             IsReadOnly="True" MaxHeight="120" MinHeight="68"
+                             PlaceholderText="Здесь будет появляться журнал выполнения..." />
                 </StackPanel>
             </Border>
         </Grid>

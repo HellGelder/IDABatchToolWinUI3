@@ -327,8 +327,18 @@ public DiffPage()
 
     private void HookWorker(DiffWorker w)
     {
-        w.StageChanged += (stage, phase) => RunOnUi(() => OnStageChanged(stage, phase));
-        w.StageFile += (stage, cur, tot, file) => RunOnUi(() => OnStageFile(stage, cur, tot, file));
+        w.StageChanged += (stage, phase) => RunOnUi(() =>
+        {
+            OnStageChanged(stage, phase);
+            if (phase == "started" || phase == "done")
+                AppendLog($"[Этап] {stage} — {(phase == "started" ? "начало" : "завершён")}");
+        });
+        w.StageFile += (stage, cur, tot, file) => RunOnUi(() =>
+        {
+            OnStageFile(stage, cur, tot, file);
+            if (!string.IsNullOrEmpty(file))
+                AppendLog($"[{stage}] {file} ({cur}/{tot})");
+        });
         w.PairProcessStarted += (relKey, pid) => RunOnUi(() =>
         {
             var row = (PairsListView.ItemsSource as List<PairRowViewModel>)
@@ -343,6 +353,8 @@ public DiffPage()
             if (row == null) return;
             if (engine == "bindiff") row.BindiffStatus = status;
             else row.DiaphoraStatus = status;
+            if (status is "done" or "error")
+                AppendLog($"[{engine}] {relKey} — {(status == "done" ? "успешно" : "ошибка")}");
         });
         w.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
         w.Finished += (ok, total) => RunOnUi(() => OnDiffFinished(ok, total));
@@ -499,7 +511,11 @@ public DiffPage()
     //  Вспомогательное
     // ──────────────────────────────────────────────
 
-    private void AppendError(string message)
+    private void AppendError(string message) => AppendLog(message);
+
+    /// <summary>Журнал выполнения: дублирует в «Лог выполнения» любые события
+    /// (этапы, файлы, статусы пар, ошибки), не только ошибки.</summary>
+    private void AppendLog(string message)
     {
         if (string.IsNullOrEmpty(DiffErrorTextBox.Text)) DiffErrorTextBox.Text = message;
         else DiffErrorTextBox.Text += Environment.NewLine + message;

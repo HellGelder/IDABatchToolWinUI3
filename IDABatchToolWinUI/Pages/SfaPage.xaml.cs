@@ -229,6 +229,39 @@ public SfaPage()
             return;
         }
 
+        // Кэш документации MS Learn: диалог показывается сразу после нажатия
+        // кнопки анализа (при наличии БД кэша и только для Windows — Linux
+        // априори документируется по man-pages, без вопросов). «Перегенерировать
+        // из кэша» запускает перегенерацию HTML без IDA-анализа; «полный
+        // анализ» — обычный цикл, документация доищется фазой после анализа.
+        if (_detectedPlatform == "Windows")
+        {
+            var sfaReportsDir = Path.Combine(SfaInputDirTextBox.Text.Trim(), "SFAReports");
+            var cacheDbPath = Path.Combine(sfaReportsDir, "mslearn_cache.db");
+            var indexDbPath = Path.Combine(sfaReportsDir, "sfa_function_index.db");
+            if (File.Exists(cacheDbPath) && File.Exists(indexDbPath))
+            {
+                var sizeKb = new FileInfo(cacheDbPath).Length / 1024.0;
+                var (cacheAction, _) = await AskSfaCacheAsync(sizeKb);
+                switch (cacheAction)
+                {
+                    case "cancel":
+                        return;
+                    case "reuse":
+                        var cachedJsonFiles = ReadJsonPathsFromIndex(indexDbPath);
+                        if (cachedJsonFiles.Length == 0)
+                        {
+                            await UiDialogs.WarnAsync("Ошибка",
+                                "Индекс БД устарел или не содержит данных.\nВыполните полный анализ для перестроения индекса.");
+                            return;
+                        }
+                        await DoGenerateHtmlAsync(SfaInputDirTextBox.Text.Trim(), cachedJsonFiles,
+                            reuseCache: true, sfaReports: sfaReportsDir);
+                        return;
+                }
+            }
+        }
+
         _analysisInProgress = true;
         _analysisCancelled = false;
         SfaStartButton.IsEnabled = false;
@@ -251,15 +284,25 @@ public SfaPage()
     private void HookWorker(AnalysisWorker w)
     {
         w.PhaseChanged += phase => RunOnUi(() =>
-            SfaProcessStatusText.Text = phase == "analysis" ? "Фаза: анализ файлов..." : "Фаза: экспорт в JSON...");
+        {
+            SfaProcessStatusText.Text = phase == "analysis" ? "Фаза: анализ файлов..." : "Фаза: экспорт в JSON...";
+            AppendLog($"[Фаза] {SfaProcessStatusText.Text}");
+        });
         w.AnalysisProgress += (name, cur, total) => RunOnUi(() =>
         {
             SfaProcessStatusText.Text = $"Анализ: {cur}/{total} – {name}";
             if (total > 0) SfaProcessProgress.Value = 100.0 * cur / total;
         });
-        w.AnalysisFileStarted += name => RunOnUi(() => SetFileStatusByName(name, AnalysisStatus.InProgress));
+        w.AnalysisFileStarted += name => RunOnUi(() =>
+        {
+            SetFileStatusByName(name, AnalysisStatus.InProgress);
+            AppendLog($"[Анализ] Начало: {name}");
+        });
         w.AnalysisFileCompleted += (name, ok) => RunOnUi(() =>
-            SetFileStatusByName(name, ok ? AnalysisStatus.Success : AnalysisStatus.Error));
+        {
+            SetFileStatusByName(name, ok ? AnalysisStatus.Success : AnalysisStatus.Error);
+            AppendLog($"[Анализ] {name} — {(ok ? "успешно" : "ошибка")}");
+        });
         w.ExportProgress += (name, cur, total) => RunOnUi(() =>
         {
             SfaProcessStatusText.Text = $"Экспорт: {cur}/{total} – {name}";
@@ -268,6 +311,7 @@ public SfaPage()
         w.ExportFileCompleted += (name, ok) => RunOnUi(() =>
         {
             if (!ok) AppendError($"Ошибка экспорта для {name}");
+            else AppendLog($"[Экспорт] {name} — успешно");
         });
         w.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
         w.Finished += (ok, total) => RunOnUi(() => OnAnalysisFinished(ok, total));
@@ -349,6 +393,10 @@ public SfaPage()
                 : $"Поиск документации: {cur}/{total}";
         });
         _docsWorker.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
+        _docsWorker.ProgressUpdated += (cur, total, msg) => RunOnUi(() =>
+        {
+            if (msg.Length > 0) AppendLog($"[Документация] {msg}");
+        });
         _docsWorker.Finished += result => RunOnUi(() => OnDocsFinished(result));
 
         await Task.Run(() => _docsWorker.Run(inputDir, sfaReports, inputDir, null, null, null, jsonFiles));
@@ -410,7 +458,11 @@ public SfaPage()
         SfaCancelButton.IsEnabled = false;
     }
 
-    private void AppendError(string message)
+    private void AppendError(string message) => AppendLog(message);
+
+    /// <summary>Журнал выполнения: дублирует в «Лог выполнения» любые события
+    /// (этапы, файлы, экспорт, документация, ошибки), не только ошибки.</summary>
+    private void AppendLog(string message)
     {
         if (string.IsNullOrEmpty(SfaErrorLogTextBox.Text)) SfaErrorLogTextBox.Text = message;
         else SfaErrorLogTextBox.Text += Environment.NewLine + message;
@@ -434,38 +486,40 @@ public SfaPage()
         }
 
         var sfaReports = Path.Combine(inputDir, "SFAReports");
-        var cacheDb = Path.Combine(sfaReports, "mslearn_cache.db");
-        var indexDb = Path.Combine(sfaReports, "sfa_function_index.db");
-        var reuseCache = false;
 
-        if (Directory.Exists(sfaReports) && File.Exists(cacheDb) && File.Exists(indexDb))
-        {
-            var sizeKb = new FileInfo(cacheDb).Length / 1024.0;
-            var (action, _) = await AskSfaCacheAsync(sizeKb);
-            if (action == "cancel") return;
-            reuseCache = action == "reuse";
-        }
+        // Вопрос про кэш задаётся при запуске анализа, не здесь: к моменту
+        // нажатия «Сгенерировать HTML» поиск документации уже выполнен, и
+        // генерация идёт по кэшу mslearn_cache.db. Если индекс покрывает все
+        // найденные JSON — перегенерация из кэша; есть неучтённые файлы
+        // (добавлены после анализа) — полная генерация, индекс перестроится.
+        var scannedJsons = ExecutableFinder.SafeEnumerateFiles(inputDir)
+            .Where(f => f.EndsWith(".export.json", StringComparison.OrdinalIgnoreCase)).ToArray();
+        var indexDb = Path.Combine(sfaReports, "sfa_function_index.db");
+        var indexPaths = File.Exists(indexDb) ? ReadJsonPathsFromIndex(indexDb) : Array.Empty<string>();
+        var indexed = new HashSet<string>(indexPaths.Select(p => Path.GetFullPath(p)), StringComparer.OrdinalIgnoreCase);
 
         string[] jsonFiles;
-        if (reuseCache)
+        bool reuseCache;
+        if (scannedJsons.Length == 0 && indexPaths.Length > 0)
         {
-            jsonFiles = ReadJsonPathsFromIndex(indexDb);
-            if (jsonFiles.Length == 0)
-            {
-                await UiDialogs.WarnAsync("Ошибка",
-                    "Индекс БД устарел или не содержит данных.\nВыполните полный анализ для перестроения индекса.");
-                return;
-            }
+            // JSON удалены (например, «удалять JSON» включён) — только кэш.
+            jsonFiles = indexPaths;
+            reuseCache = true;
+        }
+        else if (scannedJsons.Length > 0 && scannedJsons.All(f => indexed.Contains(Path.GetFullPath(f))))
+        {
+            jsonFiles = scannedJsons;
+            reuseCache = true;
         }
         else
         {
-            jsonFiles = ExecutableFinder.SafeEnumerateFiles(inputDir)
-            .Where(f => f.EndsWith(".export.json", StringComparison.OrdinalIgnoreCase)).ToArray();
-            if (jsonFiles.Length == 0)
-            {
-                await UiDialogs.WarnAsync("Ошибка", "Нет JSON-файлов экспорта.");
-                return;
-            }
+            jsonFiles = scannedJsons;
+            reuseCache = false;
+        }
+        if (jsonFiles.Length == 0)
+        {
+            await UiDialogs.WarnAsync("Ошибка", "Нет JSON-файлов экспорта.");
+            return;
         }
 
         await DoGenerateHtmlAsync(inputDir, jsonFiles, reuseCache, sfaReports);
@@ -500,6 +554,10 @@ public SfaPage()
                 : $"Генерация HTML: {cur}/{total}";
         });
         _htmlWorker.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
+        _htmlWorker.ProgressUpdated += (cur, total, msg) => RunOnUi(() =>
+        {
+            if (msg.Length > 0) AppendLog($"[HTML] {msg}");
+        });
         // Finished приходит из фонового потока Task.Run: без RunOnUi обработчик
         // трогал UI (кнопки, прогресс, ContentDialog) из не-UI потока —
         // приложение падало аварийно в момент завершения/отмены генерации.
@@ -588,11 +646,12 @@ public SfaPage()
         var tcs = new TaskCompletionSource<(string, object?)>();
         var dlg = new ContentDialog
         {
-            Title = "Существующий кэш MS Learn",
-            Content = $"Найдена папка SFAReports с ранее сформированным кэшем документации ({sizeKb:F1} КБ).\n\n" +
-                      "Перегенерация из кэша использует сохранённую документацию; " +
-                      "если в кэше её не хватает (например, поиск прерывался), " +
-                      "недостающие функции будут доискаться автоматически.",
+            Title = "Найден кэш документации MS Learn",
+            Content = $"Обнаружен ранее собранный кэш документации ({sizeKb:F1} КБ).\n\n" +
+                      "«Перегенерировать HTML из кэша» — отчёты строятся из сохранённой " +
+                      "документации без повторного анализа IDA; недостающие функции доищутся автоматически.\n\n" +
+                      "«Выполнить полный анализ» — обычный цикл IDA + экспорт; документация " +
+                      "будет искаться после анализа.",
             PrimaryButtonText = "Выполнить полный анализ",
             SecondaryButtonText = "Перегенерировать HTML из кэша",
             CloseButtonText = "Отмена",

@@ -189,6 +189,19 @@ def get_category_description(category: str) -> str:
     return info.get("description", "") if info else ""
 
 
+def get_module_category(module_name: str) -> str:
+    """Возвращает короткое название категории модуля (или пустую строку).
+
+    Быстрая кэшированная альтернатива ``get_module_category_and_description``,
+    когда нужно только название категории.
+    """
+    from .naming import normalize_module_name
+
+    if not module_name:
+        return ""
+    return _build_category_key_map().get(normalize_module_name(module_name), "")
+
+
 # Кэш: нормализованный ключ модуля → название категории.
 _CATEGORY_KEY_MAP: dict[str, str] | None = None
 

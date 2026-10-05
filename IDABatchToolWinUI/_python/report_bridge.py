@@ -165,6 +165,7 @@ def normalize_display_name(module_name):
 
 from classifier.platform_classifier import classify_module as _classifier_describe
 from classifier.categories import get_module_category_and_description
+from classifier.system_modules import is_sfa_module as _classifier_is_sfa
 from classifier.system_modules import is_system_module as _classifier_is_system
 from classifier.system_modules import normalize_platform as _normalize_platform
 
@@ -1317,6 +1318,13 @@ def _is_system_module(mod_name, platform):
     return _classifier_is_system(mod_name or "", platform or "")
 
 
+def _is_sfa_module(mod_name, platform):
+    """Модуль входит в отчёты СФ: категория «Системные библиотеки ОС».
+    Отчёты СФ формируются только по системным библиотекам Windows-класса
+    (kernel32, user32, …); криптография, сеть и runtime-словари — вне СФ."""
+    return _classifier_is_sfa(mod_name or "", platform or "")
+
+
 def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
                         platform, data_override=None, reuse_cache=False,
                         doc_cache=None, manpages_conn=None, sfa_index_conn=None,
@@ -1387,7 +1395,7 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
         # Псевдо-модуль ELF (.dynsym): библиотека неизвестна — системность
         # определяется по наличию документации.
         is_pseudo_module = module.strip().lower() in (".dynsym", ".dynsec", "unknown", "")
-        module_is_system = _is_system_module(module, platform)
+        module_is_system = _is_sfa_module(module, platform)
 
         # Фильтр 1 (Windows): несистемные библиотеки пропускаются. Для
         # псевдо-модулей проверка откладывается до поиска документации.
@@ -1562,11 +1570,12 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
     system_notfound_names = {e["name"] for e in system_entries if not e["found"]}
     # Системные библиотеки модуля: для ELF источник — зависимости (DT_NEEDED);
     # в list_all-режиме дополняем библиотеками подтверждённых системных строк.
-    system_libs = {lib for lib in needed_libs if _is_system_module(lib, platform)}
+    # Критерий — СФ-библиотеки («Системные библиотеки ОС»), тот же, что у индекса.
+    system_libs = {lib for lib in needed_libs if _is_sfa_module(lib, platform)}
     if list_all_imports:
         for e in system_entries:
             dll = e["dll"]
-            if dll and dll != "—" and _is_system_module(dll, platform):
+            if dll and dll != "—" and _is_sfa_module(dll, platform):
                 system_libs.add(dll)
 
     ctx = {
@@ -1899,7 +1908,9 @@ def build_sfa_index(index_db, json_files, platform):
                     "(json_path, file_name, func_name, module_name, address, file_size) "
                     "VALUES (?, ?, ?, ?, ?, ?)",
                     (jp_str, file_name, func_name, module, address, file_size))
-                if _is_system_module(module, platform):
+                # В СФ-индекс — только СФ-библиотеки (категория «Системные
+                # библиотеки ОС»): криптография, сеть и runtime вне СФ.
+                if _is_sfa_module(module, platform):
                     conn.execute(
                         "INSERT OR IGNORE INTO system_modules (module_key, module_name, category) "
                         "VALUES (?, ?, ?)", (module_key, module, ""))
@@ -2372,7 +2383,7 @@ def run_generate(args):
                     continue
                 module = (imp.get("module") or "").strip()
                 is_pseudo = module.lower() in (".dynsym", ".dynsec", "unknown", "")
-                if not is_pseudo and not _is_system_module(module, platform):
+                if not is_pseudo and not _is_sfa_module(module, platform):
                     continue
                 if (not is_pseudo and sfa_index_conn is not None
                         and not _sfa_index_is_known(sfa_index_conn, fn)):

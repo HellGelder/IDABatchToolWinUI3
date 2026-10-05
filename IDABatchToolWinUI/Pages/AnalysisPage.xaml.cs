@@ -288,9 +288,15 @@ public sealed partial class AnalysisPage : Page
     private void HookWorker(AnalysisWorker w)
     {
         w.PhaseChanged += phase => RunOnUi(() =>
-            ProcessStatusText.Text = phase == "analysis" ? "Фаза: анализ файлов..." : "Фаза: экспорт в JSON...");
+        {
+            ProcessStatusText.Text = phase == "analysis" ? "Фаза: анализ файлов..." : "Фаза: экспорт в JSON...";
+            AppendLog($"[Фаза] {ProcessStatusText.Text}");
+        });
         w.ProcessStarted += (name, pid, tid) => RunOnUi(() =>
-            AnalysisMonitor.SetProcessInfo(AnalysisMonitor.NormalizeName(name), pid, tid));
+        {
+            AnalysisMonitor.SetProcessInfo(AnalysisMonitor.NormalizeName(name), pid, tid);
+            AppendLog($"Запущен процесс: {name} (PID {pid})");
+        });
         w.AnalysisProgress += (name, cur, total) => RunOnUi(() =>
         {
             ProcessStatusText.Text = $"Анализ: {cur}/{total} – {name}";
@@ -299,14 +305,19 @@ public sealed partial class AnalysisPage : Page
         {
             SetFileStatusByName(name, AnalysisStatus.InProgress);
             AnalysisMonitor.MarkRunning(AnalysisMonitor.NormalizeName(name), "analysis");
+            AppendLog($"[Анализ] Начало: {name}");
         });
         w.AnalysisFileCompleted += (name, ok) => RunOnUi(() =>
         {
             SetFileStatusByName(name, ok ? AnalysisStatus.Success : AnalysisStatus.Error);
             AnalysisMonitor.MarkCompleted(AnalysisMonitor.NormalizeName(name), ok);
+            AppendLog($"[Анализ] {name} — {(ok ? "успешно" : "ошибка")}");
         });
         w.ExportFileStarted += name => RunOnUi(() =>
-            AnalysisMonitor.MarkRunning(AnalysisMonitor.NormalizeName(name), "export"));
+        {
+            AnalysisMonitor.MarkRunning(AnalysisMonitor.NormalizeName(name), "export");
+            AppendLog($"[Экспорт] Начало: {name}");
+        });
         w.ExportProgress += (name, cur, total) => RunOnUi(() =>
         {
             ProcessStatusText.Text = $"Экспорт: {cur}/{total} – {name}";
@@ -314,6 +325,7 @@ public sealed partial class AnalysisPage : Page
         w.ExportFileCompleted += (name, ok) => RunOnUi(() =>
         {
             if (!ok) AppendError($"Ошибка экспорта для {name}");
+            else AppendLog($"[Экспорт] {name} — успешно");
             AnalysisMonitor.MarkCompleted(AnalysisMonitor.NormalizeName(name), ok);
         });
         w.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
@@ -403,7 +415,11 @@ public sealed partial class AnalysisPage : Page
         _taskManagerWindow.Activate();
     }
 
-    private void AppendError(string message)
+    private void AppendError(string message) => AppendLog(message);
+
+    /// <summary>Журнал выполнения: дублирует в «Лог выполнения» любые события
+    /// (этапы, файлы, экспорт, ошибки), не только ошибки.</summary>
+    private void AppendLog(string message)
     {
         if (string.IsNullOrEmpty(ErrorLogTextBox.Text)) ErrorLogTextBox.Text = message;
         else ErrorLogTextBox.Text += Environment.NewLine + message;
@@ -453,6 +469,10 @@ public sealed partial class AnalysisPage : Page
                 : $"Генерация HTML: {cur}/{total}";
         });
         _htmlWorker.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
+        _htmlWorker.ProgressUpdated += (cur, total, msg) => RunOnUi(() =>
+        {
+            if (msg.Length > 0) AppendLog($"[HTML] {msg}");
+        });
         _htmlWorker.Finished += result => RunOnUi(() => OnHtmlFinished(result));
 
         await Task.Run(() => _htmlWorker.Run(inputDir, reportsDir, inputDir, null, null, null, jsonFiles));
