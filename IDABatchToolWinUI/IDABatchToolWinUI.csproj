@@ -22,6 +22,19 @@
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <!-- Иконка exe (ярлык, проводник, панель задач). Значок окна задаёт MainWindow (TitleBar.IconSource). -->
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+
+    <!--
+      Версия файла в свойствах exe/dll. При каждой новой сборке поднимать здесь и
+      добавлять запись в version.txt (лончер берёт версию из FileVersion автоматически).
+    -->
+    <Version>1.0.0.0</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <InformationalVersion>1.0.0.0</InformationalVersion>
+    <AssemblyTitle>IDA Batch Tool</AssemblyTitle>
+    <Product>IDA Batch Tool</Product>
+    <Company>СФБ ЛАБ</Company>
+    <Copyright>© СФБ ЛАБ</Copyright>
   </PropertyGroup>
 
   <ItemGroup>

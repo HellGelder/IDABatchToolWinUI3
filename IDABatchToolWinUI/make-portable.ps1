@@ -34,6 +34,11 @@ param(
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 
+# Версия сборки — из csproj (FileVersion); ею же штампуется лончер.
+$csprojRaw = Get-Content "$root\IDABatchToolWinUI.csproj" -Raw
+$AppVersion = if ($csprojRaw -match '<FileVersion>([^<]+)</FileVersion>') { $Matches[1] } else { "1.0.0.0" }
+Write-Host "Версия сборки: $AppVersion"
+
 # ── 1. Publish ──────────────────────────────────────────────────────────────
 if (-not $NoPublish) {
     dotnet publish "$root\IDABatchToolWinUI.csproj" -c $Configuration -r $Rid
@@ -70,13 +75,26 @@ else {
     Write-Warning "bindiff.exe не найден в publish — корень будет без него (поиск BinDiff: конфиг/реестр/PATH)"
 }
 
+# ── 3.5. Краткий readme и журнал версий — в корень поставки ────────────────
+foreach ($doc in @("README.txt", "version.txt")) {
+    $src = Join-Path $root $doc
+    if (Test-Path $src) { Copy-Item $src (Join-Path $staging $doc) -Force }
+    else { Write-Warning "$doc не найден в проекте — в поставку не попал" }
+}
+
 # ── 4. Лончер ───────────────────────────────────────────────────────────────
 $launcherCs = Join-Path $env:TEMP "idabatchtool-launcher.cs"
-@'
+$launcherSource = @'
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
+
+[assembly: AssemblyVersion("__APPVERSION__")]
+[assembly: AssemblyFileVersion("__APPVERSION__")]
+[assembly: AssemblyTitle("IDA Batch Tool")]
+[assembly: AssemblyProduct("IDA Batch Tool")]
 
 static class Launcher
 {
@@ -118,7 +136,10 @@ static class Launcher
         return 0;
     }
 }
-'@ | Set-Content -Path $launcherCs -Encoding ASCII
+'@
+$launcherSource = $launcherSource.Replace("__APPVERSION__", $AppVersion)
+# .NET Framework csc не знает /version — версия задаётся assembly-атрибутами выше
+Set-Content -Path $launcherCs -Value $launcherSource -Encoding ASCII
 
 $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 if (-not (Test-Path $csc)) { $csc = "C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe" }
