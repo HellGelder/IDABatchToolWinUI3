@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "IDABatchToolWinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "IDABatchToolWinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

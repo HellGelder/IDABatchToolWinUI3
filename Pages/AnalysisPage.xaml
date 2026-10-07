@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="IDABatchToolWinUI.Pages.AnalysisPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctl="using:IDABatchToolWinUI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:IDABatchToolWinUI.Pages"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <Style x:Key="GroupBoxStyle" TargetType="Border">
+            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="12,10" />
+        </Style>
+
+        <Style x:Key="GroupHeaderStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+        </Style>
+
+        <!-- Общая тень для всех блоков (паттерн ThemeShadow). Receiver — ShadowCastGrid ниже блоков. -->
+        <ThemeShadow x:Key="SharedShadow" />
+
+        <Style x:Key="SubBlockStyle" TargetType="Border">
+            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
+    </Page.Resources>
+
+    <ScrollViewer>
+        <!-- Внутренний Grid: сначала прозрачный слой-приёмник тени, поверх него блоки -->
+        <Grid>
+            <Grid x:Name="ShadowCastGrid" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+
+            <StackPanel Padding="{StaticResource PagePadding}" Spacing="8">
+
+                <!-- Источник файлов -->
+                <Border Style="{StaticResource GroupBoxStyle}" Shadow="{StaticResource SharedShadow}"
+                        Loaded="ShadowRect_Loaded">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Источник файлов" Style="{StaticResource GroupHeaderStyle}" />
+                        <Grid ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="InputDirTextBox" Grid.Column="0"
+                                     PlaceholderText="Путь к папке с бинарными файлами или к архиву (.apk, .ipa, .dmg)..." />
+                            <Button x:Name="BrowseDirButton" Grid.Column="1" Content="Обзор..." MinWidth="80" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Графическое отображение директории -->
+                <Border Style="{StaticResource GroupBoxStyle}" Shadow="{StaticResource SharedShadow}"
+                        Loaded="ShadowRect_Loaded">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Графическое отображение директории" Style="{StaticResource GroupHeaderStyle}" />
+                        <ctl:TreemapControl x:Name="Treemap" Height="40" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Автоопределение платформы: неотключаемый инфобар под тремапом -->
+                <InfoBar x:Name="PlatformInfoBar" IsOpen="False" IsClosable="False"
+                         Severity="Informational"
+                         Shadow="{StaticResource SharedShadow}" Loaded="ShadowRect_Loaded" />
+
+                <!-- Параметры (во всю ширину): чекбоксы 2+2, ниже — потоки IDA -->
+                <Border Style="{StaticResource GroupBoxStyle}" Shadow="{StaticResource SharedShadow}"
+                        Loaded="ShadowRect_Loaded">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Параметры" Style="{StaticResource GroupHeaderStyle}" />
+                        <Grid ColumnSpacing="20">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Spacing="6">
+                                <CheckBox x:Name="CleanupCheck" Content="Удалять .asm и .log после успешного анализа"
+                                          IsChecked="True" />
+                                <CheckBox x:Name="TempCleanupCheck" Content="Удалять временные файлы IDA (.id0, .id1, .nam, .til)"
+                                          IsChecked="True" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Spacing="6">
+                                <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                                    <CheckBox x:Name="PseudocodeCheck" Content="Включить псевдокод в JSON-экспорт"
+                                              IsChecked="True" />
+                                    <!-- «i» в кружочке: наведение — ToolTip, нажатие — TeachingTip -->
+                                    <Button x:Name="PseudocodeInfoButton" Padding="4" MinWidth="24" MinHeight="24"
+                                            VerticalAlignment="Center" Click="PseudocodeInfoButton_Click"
+                                            ToolTipService.ToolTip="Псевдокод Hex-Rays попадёт в JSON и HTML-отчёты. Нажмите для подробностей.">
+                                        <FontIcon Glyph="&#xE946;" FontSize="12" />
+                                    </Button>
+                                </StackPanel>
+                                <CheckBox x:Name="DeleteJsonCheck" Content="Удалить JSON-файлы после создания отчётов"
+                                          IsChecked="True" />
+                            </StackPanel>
+                        </Grid>
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Потоков IDA:" VerticalAlignment="Center" FontSize="12" />
+                            <Slider x:Name="MaxIdaSlider" Grid.Column="1" Minimum="1" Maximum="32" Value="4"
+                                    StepFrequency="1" TickFrequency="4"
+                                    ToolTipService.ToolTip="Максимальное количество одновременно работающих экземпляров IDA. По умолчанию — число логических процессоров." />
+                            <TextBlock Grid.Column="2" Text="{Binding ElementName=MaxIdaSlider, Path=Value}"
+                                       VerticalAlignment="Center" MinWidth="24" TextAlignment="Center"
+                                       FontSize="12" FontWeight="SemiBold" />
+                        </Grid>
+                        <TeachingTip x:Name="PseudocodeTip"
+                                     Title="Псевдокод в JSON-экспорте"
+                                     CloseButtonContent="Понятно"
+                                     IsOpen="False">
+                            <TeachingTip.Content>
+                                <TextBlock TextWrapping="Wrap" MaxWidth="340"
+                                           Text="При включении для каждой функции дополнительно экспортируется псевдокод декомпилятора Hex-Rays: он попадает в JSON-файлы и HTML-отчёты. Это увеличивает время экспорта и размер JSON и отчётов, особенно на крупных проектах. Если выключено, в отчётах остаётся только дизассемблирование (инструкции, hexdump)." />
+                            </TeachingTip.Content>
+                        </TeachingTip>
+                        <InfoBar x:Name="ThreadsWarningBar" IsOpen="False" IsClosable="False"
+                                 Severity="Warning"
+                                 Title="Повышенная нагрузка на систему"
+                                 Message="Выбрано максимальное количество потоков, соответствующее числу логических процессоров системы. Во время выполнения анализа возможна высокая загрузка процессора и временное снижение отклика системы и других приложений. При необходимости уменьшите количество потоков." />
+                    </StackPanel>
+                </Border>
+
+                <!-- Процесс анализа (running ProgressBar во время работы, скрыт в простое) -->
+                <Border Style="{StaticResource GroupBoxStyle}" Shadow="{StaticResource SharedShadow}"
+                        Loaded="ShadowRect_Loaded">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Процесс анализа" Style="{StaticResource GroupHeaderStyle}" />
+                        <TextBlock x:Name="ProcessStatusText" Text="Готов к запуску" FontSize="11"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <ProgressBar x:Name="ProcessProgress" IsIndeterminate="True" Height="4" Visibility="Collapsed"
+                                     Foreground="{ThemeResource AccentAAFillColorDefaultBrush}" />
+                        <Grid ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="StartAnalysisButton" Grid.Column="0" Content="Запустить анализ"
+                                    Height="34" Width="150" Padding="12,6" />
+                            <!-- Активна только во время выполнения анализа -->
+                            <Button x:Name="DetailsButton" Grid.Column="1" Height="34" MinWidth="132"
+                                    Padding="12,6" IsEnabled="False" Click="DetailsButton_Click"
+                                    ToolTipService.ToolTip="Мини-диспетчер задач анализа: PID, потоки и статусы всех файлов">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE946;" FontSize="13" />
+                                    <TextBlock Text="Подробнее" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="CancelButton" Grid.Column="2" Content="Отмена"
+                                    Height="34" Width="90" Padding="12,6" IsEnabled="False" />
+                            <Button x:Name="GenerateHtmlButton" Grid.Column="4" Height="40" MinWidth="168" Padding="12,4" IsEnabled="False">
+                                <StackPanel Spacing="0" VerticalAlignment="Center">
+                                    <TextBlock Text="Сгенерировать" HorizontalAlignment="Center" FontSize="12" />
+                                    <TextBlock Text="HTML-отчёты" HorizontalAlignment="Center" FontSize="12" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Ошибки -->
+                <Border Style="{StaticResource GroupBoxStyle}" Shadow="{StaticResource SharedShadow}"
+                        Loaded="ShadowRect_Loaded">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Лог выполнения" Style="{StaticResource GroupHeaderStyle}" />
+                        <TextBox x:Name="ErrorLogTextBox" AcceptsReturn="True" TextWrapping="Wrap"
+                                 IsReadOnly="True" MaxHeight="120" MinHeight="68"
+                                 PlaceholderText="Здесь будет появляться журнал выполнения..." />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</Page>

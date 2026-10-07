@@ -1,0 +1,10 @@
+ida:
+  executable: idat.exe
+bindiff:
+  executable: bindiff.exe
+# 0 = авто: число логических процессоров машины
+max_ida: 0
+default_inputdir: .
+log_level: INFO
+theme: light
+manpages_db_path: ""

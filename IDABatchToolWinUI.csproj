@@ -1,0 +1,125 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>IDABatchToolWinUI</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x86;x64;ARM64</Platforms>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant())</RuntimeIdentifier>
+    <PublishProfile Condition="Exists('Properties\PublishProfiles\win-$(Platform).pubxml')">win-$(Platform).pubxml</PublishProfile>
+    <UseWinUI>true</UseWinUI>
+    <WinUISDKReferences>false</WinUISDKReferences>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <!--
+      Unpackaged запуск (dotnet run) + self-contained Windows App SDK:
+      не требует установки Windows App Runtime в системе.
+    -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- Иконка exe (ярлык, проводник, панель задач). Значок окна задаёт MainWindow (TitleBar.IconSource). -->
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+
+    <!--
+      Версия файла в свойствах exe/dll. При каждой новой сборке поднимать здесь и
+      добавлять запись в version.txt (лончер берёт версию из FileVersion автоматически).
+    -->
+    <Version>1.0.0.7</Version>
+    <FileVersion>1.0.0.7</FileVersion>
+    <AssemblyVersion>1.0.0.7</AssemblyVersion>
+    <InformationalVersion>1.0.0.7</InformationalVersion>
+    <AssemblyTitle>IDA Batch Tool</AssemblyTitle>
+    <Product>IDA Batch Tool</Product>
+    <Company>СФБ ЛАБ</Company>
+    <Copyright>© СФБ ЛАБ</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- CopyToOutputDirectory обязателен: иначе Assets не попадают в publish
+         и ломаются ссылки на иконку (AppWindow.SetIcon / ImageIconSource). -->
+    <Content Include="Assets\SplashScreen.scale-200.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\LockScreenLogo.scale-200.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Square150x150Logo.scale-200.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Square44x44Logo.scale-200.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Square44x44Logo.targetsize-48_altform-lightunplated.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\StoreLogo.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\AppIcon.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Wide310x150Logo.scale-200.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- Python-мосты генерации отчётов и man-pages + скрипты для IDA копируются в выходную папку -->
+  <ItemGroup>
+    <Content Include="_python\*.py" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="_python\classifier\**\*.py" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="_python\templates\*.html" CopyToOutputDirectory="PreserveNewest" />
+    <!-- vendor: js И css (datatables.min.css нужен отчётам; без него таблицы без стилей) -->
+    <Content Include="_python\vendor\*.*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="scripts\export_data.py" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="config.yaml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="bindiff.exe" CopyToOutputDirectory="PreserveNewest" Condition="Exists('bindiff.exe')" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="scripts\diaphora\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Manifest Include="$(ApplicationManifest)" />
+  </ItemGroup>
+
+  <!--
+    Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging
+    Tools extension to be activated for this project even if the Windows App SDK Nuget
+    package has not yet been restored.
+  -->
+  <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <ProjectCapability Include="Msix" />
+  </ItemGroup>
+
+  <!--
+    Microsoft.Windows.SDK.BuildTools.WinApp adds first-class support for
+    `dotnet run` on packaged WinUI apps: it hooks the .NET CLI Run target to
+    register a debug identity via the winapp CLI and launch the app with
+    package identity (AUMID).
+    Set <EnableWinAppRunSupport>false</EnableWinAppRunSupport> in a
+    <PropertyGroup> above to opt out.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="0.6.1" />
+  </ItemGroup>
+
+  <!--
+    Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
+    Explorer "Package and Publish" context menu entry to be enabled for this project even if
+    the Windows App SDK Nuget package has not yet been restored.
+  -->
+  <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
+  </PropertyGroup>
+
+  <!-- Publish Properties -->
+  <PropertyGroup>
+    <!--
+      ReadyToRun ОТКЛЮЧЁН (2026-10-05): R2R-образы ломают WinRT-проецирование —
+      нативный краш 0xc000027b в Microsoft.UI.Xaml.dll при заворачивании
+      управляемых объектов (WinRT.TypeExtensions.GetAbiToProjectionVftblPtr →
+      NullReferenceException): пустая таблица пар на вкладке «Сравнение»,
+      падение при развороте окна. Подтверждено экспериментально: publish без
+      R2R работает, с R2R падает. Цена отключения — чуть медленнее старт/JIT.
+    -->
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <!--
+      Тримминг тоже отключён: обрезанные WinRT.Runtime / Microsoft.Windows.SDK.NET
+      (IL2104) бьют по тому же рефлексивному механизму CCW. Не включать без
+      перепроверки всех экранов на собранной поставке.
+    -->
+    <PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+</Project>
