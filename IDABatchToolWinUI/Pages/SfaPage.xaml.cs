@@ -30,7 +30,16 @@ public SfaPage()
     {
         InitializeComponent();
         _cfg = ConfigService.Load();
-        SfaMaxIdaSlider.Value = _cfg.MaxIda;
+        // Потоки IDA: по умолчанию — максимум аппаратных возможностей (логические
+        // процессоры). max_ida: 0 в config.yaml означает «авто»; сохранённое
+        // значение учитывается, но не выше числа процессоров.
+        SfaMaxIdaSlider.Maximum = Environment.ProcessorCount;
+        SfaMaxIdaSlider.Value = _cfg.MaxIda > 0
+            ? Math.Min(_cfg.MaxIda, Environment.ProcessorCount)
+            : Environment.ProcessorCount;
+        // Предупреждение о повышенной нагрузке при потоках по максимуму железа
+        SfaMaxIdaSlider.ValueChanged += (_, _) => UpdateThreadsWarning();
+        UpdateThreadsWarning();
 
         // Подписки — один раз в конструкторе, чтобы при повторном показе
         // не дублировались (страница кэшируется в MainWindow).
@@ -50,6 +59,10 @@ public SfaPage()
     }
 
     public bool IsAnalysisRunning() => _analysisInProgress || _htmlInProgress || _docsInProgress;
+
+    /// <summary>Инфобар-ворнинг: потоки на максимуме аппаратных возможностей.</summary>
+    private void UpdateThreadsWarning()
+        => SfaThreadsWarningBar.IsOpen = (int)SfaMaxIdaSlider.Value >= (int)SfaMaxIdaSlider.Maximum;
 
     /// <summary>Индикатор занятости (как SetProgressRunning на вкладке
     /// «Общий анализ»): пока идёт любая фаза — полоса анимируется, точные
@@ -275,7 +288,8 @@ public SfaPage()
         _worker = new AnalysisWorker(
             files.Select(f => f.Path).ToList(), idatPath, (int)SfaMaxIdaSlider.Value, null,
             SfaCleanupCheck.IsChecked == true, SfaTempCleanupCheck.IsChecked == true,
-            SfaPseudocodeCheck.IsChecked == true, SfaDeleteJsonCheck.IsChecked == true,
+            // СФ-отчёты псевдокод не используют — экспорт всегда без него
+            false, SfaDeleteJsonCheck.IsChecked == true,
             exportOnly);
         HookWorker(_worker);
         _worker.Start();
@@ -425,7 +439,7 @@ public SfaPage()
         SfaProcessStatusText.Text = "Фаза: экспорт в JSON...";
         SfaProcessProgress.Value = 0;
         var worker = new AnalysisWorker(idbFiles, idatPath, (int)SfaMaxIdaSlider.Value, null,
-            false, false, SfaPseudocodeCheck.IsChecked == true, false, true);
+            false, false, false, false, true);
         HookWorker(worker);
         _worker = worker;
         worker.Start();

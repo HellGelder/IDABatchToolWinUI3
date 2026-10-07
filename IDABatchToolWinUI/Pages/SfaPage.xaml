@@ -65,7 +65,8 @@
             <InfoBar Grid.Row="2" x:Name="SfaPlatformInfoBar" IsOpen="False" IsClosable="False"
                      Severity="Informational" />
 
-            <!-- Параметры (во всю ширину): чекбоксы 2+2, ниже — потоки IDA -->
+            <!-- Параметры: слева очистка, справа JSON и потоки IDA (СФ-экспорт
+                 всегда без псевдокода — в отчётах СФ он не используется) -->
             <Border Grid.Row="3" Style="{StaticResource GroupBoxStyle}">
                 <StackPanel Spacing="6">
                     <TextBlock Text="Параметры" Style="{StaticResource GroupHeaderStyle}" />
@@ -81,26 +82,28 @@
                                       IsChecked="True" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" Spacing="6">
-                            <CheckBox x:Name="SfaPseudocodeCheck" Content="Включить псевдокод в JSON-экспорт"
-                                      IsChecked="True" />
                             <CheckBox x:Name="SfaDeleteJsonCheck" Content="Удалить JSON-файлы после создания отчётов"
                                       IsChecked="True" />
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Потоков IDA:" VerticalAlignment="Center" FontSize="12" />
+                                <Slider x:Name="SfaMaxIdaSlider" Grid.Column="1" Minimum="1" Maximum="32" Value="4"
+                                        StepFrequency="1" TickFrequency="4"
+                                        ToolTipService.ToolTip="Максимальное количество одновременно работающих экземпляров IDA. По умолчанию — число логических процессоров." />
+                                <TextBlock Grid.Column="2" Text="{Binding ElementName=SfaMaxIdaSlider, Path=Value}"
+                                           VerticalAlignment="Center" MinWidth="20" TextAlignment="Center"
+                                           FontSize="12" FontWeight="SemiBold" />
+                            </Grid>
                         </StackPanel>
                     </Grid>
-                    <Grid ColumnSpacing="10">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Потоков IDA:" VerticalAlignment="Center" FontSize="12" />
-                        <Slider x:Name="SfaMaxIdaSlider" Grid.Column="1" Minimum="1" Maximum="32" Value="4"
-                                StepFrequency="1" TickFrequency="4"
-                                ToolTipService.ToolTip="Максимальное количество одновременно работающих экземпляров IDA." />
-                        <TextBlock Grid.Column="2" Text="{Binding ElementName=SfaMaxIdaSlider, Path=Value}"
-                                   VerticalAlignment="Center" MinWidth="20" TextAlignment="Center"
-                                   FontSize="12" FontWeight="SemiBold" />
-                    </Grid>
+                    <InfoBar x:Name="SfaThreadsWarningBar" IsOpen="False" IsClosable="False"
+                             Severity="Warning"
+                             Title="Повышенная нагрузка на систему"
+                             Message="Выбрано максимальное количество потоков, соответствующее числу логических процессоров системы. Во время выполнения анализа возможна высокая загрузка процессора и временное снижение отклика системы и других приложений. При необходимости уменьшите количество потоков." />
                 </StackPanel>
             </Border>
 

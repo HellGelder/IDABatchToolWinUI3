@@ -26,13 +26,26 @@ public sealed partial class AnalysisPage : Page
     {
         InitializeComponent();
         _cfg = ConfigService.Load();
-        MaxIdaSlider.Value = _cfg.MaxIda;
+        // Потоки IDA: по умолчанию — максимум аппаратных возможностей (логические
+        // процессоры). max_ida: 0 в config.yaml означает «авто»; сохранённое
+        // значение учитывается, но не выше числа процессоров.
+        MaxIdaSlider.Maximum = Environment.ProcessorCount;
+        MaxIdaSlider.Value = _cfg.MaxIda > 0
+            ? Math.Min(_cfg.MaxIda, Environment.ProcessorCount)
+            : Environment.ProcessorCount;
+        // Предупреждение о повышенной нагрузке при потоках по максимуму железа
+        MaxIdaSlider.ValueChanged += (_, _) => UpdateThreadsWarning();
+        UpdateThreadsWarning();
 
         // Подписки — один раз в конструкторе, чтобы при повторном показе страницы
         // (кэш навигации) обработчики не дублировались.
         BrowseDirButton.Click += BrowseDir_Click;
         StartAnalysisButton.Click += StartAnalysis_Click;
         DetailsButton.Click += DetailsButton_Click;
+        // TeachingTip — не FrameworkElement: x:Bind к Target ненадёжен, задаём
+        // из кода. Клик подключён атрибутом Click в XAML ровно один раз:
+        // обработчик тоглит IsOpen, двойная подписка гасила бы тип.
+        PseudocodeTip.Target = PseudocodeInfoButton;
         CancelButton.Click += Cancel_Click;
         GenerateHtmlButton.Click += GenerateHtml_Click;
         InputDirTextBox.TextChanged += (_, _) => RefreshFileList();
@@ -430,6 +443,13 @@ public sealed partial class AnalysisPage : Page
     // ──────────────────────────────────────────────
     //  HTML-отчёты
     // ──────────────────────────────────────────────
+
+    /// <summary>Инфобар-ворнинг: потоки на максимуме аппаратных возможностей.</summary>
+    private void UpdateThreadsWarning()
+        => ThreadsWarningBar.IsOpen = (int)MaxIdaSlider.Value >= (int)MaxIdaSlider.Maximum;
+
+    private void PseudocodeInfoButton_Click(object sender, RoutedEventArgs e)
+        => PseudocodeTip.IsOpen = !PseudocodeTip.IsOpen;
 
     private async void GenerateHtml_Click(object sender, RoutedEventArgs e)
     {

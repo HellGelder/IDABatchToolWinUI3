@@ -1797,6 +1797,17 @@ def _split(s):
     return [x for x in s.split(";") if x.strip()]
 
 
+def _read_paths_file(paths_file):
+    """Читает файл-ответку со списком JSON: один путь в строке, UTF-8 (BOM
+    допустим). Обход лимита длины командной строки Windows (~32 КБ): при
+    сотнях файлов строка "a;b;c" в --json-paths не проходит в CreateProcess
+    (Win32 ошибка 206, «имя файла или его расширение имеет слишком большую
+    длину»), хотя путь к самому интерпретатору ни при чём."""
+    with open(paths_file, "r", encoding="utf-8-sig") as f:
+        return [Path(line.strip()) for line in f
+                if line.strip() and Path(line.strip()).is_file()]
+
+
 def _collect_export_jsons(json_dir, json_paths):
     if json_paths:
         return [Path(p) for p in _split(json_paths) if Path(p).is_file()]
@@ -1972,7 +1983,10 @@ def run_generate(args):
     reports_dir = Path(args.reports_dir)
 
     if args.kind == "analysis":
-        json_files = _collect_export_jsons(args.json_dir, args.json_paths)
+        if args.json_paths_file:
+            json_files = _read_paths_file(args.json_paths_file)
+        else:
+            json_files = _collect_export_jsons(args.json_dir, args.json_paths)
         if not json_files:
             emit_error("Нет JSON-файлов экспорта. Сначала выполните анализ.")
             return
@@ -2090,7 +2104,10 @@ def run_generate(args):
             except Exception:
                 pass
         else:
-            json_files = _collect_export_jsons(args.json_dir, args.json_paths)
+            if args.json_paths_file:
+                json_files = _read_paths_file(args.json_paths_file)
+            else:
+                json_files = _collect_export_jsons(args.json_dir, args.json_paths)
             if not json_files:
                 emit_error("Нет JSON-файлов экспорта.")
                 return
@@ -2330,8 +2347,12 @@ def run_generate(args):
         Прогресс — по функциям; отмена — через stdin (CANCEL)."""
         sfa_index_db = reports_dir / "sfa_function_index.db"
         platform = _normalize_platform(args.platform)
-        json_files = [Path(p) for p in _split(args.json_paths)] if args.json_paths else \
-            _collect_export_jsons(args.json_dir, args.json_paths)
+        if args.json_paths_file:
+            json_files = _read_paths_file(args.json_paths_file)
+        elif args.json_paths:
+            json_files = [Path(p) for p in _split(args.json_paths)]
+        else:
+            json_files = _collect_export_jsons(args.json_dir, args.json_paths)
         if not json_files:
             emit_error("Нет JSON-файлов экспорта. Сначала выполните анализ.")
             return
@@ -2449,8 +2470,12 @@ def run_generate(args):
         })
 
     elif args.kind == "diff":
-        json_files = [Path(p) for p in _split(args.json_paths)] if args.json_paths else \
-            list(Path(args.json_dir).glob("*.diff.json"))
+        if args.json_paths_file:
+            json_files = _read_paths_file(args.json_paths_file)
+        elif args.json_paths:
+            json_files = [Path(p) for p in _split(args.json_paths)]
+        else:
+            json_files = list(Path(args.json_dir).glob("*.diff.json"))
         if not json_files:
             emit_error("Нет JSON-файлов с результатами сравнения.")
             return
@@ -2502,6 +2527,7 @@ def main():
     p.add_argument("--reuse-cache", action="store_true")
     p.add_argument("--manpages-db", default="")
     p.add_argument("--json-paths", default="")
+    p.add_argument("--json-paths-file", default="")
     args = parser.parse_args()
 
     # Слежение за stdin для мягкой отмены (GUI присылает CANCEL)

@@ -14,6 +14,8 @@ public sealed partial class DiffPage : Page
 {
     private readonly AppConfig _cfg;
     private bool _diffInProgress;
+    private bool _gitDiffInProgress;
+    private CancellationTokenSource? _gitDiffCts;
     private DiffWorker? _worker;
     private string? _outputDir;
     private readonly Dictionary<string, TextBlock> _stageLabels = new();
@@ -24,6 +26,11 @@ public DiffPage()
     {
         InitializeComponent();
         _cfg = ConfigService.Load();
+
+        // Подсказка BinDiff: TeachingTip — не FrameworkElement, x:Bind к Target
+        // ненадёжен — Target назначаем из кода. Клик подключён атрибутом Click
+        // в XAML ровно один раз (обработчик тоглит IsOpen).
+        BindiffTip.Target = BindiffInfoButton;
 
         // Подписки — один раз в конструкторе, чтобы при повторном показе
         // (кэш навигации) обработчики не дублировались.
@@ -44,9 +51,22 @@ public DiffPage()
         _analyzeTimer.Tick += (_, _) => _ = AnalyzeDirectoriesAsync();
 
         Loaded += (_, _) => AnalyzeDirectories();
+
+        // Подвкладка «Git-сравнение»: пикеры папок, запуск и отмена текстового диффа
+        GitBrowseOldButton.Click += async (_, _) => await UiDialogs.PickFolderAsync(GitOldDirTextBox);
+        GitBrowseNewButton.Click += async (_, _) => await UiDialogs.PickFolderAsync(GitNewDirTextBox);
+        GitBrowseOutButton.Click += async (_, _) => await UiDialogs.PickFolderAsync(GitOutDirTextBox);
+        GitStartButton.Click += GitStart_Click;
+        GitCancelButton.Click += (_, _) => _gitDiffCts?.Cancel();
+        GitExcludesTextBox.Text = DirectoriesDiffService.DefaultExcludes;
+        GitContextTextBox.Text = "3";
     }
 
-    public bool IsDiffRunning() => _diffInProgress;
+    public bool IsDiffRunning() => _diffInProgress || _gitDiffInProgress;
+
+    /// <summary>«i» у радиокнопки BinDiff: нажатие тоглит TeachingTip.</summary>
+    private void BindiffInfoButton_Click(object sender, RoutedEventArgs e)
+        => BindiffTip.IsOpen = !BindiffTip.IsOpen;
 
     /// <summary>Главный чекбокс «выбрать все» в заголовке таблицы.</summary>
     private void HeaderCheckBox_Click(object sender, RoutedEventArgs e)
@@ -519,6 +539,97 @@ public DiffPage()
     {
         if (string.IsNullOrEmpty(DiffErrorTextBox.Text)) DiffErrorTextBox.Text = message;
         else DiffErrorTextBox.Text += Environment.NewLine + message;
+    }
+
+    // ────────────────── Подвкладка «Git-сравнение» ──────────────────
+
+    private async void GitStart_Click(object sender, RoutedEventArgs e)
+    {
+        if (_gitDiffInProgress) return;
+
+        var oldDir = GitOldDirTextBox.Text.Trim();
+        var newDir = GitNewDirTextBox.Text.Trim();
+        var outDir = GitOutDirTextBox.Text.Trim();
+        if (oldDir.Length == 0 || !Directory.Exists(oldDir))
+        {
+            await UiDialogs.WarnAsync("Ошибка", "Папка OLD (старая версия) не найдена.");
+            return;
+        }
+        if (newDir.Length == 0 || !Directory.Exists(newDir))
+        {
+            await UiDialogs.WarnAsync("Ошибка", "Папка NEW (новая версия) не найдена.");
+            return;
+        }
+        if (string.Equals(Path.GetFullPath(oldDir), Path.GetFullPath(newDir),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            await UiDialogs.WarnAsync("Ошибка", "Папки OLD и NEW совпадают.");
+            return;
+        }
+        if (outDir.Length == 0 || !Directory.Exists(outDir))
+        {
+            await UiDialogs.WarnAsync("Ошибка", "Папка результата не найдена.");
+            return;
+        }
+        if (!int.TryParse(GitContextTextBox.Text.Trim(), out var context) || context < 0)
+        {
+            await UiDialogs.WarnAsync("Ошибка", "«Строк контекста» — укажите неотрицательное число.");
+            return;
+        }
+
+        var outPath = Path.Combine(outDir, "changes.diff");
+        var patterns = DirectoriesDiffService.ParsePatterns(GitExcludesTextBox.Text);
+        var ct = (_gitDiffCts = new CancellationTokenSource()).Token;
+
+        _gitDiffInProgress = true;
+        GitStartButton.IsEnabled = false;
+        GitCancelButton.IsEnabled = true;
+        GitProgress.Visibility = Visibility.Visible;
+        GitStatusText.Text = "Выполняется сравнение...";
+
+        try
+        {
+            var stats = await Task.Run(() => DirectoriesDiffService.Run(
+                oldDir, newDir, outPath, context, patterns,
+                line => RunOnUi(() => AppendGitLog(line)),
+                (cur, total, rel) => RunOnUi(() => GitStatusText.Text = $"Файл {cur}/{total}: {rel}"),
+                ct));
+
+            foreach (var line in DirectoriesDiffService.Summarize(stats))
+                AppendGitLog(line);
+            GitStatusText.Text = $"Готово: {stats.OutPath} ({stats.SizeBytes / 1024f:F1} КБ)";
+            if (stats.HasErrors)
+                await UiDialogs.WarnAsync("Готово с ошибками",
+                    $"Дифф создан, но при обработке {stats.Errors} файл(ов) возникли ошибки. " +
+                    "Подробности — в журнале.");
+        }
+        catch (OperationCanceledException)
+        {
+            GitStatusText.Text = "Отменено";
+            AppendGitLog("Отменено пользователем.");
+        }
+        catch (Exception ex)
+        {
+            GitStatusText.Text = "Ошибка";
+            AppendGitLog("ОШИБКА: " + ex.Message);
+            await UiDialogs.WarnAsync("Ошибка", ex.Message + "\n\nПодробности — в логе на странице.");
+        }
+        finally
+        {
+            _gitDiffInProgress = false;
+            _gitDiffCts?.Dispose();
+            _gitDiffCts = null;
+            GitStartButton.IsEnabled = true;
+            GitCancelButton.IsEnabled = false;
+            GitProgress.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void AppendGitLog(string message)
+    {
+        if (string.IsNullOrEmpty(GitLogTextBox.Text)) GitLogTextBox.Text = message;
+        else GitLogTextBox.Text += Environment.NewLine + message;
+        GitLogTextBox.SelectionStart = GitLogTextBox.Text.Length;
     }
 
     private void RunOnUi(Action a) => DispatcherQueue.TryEnqueue(() => a());

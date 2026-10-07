@@ -11,7 +11,8 @@ public sealed class AppConfig
 {
     public string IdaExecutable { get; set; } = AppConstants.IdatDefaultExe;
     public string BindiffExecutable { get; set; } = AppConstants.BindiffDefaultExe;
-    public int MaxIda { get; set; } = 4;
+    /// <summary>0 = авто: число логических процессоров машины.</summary>
+    public int MaxIda { get; set; } = 0;
     public string DefaultInputDir { get; set; } = ".";
     public string LogLevel { get; set; } = "INFO";
     public string Theme { get; set; } = "light";

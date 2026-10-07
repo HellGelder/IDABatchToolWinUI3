@@ -7,6 +7,8 @@ THIRD_PARTY_WINDOWS = {
     "libeay32.dll": "OpenSSL Encryption Library (Windows)",
     "ssleay32.dll": "OpenSSL SSL/TLS Library (Windows)",
     "libsodium.dll": "Libsodium (Windows)",
+    "tmdrv32.dll": "СКЗИ «Аккорд» (ОКБ САПР) — драйвер доверенной загрузки и аппаратного ДСЧ, 32-бит (Windows)",
+    "tmdrv64.dll": "СКЗИ «Аккорд» (ОКБ САПР) — драйвер доверенной загрузки и аппаратного ДСЧ, 64-бит (Windows)",
     "libzip.dll": "Libzip (Windows)",
     "libmysql.dll": "MySQL Connector/C (Windows)",
     "libpq.dll": "Libpq (Windows)",

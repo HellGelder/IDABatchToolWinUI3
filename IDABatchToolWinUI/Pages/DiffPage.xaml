@@ -24,8 +24,23 @@
             <Setter Property="Margin" Value="0,0,0,8" />
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
         </Style>
+
+        <!-- Подвкладки: «Бинарное сравнение» / «Git-сравнение» -->
+        <Style TargetType="Pivot">
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style TargetType="PivotHeaderItem">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="Margin" Value="0" />
+        </Style>
     </Page.Resources>
 
+    <Pivot>
+        <PivotItem Header="Бинарное сравнение" Margin="0">
     <ScrollViewer>
         <StackPanel Padding="{StaticResource PagePadding}" Spacing="8">
 
@@ -88,12 +103,30 @@
                 <Border Grid.Column="1" Style="{StaticResource GroupBoxStyle}">
                     <StackPanel Spacing="6">
                         <TextBlock Text="Движок сравнения" Style="{StaticResource GroupHeaderStyle}" />
-                        <RadioButton x:Name="EngineBindiff" GroupName="DiffEngine" Content="Только BinDiff"
-                                     IsChecked="True" MinWidth="140" Padding="2,2" />
+                        <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                            <!-- Кастомный Padding у радиокнопок убран: он сдвигал подпись вверх относительно кружка -->
+                            <RadioButton x:Name="EngineBindiff" GroupName="DiffEngine" Content="Только BinDiff"
+                                         IsChecked="True" MinWidth="140" VerticalAlignment="Center" />
+                            <!-- «i» в кружочке: наведение — ToolTip, нажатие — TeachingTip -->
+                            <Button x:Name="BindiffInfoButton" Padding="4" MinWidth="24" MinHeight="24"
+                                    VerticalAlignment="Center" Click="BindiffInfoButton_Click"
+                                    ToolTipService.ToolTip="Для пар со схожестью менее 99% выполняется доанализ. Нажмите для подробностей.">
+                                <FontIcon Glyph="&#xE946;" FontSize="12" />
+                            </Button>
+                        </StackPanel>
                         <RadioButton x:Name="EngineDiaphora" GroupName="DiffEngine" Content="Только Diaphora"
-                                     MinWidth="140" Padding="2,2" />
+                                     MinWidth="140" />
                         <RadioButton x:Name="EngineBoth" GroupName="DiffEngine" Content="Оба движка"
-                                     MinWidth="140" Padding="2,2" />
+                                     MinWidth="140" />
+                        <TeachingTip x:Name="BindiffTip"
+                                     Title="Доанализ при выборе BinDiff"
+                                     CloseButtonContent="Понятно"
+                                     IsOpen="False">
+                            <TeachingTip.Content>
+                                <TextBlock TextWrapping="Wrap" MaxWidth="340"
+                                           Text="Несмотря на выбор BinDiff, пары со схожестью менее 99% дополнительно проходят доанализ (Diaphora) для уточнения результата сравнения. Если Diaphora недоступен, доанализ пропускается." />
+                            </TeachingTip.Content>
+                        </TeachingTip>
                     </StackPanel>
                 </Border>
             </Grid>
@@ -206,4 +239,120 @@
             </Border>
         </StackPanel>
     </ScrollViewer>
+        </PivotItem>
+
+        <PivotItem Header="Git-сравнение" Margin="0">
+            <ScrollViewer>
+                <StackPanel Padding="{StaticResource PagePadding}" Spacing="8">
+
+                    <!-- Директории с исходниками -->
+                    <Border Style="{StaticResource GroupBoxStyle}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Директории с исходниками" Style="{StaticResource GroupHeaderStyle}" />
+                            <Grid ColumnSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Левая (старая версия):"
+                                           VerticalAlignment="Center" MinWidth="120" FontSize="12" />
+                                <TextBox x:Name="GitOldDirTextBox" Grid.Column="1"
+                                         PlaceholderText="Путь к папке с исходниками (старая версия)..." />
+                                <Button x:Name="GitBrowseOldButton" Grid.Column="2" Content="Обзор..." MinWidth="70"
+                                        Padding="8,4" />
+                            </Grid>
+                            <Grid ColumnSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Правая (новая версия):"
+                                           VerticalAlignment="Center" MinWidth="120" FontSize="12" />
+                                <TextBox x:Name="GitNewDirTextBox" Grid.Column="1"
+                                         PlaceholderText="Путь к папке с исходниками (новая версия)..." />
+                                <Button x:Name="GitBrowseNewButton" Grid.Column="2" Content="Обзор..." MinWidth="70"
+                                        Padding="8,4" />
+                            </Grid>
+                            <Grid ColumnSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Папка результата:"
+                                           VerticalAlignment="Center" MinWidth="120" FontSize="12" />
+                                <TextBox x:Name="GitOutDirTextBox" Grid.Column="1"
+                                         PlaceholderText="Папка, в которую будет записан changes.diff" />
+                                <Button x:Name="GitBrowseOutButton" Grid.Column="2" Content="Обзор..." MinWidth="70"
+                                        Padding="8,4" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Параметры текстового диффа -->
+                    <Border Style="{StaticResource GroupBoxStyle}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Параметры" Style="{StaticResource GroupHeaderStyle}" />
+                            <Grid ColumnSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Исключить (через запятую):"
+                                           VerticalAlignment="Center" MinWidth="120" FontSize="12" />
+                                <TextBox x:Name="GitExcludesTextBox" Grid.Column="1"
+                                         ToolTipService.ToolTip="Шаблоны имён файлов и каталогов; совпадение по любому компоненту пути. Пустой список — исключений нет." />
+                            </Grid>
+                            <Grid ColumnSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Строк контекста:"
+                                           VerticalAlignment="Center" MinWidth="120" FontSize="12" />
+                                <TextBox x:Name="GitContextTextBox" Grid.Column="1" Text="3" MaxWidth="90"
+                                         HorizontalAlignment="Left"
+                                         ToolTipService.ToolTip="Число неизменённых строк вокруг изменений в каждом блоке диффа (0 — только изменённые строки)." />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Процесс генерации -->
+                    <Border Style="{StaticResource GroupBoxStyle}">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Процесс" Style="{StaticResource GroupHeaderStyle}" />
+                            <TextBlock x:Name="GitStatusText" Text="Готов к запуску" FontSize="11"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextTrimming="CharacterEllipsis" />
+                            <ProgressBar x:Name="GitProgress" IsIndeterminate="True" Height="4" Visibility="Collapsed"
+                                         Foreground="{ThemeResource AccentAAFillColorDefaultBrush}" />
+                            <Grid ColumnSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="GitStartButton" Grid.Column="0" Content="Сгенерировать дифф"
+                                        Height="34" Width="160" Padding="12,6" />
+                                <Button x:Name="GitCancelButton" Grid.Column="1" Content="Отмена"
+                                        Height="34" Width="80" Padding="12,6" IsEnabled="False" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Лог выполнения -->
+                    <Border Style="{StaticResource GroupBoxStyle}">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Лог выполнения" Style="{StaticResource GroupHeaderStyle}" />
+                            <TextBox x:Name="GitLogTextBox" AcceptsReturn="True" TextWrapping="Wrap"
+                                     IsReadOnly="True" MaxHeight="160" MinHeight="68" FontFamily="Consolas"
+                                     PlaceholderText="Здесь будет появляться журнал генерации диффа..." />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </PivotItem>
+    </Pivot>
 </Page>

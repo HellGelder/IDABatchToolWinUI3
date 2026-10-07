@@ -111,34 +111,64 @@ public sealed class HtmlGenWorker : IDisposable
         psi.ArgumentList.Add("--platform"); psi.ArgumentList.Add(Platform);
         if (DeleteJson) psi.ArgumentList.Add("--delete-json");
         if (ReuseCache) psi.ArgumentList.Add("--reuse-cache");
+        // Список JSON передаётся файлом-ответкой: строка "a;b;c" в командной
+        // строке упирается в лимит CreateProcess ~32 КБ (Win32 ошибка 206,
+        // «имя файла или его расширение имеет слишком большую длину») уже на
+        // нескольких сотнях файлов с длинными путями.
+        string? pathsFile = null;
         if (jsonPaths is { Count: > 0 })
         {
-            psi.ArgumentList.Add("--json-paths");
-            psi.ArgumentList.Add(string.Join(";", jsonPaths));
+            try
+            {
+                pathsFile = Path.Combine(Path.GetTempPath(),
+                    $"idabatchtool_json_{Guid.NewGuid():N}.txt");
+                File.WriteAllLines(pathsFile, jsonPaths,
+                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                psi.ArgumentList.Add("--json-paths-file");
+                psi.ArgumentList.Add(pathsFile);
+            }
+            catch
+            {
+                // %TEMP% недоступен — прежний способ через командную строку
+                // (ограничен по длине, но лучше, чем сорванная генерация).
+                pathsFile = null;
+                psi.ArgumentList.Add("--json-paths");
+                psi.ArgumentList.Add(string.Join(";", jsonPaths));
+            }
         }
 
-        _proc = Process.Start(psi);
-        if (_proc == null)
+        try
         {
-            ErrorOccurred?.Invoke("Не удалось запустить процесс генерации отчётов.");
-            Finished?.Invoke(new HtmlGenResult { GeneratedCount = 0 });
-            return;
+            _proc = Process.Start(psi);
+            if (_proc == null)
+            {
+                ErrorOccurred?.Invoke("Не удалось запустить процесс генерации отчётов.");
+                Finished?.Invoke(new HtmlGenResult { GeneratedCount = 0 });
+                return;
+            }
+            _stdin = _proc.StandardInput;
+
+            var result = new HtmlGenResult { Platform = Platform, InputDir = inputDir, ReportsDir = reportsDir };
+            var stdoutTask = ReadStdoutAsync(_proc, result);
+            var stderrTask = _proc.StandardError.ReadToEndAsync();
+            _proc.WaitForExit();
+            Task.WhenAll(stdoutTask, stderrTask).GetAwaiter().GetResult();
+
+            if (_proc.ExitCode != 0 && result.GeneratedCount == 0)
+            {
+                string err = "";
+                try { err = stderrTask.Result.Trim(); } catch { /* канал закрыт */ }
+                if (!string.IsNullOrEmpty(err)) ErrorOccurred?.Invoke(err);
+            }
+            Finished?.Invoke(result);
         }
-        _stdin = _proc.StandardInput;
-
-        var result = new HtmlGenResult { Platform = Platform, InputDir = inputDir, ReportsDir = reportsDir };
-        var stdoutTask = ReadStdoutAsync(_proc, result);
-        var stderrTask = _proc.StandardError.ReadToEndAsync();
-        _proc.WaitForExit();
-        Task.WhenAll(stdoutTask, stderrTask).GetAwaiter().GetResult();
-
-        if (_proc.ExitCode != 0 && result.GeneratedCount == 0)
+        finally
         {
-            string err = "";
-            try { err = stderrTask.Result.Trim(); } catch { /* канал закрыт */ }
-            if (!string.IsNullOrEmpty(err)) ErrorOccurred?.Invoke(err);
+            if (pathsFile != null)
+            {
+                try { File.Delete(pathsFile); } catch { /* занят или уже удалён */ }
+            }
         }
-        Finished?.Invoke(result);
     }
 
     private async Task ReadStdoutAsync(Process proc, HtmlGenResult result)
