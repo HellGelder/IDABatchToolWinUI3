@@ -24,6 +24,11 @@ IDABatchToolWinUI — **исполнение 2**: GUI на C# / WinUI 3 (WinAppS
   InformationalVersion) → дописать `version.txt` → `make-portable.ps1`.
   Перед скриптом закрыть запущенное приложение из `dist\portable` (лочит AppIcon.ico)
   и убедиться в отсутствии `idat.exe`. Архив: `dist\IDABatchToolWinUI-<версия>.zip`.
+- Граф знаний: `make-portable.ps1` при полной сборке обновляет малый граф
+  (`graphify-out/`: свой код без вендоренной diaphora; `-SkipGraph` — пропустить,
+  отсутствие graphify — предупреждение). Полный граф с diaphora —
+  только по запросу: `$env:GRAPHIFY_OUT='graphify-out-full'; graphify . --code-only;
+  Remove-Item Env:GRAPHIFY_OUT`. В git — только `GRAPH_REPORT.md` и `manifest.json`.
 
 ## Стандарты
 

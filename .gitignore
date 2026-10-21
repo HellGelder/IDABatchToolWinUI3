@@ -56,7 +56,10 @@ Generated\ Files/
 # Portable build output
 dist/
 
-# graphify knowledge graph (генерируется локально)
-graphify-out/
+# graphify knowledge graph: в git — только отчёт и manifest малого графа
+graphify-out/*
+!graphify-out/GRAPH_REPORT.md
+!graphify-out/manifest.json
+graphify-out-full/
 __pycache__/
 *.pyc

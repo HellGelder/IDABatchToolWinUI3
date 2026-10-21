@@ -23,12 +23,15 @@
     .\make-portable.ps1 -NoZip           # без архивирования
 .EXAMPLE
     .\make-portable.ps1 -Rid win-arm64 -NoZip
+.EXAMPLE
+    .\make-portable.ps1 -SkipGraph        # без актуализации графа graphify
 #>
 param(
     [string]$Configuration = "Release",
     [string]$Rid = "win-x64",
     [switch]$NoPublish,
-    [switch]$NoZip
+    [switch]$NoZip,
+    [switch]$SkipGraph
 )
 
 $ErrorActionPreference = "Stop"
@@ -182,7 +185,42 @@ if (-not $NoZip) {
     Write-Host "Архив: $zip ($('{0:N1}' -f ((Get-Item $zip).Length / 1MB)) МБ)"
 }
 
-# ── 6. Итог ─────────────────────────────────────────────────────────────────
+# ── 6. Граф знаний (graphify): малый граф, свой код без вендоренной diaphora ─
+# Полный граф (graphify-out-full, с diaphora) обновляется вручную — см. AGENTS.md.
+if ($NoPublish) {
+    Write-Host "Граф знаний: пропущен (-NoPublish)"
+}
+elseif ($SkipGraph) {
+    Write-Host "Граф знаний: пропущен (-SkipGraph)"
+}
+elseif (-not (Get-Command graphify -ErrorAction SilentlyContinue)) {
+    Write-Warning "graphify не установлен — граф не обновлён (pip install graphifyy)"
+}
+else {
+    Push-Location $root
+    try {
+        if (Test-Path (Join-Path $root "graphify-out\graph.json")) {
+            & graphify update .
+        }
+        else {
+            # Первичная сборка; --exclude сохраняется в конфиг graphify-out/,
+            # дальше update переиспользует его.
+            & graphify . --code-only --exclude scripts/diaphora
+            if ($LASTEXITCODE -eq 0) { & graphify cluster-only . }
+        }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "graphify завершился с кодом $LASTEXITCODE — граф не обновлён"
+        }
+        else {
+            Write-Host "Граф знаний обновлён: graphify-out\GRAPH_REPORT.md"
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+# ── 7. Итог ─────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "Готово. Корень поставки ($staging):"
 Get-ChildItem $staging | ForEach-Object {

@@ -22,6 +22,7 @@
 - [Сборка и публикация](#сборка-и-публикация)
   - [Отладка](#отладка)
   - [Release‑публикация и переносимая поставка](#release-публикация-и-переносимая-поставка)
+  - [Граф знаний (graphify)](#граф-знаний-graphify)
   - [Портативные утилиты (Tools\\)](#портативные-утилиты-tools)
 - [Интерфейс](#интерфейс)
   - [Общий анализ](#общий-анализ)
@@ -104,6 +105,7 @@ dotnet publish -c Release -r win-x64
 .\make-portable.ps1 -NoPublish     # пересобрать раскладку из готового publish
 .\make-portable.ps1 -NoZip         # без архивирования
 .\make-portable.ps1 -Rid win-arm64 # другой RID
+.\make-portable.ps1 -SkipGraph     # без актуализации графа graphify
 ```
 
 Архив именуется по версии файла из csproj: `IDABatchToolWinUI-1.1.0.0.zip`. Скрипт встраивает в поставку `Tools\Python` из корня проекта, если он там есть; в корень пакета кладутся `README.txt` (требования), `version.txt` (журнал сборок) и `install-prereqs.ps1` — автоустановка Python-окружения. Приложение при запуске проверяет наличие Python и пакетов `jinja2`/`requests`; если чего-то нет — предлагает запустить автоустановку (при полном окружении никаких окон не появляется).
@@ -122,6 +124,20 @@ portable/
 DLL переносятся во вложенную папку именно таким косвенным путём: WinUI 3 не поддерживает single-file publish (нативные компоненты Windows App SDK обязаны лежать файлами на диске), а runtime-сборки self-contained приложения обязаны находиться рядом с exe.
 
 На целевой машине нужны: Python 3 с `jinja2` и `requests` (либо встроенный Python из `app\Tools\Python`), IDA Pro и BinDiff (лицензионные — в поставку не включаются), 7‑Zip только для DMG.
+
+## Граф знаний (graphify)
+
+`make-portable.ps1` при полной сборке (не при `-NoPublish`) актуализирует **малый граф** проекта в `graphify-out/`: свой C#/XAML- и Python-код без вендоренной Diaphora. Шаг необязательный: `-SkipGraph` его пропускает, а отсутствие graphify даёт предупреждение, а не ошибку сборки. Первичная сборка выполняется автоматически, дальше используется инкрементальный `graphify update`.
+
+В git коммитятся только `graphify-out/GRAPH_REPORT.md` (карта архитектуры) и `graphify-out/manifest.json` (перечень файлов корпуса); `graph.json`, `graph.html` и `cache/` остаются локальными. **Полный граф** — с вендоренной Diaphora — в git не попадает и обновляется по запросу:
+
+```powershell
+$env:GRAPHIFY_OUT = 'graphify-out-full'
+graphify . --code-only
+Remove-Item Env:GRAPHIFY_OUT
+```
+
+Запросы к готовому графу: `graphify query "<вопрос>"`, `graphify explain "DiffWorker"`, `graphify path "DiffPage" "DiffWorker"`.
 
 ## Портативные утилиты (Tools\)
 

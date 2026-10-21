@@ -1,0 +1,9 @@
+# Общие исключения для обоих графов: graphify читает .gitignore и .graphifyignore,
+# причём .graphifyignore может только добавлять исключения.
+bin/
+obj/
+dist/
+graphify-out/
+graphify-out-full/
+Assets/
+_python/vendor/
