@@ -37,6 +37,24 @@ public sealed class DiffWorker : IDisposable
     public int MaxWorkers { get; }
 
     private const long LargeFileThreshold = 100L * 1024 * 1024;
+    private static readonly TimeSpan PulseInterval = TimeSpan.FromSeconds(30);
+    /// <summary>Ни ОЗУ, ни БД диафоры не менялись дольше этого срока — процесс завис, убиваем.</summary>
+    private static readonly TimeSpan StallTimeout = TimeSpan.FromHours(4);
+
+    /// <summary>Прогресс экспорта Diaphora, разобранный из stdout («Exported N out of M total»).</summary>
+    private sealed class ExportProgress
+    {
+        public int Done;            // экспортировано функций
+        public int Total;           // всего функций
+        public TimeSpan? Remaining; // оценка Diaphora «remaining time»
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex ExportedRe = new(
+        @"Exported (\d+) function\(s\) out of (\d+) total",
+        System.Text.RegularExpressions.RegexOptions.Compiled);
+    private static readonly System.Text.RegularExpressions.Regex RemainingRe = new(
+        @"remaining time ~(\d+):(\d+):(\d+)",
+        System.Text.RegularExpressions.RegexOptions.Compiled);
 
     public DiffWorker(
         IReadOnlyList<DiffPair> pairs,
@@ -106,14 +124,29 @@ public sealed class DiffWorker : IDisposable
         var useBindiff = Engine is "bindiff" or "both";
         var useDiaphora = Engine is "diaphora" or "both";
 
+        // Пары с идентичными бинарниками (равные SHA-256) не анализируем вовсе:
+        // их сходство полная и по определению — BinDiff/Diaphora там не нужны.
+        var identical = new HashSet<string>();
+        foreach (var p in all)
+        {
+            var orig1 = FindOriginalBinary(p.Primary);
+            var orig2 = FindOriginalBinary(p.Secondary);
+            if (orig1 == null || orig2 == null) continue;
+            if (FilesEqual(orig1, orig2)) identical.Add(p.Stem);
+        }
+        if (identical.Count > 0)
+            ErrorOccurred?.Invoke($"Идентичных пар (побайтно): {identical.Count} — анализ не запускается, отчёт отмечен «Модули идентичны».");
+
+        var work = all.Where(p => !identical.Contains(p.Stem)).ToList();
+
         // Этапы выполнения: счётчик «шагов» не ведём — GUI показывает этапы
         // и статусы обработки каждого файла.
         var phases = new List<(string stage, string statusText, List<DiffPair> pairs, Func<DiffPair, Task<bool>> process)>();
         if (useBindiff)
-            phases.Add(("BinDiff", "Экспорт из БД", all, p => ProcessBindiffPairAsync(p, ct)));
+            phases.Add(("BinDiff", "Экспорт из БД", work, p => ProcessBindiffPairAsync(p, ct)));
         if (useDiaphora)
-            phases.Add(("Diaphora", "Экспорт из БД", all, p => ProcessDiaphoraPairAsync(p, ct)));
-        phases.Add(("Пост-анализ", "Пост-анализ", all, p => ProcessPostPairAsync(p, ct)));
+            phases.Add(("Diaphora", "Экспорт из БД", work, p => ProcessDiaphoraPairAsync(p, ct)));
+        phases.Add(("Пост-анализ", "Пост-анализ", work, p => ProcessPostPairAsync(p, ct)));
 
         foreach (var (stage, statusText, pairs, process) in phases)
         {
@@ -121,6 +154,14 @@ public sealed class DiffWorker : IDisposable
             await RunPass(stage, pairs, pairs.Count, null, statusText, process, ct);
             if (ct.IsCancellationRequested) { Abort(); return; }
             StageChanged?.Invoke(stage, "done");
+        }
+
+        // Идентичным парам — заглушка без запуска анализаторов.
+        foreach (var p in all.Where(p => identical.Contains(p.Stem)))
+        {
+            WriteIdenticalJson(p);
+            PairStatus?.Invoke(p.RelKey, "bindiff", "identical");
+            PairStatus?.Invoke(p.RelKey, "diaphora", "identical");
         }
 
         // Генерация HTML-отчётов (одна фаза)
@@ -170,6 +211,7 @@ public sealed class DiffWorker : IDisposable
             var d = Path.Combine(OutputDir, $"{p.Stem}.diff.json");
             if (!File.Exists(d)) continue;
             if (IsAddAnalysisDone(p.Stem)) continue;
+            if (IsIdenticalOrFullHexdump(d)) continue;
             try
             {
                 var data = ReadJson(d);
@@ -180,6 +222,26 @@ public sealed class DiffWorker : IDisposable
             catch { /* пропускаем */ }
         }
         return low;
+    }
+
+    /// <summary>Пара не нуждается в доанализе независимо от similarity:
+    /// побайтно идентична (маркер identical) или BinDiff не дал функций при
+    /// 100% hexdump-схожести (анализаторы здесь бессильны, файлы одинаковые).</summary>
+    private static bool IsIdenticalOrFullHexdump(string diffJsonPath)
+    {
+        try
+        {
+            var data = ReadJson(diffJsonPath);
+            if (data == null) return false;
+            if (data.TryGetValue("identical", out var id) && id is true) return true;
+            var hd = data.TryGetValue("hexdump_similarity", out var hv) && hv != null
+                ? Convert.ToDouble(hv, System.Globalization.CultureInfo.InvariantCulture) : 0.0;
+            if (hd < 1.0) return false;
+            var matched = data.TryGetValue("matched_functions", out var mf) && mf is List<object?> ml ? ml.Count : 0;
+            var total1 = data.TryGetValue("total_functions1", out var t1) && t1 != null ? Convert.ToInt64(t1) : 0;
+            return matched == 0 && total1 == 0;
+        }
+        catch { return false; }
     }
 
     private void Abort()
@@ -363,33 +425,47 @@ public sealed class DiffWorker : IDisposable
             return false;
         }
 
-        if (!await RunDiaphoraExportAsync(p.Primary, dbPri, p.RelKey, ct))
+        var (priOk, priReason) = await RunDiaphoraExportAsync(p.Primary, dbPri, p.RelKey, ct);
+        if (!priOk)
         {
-            ErrorOccurred?.Invoke($"Diaphora экспорт primary {stem}");
+            ErrorOccurred?.Invoke($"Diaphora экспорт primary {stem}: {priReason}");
             Cleanup(dbPri, dbSec, result);
             return false;
         }
-        if (!await RunDiaphoraExportAsync(p.Secondary, dbSec, p.RelKey, ct))
+        var (secOk, secReason) = await RunDiaphoraExportAsync(p.Secondary, dbSec, p.RelKey, ct);
+        if (!secOk)
         {
-            ErrorOccurred?.Invoke($"Diaphora экспорт secondary {stem}");
+            ErrorOccurred?.Invoke($"Diaphora экспорт secondary {stem}: {secReason}");
             Cleanup(dbPri, dbSec, result);
             return false;
         }
 
         if (File.Exists(dbPri) && File.Exists(dbSec))
-            if (await RunDiaphoraDiffAsync(dbPri, dbSec, result, p.RelKey, ct))
+        {
+            var (diffOk, diffReason) = await RunDiaphoraDiffAsync(dbPri, dbSec, result, p.RelKey, ct);
+            if (diffOk)
                 MergeDiaphoraIntoJson(jsonOutput, result, stem);
+            else
+                ErrorOccurred?.Invoke($"Diaphora диф {stem}: {diffReason}");
+        }
 
         Cleanup(dbPri, dbSec, result);
         return true;
     }
 
-    private async Task<bool> RunDiaphoraExportAsync(string i64Path, string outSqlite, string relKey, CancellationToken ct)
+    private async Task<(bool Ok, string? Reason)> RunDiaphoraExportAsync(string i64Path, string outSqlite, string relKey, CancellationToken ct)
     {
         var psi = NewIdatPsi();
         var env = psi.Environment;
         env["DIAPHORA_AUTO"] = "1";
         env["DIAPHORA_EXPORT_FILE"] = outSqlite;
+        // Облегчённый профиль экспорта (перенос из исполнения 1): псевдокод-эвристики
+        // работают, микрокод off — Hex-Rays вызывается один раз на функцию вместо двух.
+        // Работает только с патчем get_value_for (иначе '0' остаётся строкой и не
+        // отключает флаг) и патчем ключа export_microcode в diaphora_ida.py.
+        env["DIAPHORA_USE_DECOMPILER"] = "1";
+        env["DIAPHORA_EXPORT_MICROCODE"] = "0";
+        env["DIAPHORA_FUNCTION_SUMMARIES_ONLY"] = "0";
 
         // Для крупных файлов — как в исполнении 1: увеличенная виртуальная память,
         // отключение undo, отдельный лог IDA.
@@ -407,11 +483,35 @@ public sealed class DiffWorker : IDisposable
         psi.ArgumentList.Add($"-S{DiaphoraPath}");
         psi.ArgumentList.Add(i64Path);
 
-        var (rc, _, _) = await RunProcWithTimeoutAsync(psi, relKey, TimeSpan.FromHours(6), ct);
-        return rc == 0 && File.Exists(outSqlite);
+        var (rc, stdout, stderr) = await RunProcWithPulseAsync(psi, relKey, "экспорт", outSqlite, ct);
+        if (rc == 0 && File.Exists(outSqlite)) return (true, null);
+        return (false, DescribeProcFailure(rc, stdout, stderr, $"экспорт {Path.GetFileName(i64Path)}"));
     }
 
-    private async Task<bool> RunDiaphoraDiffAsync(string db1, string db2, string outSqlite, string relKey, CancellationToken ct)
+    /// <summary>Короткая причина неудачи запуска Diaphora для заметки в отчёте:
+    /// код выхода и хвост stderr/stdout (последние непустые строки).</summary>
+    private static string DescribeProcFailure(int rc, string stdout, string stderr, string phase)
+    {
+        var tail = LastNonEmptyLines(stderr is "" or null ? stdout : stderr, 3);
+        if (tail == "") tail = LastNonEmptyLines(stdout, 3);
+        var baseMsg = $"код выхода {rc}, фаза {phase}";
+        return tail == "" ? baseMsg : $"{baseMsg}: {tail}";
+    }
+
+    /// <summary>Последние непустые строки журнала (без ANSI-прочих артефактов), ≤ 500 символов.</summary>
+    private static string LastNonEmptyLines(string text, int count)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "";
+        var lines = text.Replace("\r", "")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(l => l.Length > 0)
+            .ToArray();
+        var picked = lines.Length <= count ? lines : lines[^count..];
+        var joined = string.Join(" | ", picked);
+        return joined.Length <= 500 ? joined : "…" + joined[^500..];
+    }
+
+    private async Task<(bool Ok, string? Reason)> RunDiaphoraDiffAsync(string db1, string db2, string outSqlite, string relKey, CancellationToken ct)
     {
         var psi = new ProcessStartInfo
         {
@@ -421,13 +521,23 @@ public sealed class DiffWorker : IDisposable
             RedirectStandardError = true,
             CreateNoWindow = true,
         };
+        // Быстрый профиль дифа (перенос из исполнения 1): медленные и экспериментальные
+        // эвристики избыточны, таймаут эвристики снижен, чтобы одна тяжёлая эвристика
+        // не растягивала диф на часы. Нужен патч get_value_for в diaphora.py —
+        // без него env-строки не приводятся к bool/int и флаги не работают.
+        psi.Environment["DIAPHORA_SLOW_HEURISTICS"] = "0";
+        psi.Environment["DIAPHORA_EXPERIMENTAL"] = "0";
+        psi.Environment["DIAPHORA_UNRELIABLE"] = "0";
+        psi.Environment["DIAPHORA_SQL_TIMEOUT_LIMIT"] = "60";
+
         psi.ArgumentList.Add(DiaphoraPath);
         psi.ArgumentList.Add(db1);
         psi.ArgumentList.Add(db2);
         psi.ArgumentList.Add("-o");
         psi.ArgumentList.Add(outSqlite);
-        var (rc, _, _) = await RunProcAsync(psi, relKey, ct);
-        return rc == 0 && File.Exists(outSqlite);
+        var (rc, stdout, stderr) = await RunProcWithPulseAsync(psi, relKey, "диф", outSqlite, ct);
+        if (rc == 0 && File.Exists(outSqlite)) return (true, null);
+        return (false, DescribeProcFailure(rc, stdout, stderr, "сравнение БД"));
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -558,6 +668,7 @@ public sealed class DiffWorker : IDisposable
             var d = Path.Combine(OutputDir, $"{stem}.diff.json");
             if (!File.Exists(d)) return false;
             if (IsAddAnalysisDone(stem)) return false;
+            if (IsIdenticalOrFullHexdump(d)) return false;
             try
             {
                 var data = ReadJson(d);
@@ -604,24 +715,55 @@ public sealed class DiffWorker : IDisposable
         var dbSec = Path.Combine(AddOutputDir!, $"{stem}_secondary.diaphora.sqlite");
         var result = Path.Combine(AddOutputDir!, $"{stem}_diaphora_result.sqlite");
 
-        if (!await RunDiaphoraExportAsync(p.Primary, dbPri, p.RelKey, ct)) { Cleanup(dbPri, dbSec, result); return false; }
-        if (!await RunDiaphoraExportAsync(p.Secondary, dbSec, p.RelKey, ct)) { Cleanup(dbPri, dbSec, result); return false; }
+        // Причина провала — в отчёт доанализа (add_analysis_note): модуль не удалось
+        // проанализировать (экспорт/сравнение не состоялись — например, БД не росла).
+        string? note = null;
+        var (priOk, priReason) = await RunDiaphoraExportAsync(p.Primary, dbPri, p.RelKey, ct);
+        if (!priOk)
+        {
+            Cleanup(dbPri, dbSec, result);
+            MarkAddAnalysisDone(jsonOutput, false,
+                $"не удался экспорт основной БД ({Path.GetFileName(p.Primary)}): {priReason}");
+            return false;
+        }
+        var (secOk, secReason) = await RunDiaphoraExportAsync(p.Secondary, dbSec, p.RelKey, ct);
+        if (!secOk)
+        {
+            Cleanup(dbPri, dbSec, result);
+            MarkAddAnalysisDone(jsonOutput, false,
+                $"не удался экспорт сравниваемой БД ({Path.GetFileName(p.Secondary)}): {secReason}");
+            return false;
+        }
 
         var merged = false;
         if (File.Exists(dbPri) && File.Exists(dbSec))
-            if (await RunDiaphoraDiffAsync(dbPri, dbSec, result, p.RelKey, ct))
+        {
+            var (diffOk, diffReason) = await RunDiaphoraDiffAsync(dbPri, dbSec, result, p.RelKey, ct);
+            if (diffOk)
             {
                 MergeDiaphoraIntoJson(jsonOutput, result, stem);
                 merged = true;
+                // Diaphora отработала штатно, но ни одной новой пары не добавила —
+                // так и пишем в отчёт (нейтрально, без «ошибки»).
+                var newPairs = 0;
+                if (ReadJson(jsonOutput) is { } mergedData &&
+                    mergedData.TryGetValue("matched_diaphora_only", out var md) && md is List<object?> ml)
+                    newPairs = ml.Count;
+                if (newPairs == 0) note = "Доанализ Diaphora дополнительных пар не дал — все совпадения уже найдены BinDiff.";
             }
+            else note = diffReason;
+        }
+        if (!merged && note == null)
+            note = "сравнение БД не дало результата (файл результата не создан)";
         // Маркер успешного доанализа — по нему пара исключается из следующих прогонов
-        MarkAddAnalysisDone(jsonOutput, merged);
+        MarkAddAnalysisDone(jsonOutput, merged, note);
         Cleanup(dbPri, dbSec, result);
-        return true;
+        return merged;
     }
 
-    /// <summary>Ставит (или снимает) маркер add_analysis_done в add-JSON пары.</summary>
-    private static void MarkAddAnalysisDone(string jsonPath, bool done)
+    /// <summary>Ставит (или снимает) маркер add_analysis_done в add-JSON пары, note —
+    /// причина провала либо нейтральный итог (рендерится баннером в HTML).</summary>
+    private static void MarkAddAnalysisDone(string jsonPath, bool done, string? failureNote = null)
     {
         try
         {
@@ -629,6 +771,8 @@ public sealed class DiffWorker : IDisposable
             var data = ReadJson(jsonPath);
             if (data == null) return;
             data["add_analysis_done"] = done;
+            if (failureNote == null) data.Remove("add_analysis_note");
+            else data["add_analysis_note"] = failureNote;
             WriteJson(jsonPath, data);
         }
         catch { /* не критично */ }
@@ -1495,6 +1639,75 @@ public sealed class DiffWorker : IDisposable
     //  Hexdump diff (аналог _compute_hexdump_diff)
     // ─────────────────────────────────────────────────────────────────
 
+    /// <summary>Побайтовое равенство двух файлов (размер + содержимое, потоково).</summary>
+    private static bool FilesEqual(string path1, string path2)
+    {
+        try
+        {
+            var fi1 = new FileInfo(path1);
+            var fi2 = new FileInfo(path2);
+            if (fi1.Length != fi2.Length) return false;
+            using var s1 = fi1.OpenRead();
+            using var s2 = fi2.OpenRead();
+            var buf1 = new byte[81920];
+            var buf2 = new byte[81920];
+            int n1, n2;
+            do
+            {
+                n1 = s1.Read(buf1, 0, buf1.Length);
+                n2 = s2.Read(buf2, 0, buf2.Length);
+                if (n1 != n2) return false;
+                for (int i = 0; i < n1; i++)
+                    if (buf1[i] != buf2[i]) return false;
+            } while (n1 > 0);
+            return true;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>Заглушка diff.json для побайтно идентичной пары: без запуска
+    /// BinDiff/Diaphora — сходство полная и по определению.</summary>
+    private void WriteIdenticalJson(DiffPair p)
+    {
+        var jsonOutput = Path.Combine(OutputDir, $"{p.Stem}.diff.json");
+        var orig1 = FindOriginalBinary(p.Primary);
+        var orig2 = FindOriginalBinary(p.Secondary);
+        var now = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        var data = new Dictionary<string, object?>
+        {
+            ["primary"] = p.Primary, ["secondary"] = p.Secondary,
+            ["real_primary"] = orig1 ?? p.Primary, ["real_secondary"] = orig2 ?? p.Secondary,
+            ["similarity"] = 1.0, ["confidence"] = 1.0,
+            ["hexdump_similarity"] = 1.0,
+            ["description"] = "", ["version"] = "", ["created"] = now, ["modified"] = now,
+            ["file1"] = new Dictionary<string, object?>(), ["file2"] = new Dictionary<string, object?>(),
+            ["matched_functions"] = new List<object?>(),
+            ["matched_summary"] = new Dictionary<string, object?>
+                { ["total"] = 0, ["bindiff_only"] = 0, ["diaphora_only"] = 0, ["both"] = 0 },
+            ["unmatched_functions1"] = new List<object?>(),
+            ["unmatched_functions2"] = new List<object?>(),
+            ["total_functions1"] = 0, ["total_functions2"] = 0,
+            ["total_matched"] = 0, ["total_unmatched"] = 0,
+            ["identical"] = true,
+            ["add_analysis_done"] = true,
+            ["error"] = null,
+        };
+        if (orig1 != null && orig2 != null)
+        {
+            data["global_hex_diff"] = new List<object?>
+            {
+                new Dictionary<string, object?>
+                {
+                    ["name1"] = Path.GetFileName(orig1), ["path1"] = orig1,
+                    ["name2"] = Path.GetFileName(orig2), ["path2"] = orig2,
+                    ["hexdump_similarity"] = 1.0,
+                }
+            };
+        }
+        WriteJson(jsonOutput, data);
+    }
+
+
     public static (List<object?> Rows, double Similarity) ComputeHexdumpDiff(string orig1, string orig2)
     {
         byte[]? d1, d2;
@@ -1698,34 +1911,145 @@ public sealed class DiffWorker : IDisposable
         return new ProcResult(proc.ExitCode, await so, await se);
     }
 
-    private async Task<ProcResult> RunProcWithTimeoutAsync(ProcessStartInfo psi, string relKey, TimeSpan timeout, CancellationToken ct)
+    /// <summary>
+    /// Ожидание процесса Diaphora с двумя уровнями контроля.
+    /// 1) Живость: выход процесса или отмена завершают ожидание; kill — при отмене
+    ///    или зависании (ни ОЗУ, ни БД не менялись дольше StallTimeout).
+    /// 2) Пульс (раз в PulseInterval): ОЗУ процесса (WorkingSet64), при watchDbPath —
+    ///    ещё и суммарный размер БД (*.sqlite + *-wal + *-shm — диафора пишет в WAL,
+    ///    и рост уходит в -wal), плюс прогресс экспорта из stdout Diaphora.
+    /// Живой процесс может сколько угодно не менять ОЗУ (или БД) — зависанием
+    /// считается только одновременное затишье обоих сигналов.
+    /// </summary>
+    private async Task<ProcResult> RunProcWithPulseAsync(ProcessStartInfo psi, string relKey, string phaseLabel,
+        string? watchDbPath, CancellationToken ct)
     {
         using var proc = Process.Start(psi);
         if (proc == null)
         {
             PairProcessStarted?.Invoke(relKey, -1);
-            return new ProcResult(-1, "", "");
+            return new ProcResult(-1, "", "Не удалось запустить процесс");
         }
         PairProcessStarted?.Invoke(relKey, proc.Id);
-        var so = proc.StandardOutput.ReadToEndAsync();
+        // stdout читаем построчно: из него же берём прогресс экспорта Diaphora.
+        var progress = new ExportProgress();
+        var so = ReadStdoutWithProgressAsync(proc, progress);
         var se = proc.StandardError.ReadToEndAsync();
+        var started = Stopwatch.StartNew();
+        var exitTask = proc.WaitForExitAsync(ct);
+        long lastSize = watchDbPath != null ? DiaphoraDbSize(watchDbPath) : -1;
+        long lastWs = ProcWorkingSet(proc);
+        var lastActivity = TimeSpan.Zero;
         try
         {
-            await proc.WaitForExitAsync(ct).WaitAsync(timeout);
+            while (true)
+            {
+                var done = await Task.WhenAny(exitTask, Task.Delay(PulseInterval, ct));
+                if (done == exitTask) break;
+                if (ct.IsCancellationRequested)
+                {
+                    // Отмена: гасим дерево процессов, иначе экспорт Diaphora остаётся висеть.
+                    try { proc.Kill(entireProcessTree: true); } catch { }
+                    throw new OperationCanceledException(ct);
+                }
+                if (proc.HasExited) break;
+
+                var elapsed = started.Elapsed;
+                var ws = ProcWorkingSet(proc);
+                var size = watchDbPath != null ? DiaphoraDbSize(watchDbPath) : -1;
+                if (ws != lastWs || (watchDbPath != null && size != lastSize))
+                    lastActivity = elapsed;
+                lastWs = ws;
+                if (watchDbPath != null) lastSize = size;
+
+                if (elapsed - lastActivity >= StallTimeout)
+                {
+                    ErrorOccurred?.Invoke(
+                        $"Diaphora {relKey}: ни ОЗУ, ни БД {Path.GetFileName(watchDbPath)} " +
+                        $"не менялись уже {StallTimeout.TotalHours:0} ч — процесс завис, убиваю (PID={proc.Id}).");
+                    try { proc.Kill(entireProcessTree: true); } catch { }
+                    await Task.WhenAll(so, se);
+                    return new ProcResult(-1, await so, await se);
+                }
+
+                // Пульс: время, ОЗУ, (для экспорта) БД и процент из stdout Diaphora.
+                var status = $"{phaseLabel} {(int)elapsed.TotalMinutes} мин, ОЗУ {ws / 1024 / 1024} ГБ";
+                if (watchDbPath != null)
+                    status += $", БД {size / 1024 / 1024} МБ";
+                if (progress.Total > 0 && progress.Done > 0)
+                {
+                    var pct = Math.Min(100, progress.Done * 100 / progress.Total);
+                    status += $", {pct}%";
+                    if (progress.Remaining is { } rem)
+                        status += $" (осталось ~{(int)rem.TotalMinutes} мин)";
+                }
+                PairStatus?.Invoke(relKey, "diaphora", status);
+            }
         }
-        catch (TimeoutException)
+        finally
         {
-            try { proc.Kill(entireProcessTree: true); } catch { }
-            return new ProcResult(-1, await so, await se);
+            if (!exitTask.IsCompleted) exitTask.Ignore();
         }
-        catch (OperationCanceledException)
-        {
-            // Отмена: гасим дерево процессов, иначе экспорт Diaphora остаётся висеть.
-            try { proc.Kill(entireProcessTree: true); } catch { }
-            throw;
-        }
+        await exitTask;
         await Task.WhenAll(so, se);
         return new ProcResult(proc.ExitCode, await so, await se);
+    }
+
+    /// <summary>Рабочее множество процесса в байтах; 0 — процесс уже завершился.</summary>
+    private static long ProcWorkingSet(Process proc)
+    {
+        try { proc.Refresh(); return proc.WorkingSet64; }
+        catch { return 0; }
+    }
+
+    /// <summary>Читает stdout процесса построчно и обновляет прогресс экспорта
+    /// по строкам Diaphora «Exported N function(s) out of M total … remaining time ~H:MM:SS».</summary>
+    private async Task<string> ReadStdoutWithProgressAsync(Process proc, ExportProgress progress)
+    {
+        var sb = new StringBuilder();
+        var buffer = new char[256];
+        try
+        {
+            using var reader = proc.StandardOutput;
+            while (await reader.ReadAsync(buffer, 0, buffer.Length) > 0)
+            {
+                sb.Append(buffer);
+                ParseExportProgress(sb.ToString(), progress);
+                // Держим хвост, достаточный для обеих regex-строк, — весь лог не копим.
+                if (sb.Length > 4096) sb.Remove(0, sb.Length - 1024);
+            }
+        }
+        catch { /* процесс завершён или поток закрыт */ }
+        return sb.ToString();
+    }
+
+    private static void ParseExportProgress(string chunk, ExportProgress progress)
+    {
+        var m = ExportedRe.Match(chunk);
+        if (!m.Success) return;
+        if (int.TryParse(m.Groups[1].Value, out var done) &&
+            int.TryParse(m.Groups[2].Value, out var total) && total > 0)
+        {
+            progress.Done = done;
+            progress.Total = total;
+        }
+        var r = RemainingRe.Match(chunk);
+        if (r.Success && int.TryParse(r.Groups[1].Value, out var h) &&
+            int.TryParse(r.Groups[2].Value, out var min) &&
+            int.TryParse(r.Groups[3].Value, out var s))
+        {
+            progress.Remaining = new TimeSpan(h, min, s);
+        }
+    }
+
+    /// <summary>Суммарный размер БД диафоры: сам файл + WAL/SHM (рост идёт в *-wal).</summary>
+    private static long DiaphoraDbSize(string dbPath)
+    {
+        long total = 0;
+        foreach (var p in new[] { dbPath, dbPath + "-wal", dbPath + "-shm" })
+            try { if (File.Exists(p)) total += new FileInfo(p).Length; }
+            catch { /* файл занят — берём что есть */ }
+        return total;
     }
 
     private static Dictionary<string, object?>? ReadJson(string path)
@@ -1794,4 +2118,9 @@ internal static class JsonDictExtensions
 {
     public static object? GetValue(this Dictionary<string, object?> d, string key)
         => d.TryGetValue(key, out var v) ? v : null;
+
+    /// <summary>Гасит наблюдение за задачей, которую сознательно не ждём (например,
+    /// брошенный WaitForExitAsync при досрочном выходе из цикла пульса).</summary>
+    public static void Ignore(this Task task)
+        => _ = task.ContinueWith(static t => _ = t.Exception, TaskScheduler.Default);
 }

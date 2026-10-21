@@ -1628,6 +1628,26 @@ _LINUX_QT = {
         "Qt 5 Quick — сцена-граф рендеринга QML через OpenGL/."
         "Используется всеми QML-интерфейсами."
     ),
+    "libQt5WebChannel.so.5": (
+        "Qt 5 WebChannel — мост QML/C++ ↔ JavaScript: передача "
+        "сигналов и вызовов между Qt-приложением и HTML/QML-страницей "
+        "(transport поверх WebSockets или QWebChannel-протокола)."
+    ),
+    "libQt5WebEngine.so.5": (
+        "Qt 5 WebEngine — встроенный браузерный движок Qt на базе "
+        "Chromium: рендеринг веб-контента в QML-приложениях "
+        "(WebEngineView), управление профилями, навигацией."
+    ),
+    "libQt5WebEngineCore.so.5": (
+        "Qt 5 WebEngine Core — ядро WebEngine на базе Chromium "
+        "(Blink, V8, сетевой стек, процессы рендеринга). Самая "
+        "крупная библиотека Qt: включает большую часть Chromium."
+    ),
+    "libQt5WebEngineWidgets.so.5": (
+        "Qt 5 WebEngine Widgets — виджетная обёртка WebEngine "
+        "(QWebEngineView, QWebEnginePage) для классических "
+        "QWidget-приложений."
+    ),
     "libQt6Core.so.6": (
         "Qt 6 Core — базовая библиотека Qt 6 (преемник Qt 5 Core): "
         "объектная модель, контейнеры, события, новые форматы "

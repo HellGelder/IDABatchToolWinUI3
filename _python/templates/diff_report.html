@@ -12,6 +12,11 @@
             border-radius: var(--radius-sm); padding: 10px 14px;
             font-weight: 500; font-size: 14px; margin: 8px 0;
         }
+        .note-block {
+            background: var(--warning-tint); color: var(--warning);
+            border-radius: var(--radius-sm); padding: 10px 14px;
+            font-weight: 500; font-size: 14px; margin: 8px 0;
+        }
         .matched-summary { margin-bottom: 12px; font-size: 14px; }
 
         .import-col { flex: 1; min-width: 280px; }
@@ -104,6 +109,12 @@
         {% if error %}
         <div class="danger-block">⚠️ {{ error }}</div>
         {% endif %}
+        {% if identical %}
+        <div class="note-block" style="background:var(--success-tint); color:var(--success);">✓ Модули идентичны — сравнение анализаторами не проводилось (файлы совпадают побайтно).</div>
+        {% endif %}
+        {% if add_analysis_note %}
+        <div class="note-block">ℹ️ {{ add_analysis_note }}</div>
+        {% endif %}
     </div>
 
     <!-- Статистика по файлам -->
@@ -144,7 +155,7 @@
             {% set hd = global_hex_diff[0] %}
             {% set hd_sim = hd.hexdump_similarity if hd.hexdump_similarity is defined else 0.0 %}
             <p class="meta-text" style="margin-bottom:4px;">
-                Схожесть hex-дампов: <strong>{{ "%.2f"|format(hd_sim * 100) }}%</strong>
+                Схожесть hex-дампов: <strong>{{ hd_sim | pct(2) }}%</strong>
                 <span style="font-size:10px; color:var(--text-tertiary); cursor:help;" title="Доля байт эталонного файла, для которых найдена идентичная последовательность (≥16 байт) в контрольном файле. Рассчитывается как matching_bytes / len(эталонный_файл).">ⓘ</span>
                 {% if hd_sim >= 1.0 %}<span class="badge badge--success" style="font-size:10px;">идентичны</span>{% endif %}
             </p>
@@ -230,7 +241,7 @@
     <div class="card">
         <div class="flex-row">
             <div>
-                <div class="stat-value">{{ "%.2f"|format(display_sim * 100) }}%</div>
+                <div class="stat-value">{{ display_sim | pct(2, guard=99.0) }}%</div>
                 <div class="stat-label" style="margin-bottom:4px;">
                     Схожесть
                     {% if total_functions1 == 0 %}
@@ -240,7 +251,7 @@
                 <div class="progress-bar"><div class="progress-fill" style="width:{{ display_sim * 100 }}%;"></div></div>
             </div>
             <div>
-                <div class="stat-value">{{ "%.2f"|format(confidence * 100) }}%</div>
+                <div class="stat-value">{{ confidence | pct(2) }}%</div>
                 <div class="stat-label" style="margin-bottom:4px;">Уверенность</div>
                 <div class="progress-bar"><div class="progress-fill" style="width:{{ confidence * 100 }}%;"></div></div>
             </div>
@@ -278,7 +289,7 @@
     <div class="card">
         <p class="matched-summary" title="Доля функций первичного файла, для которых найдено соответствие хотя бы одним движком.">
             Показатель совпадения: {{ bd_only + dp_only + both_cnt }} из {{ total_functions1 }} функций первичного файла
-            ({{ "%.1f"|format((bd_only + dp_only + both_cnt) / total_functions1 * 100) if total_functions1 else 0 }}%)
+            ({{ ((bd_only + dp_only + both_cnt) / total_functions1) | pct if total_functions1 else 0 }}%)
         </p>
 
         {% if matched_functions %}
@@ -317,8 +328,8 @@
                             <td class="col-nowrap"><code>{{ f.address1 }}</code></td>
                             <td class="dt-name" title="{{ f.name2 }}">{{ f.name2 }}</td>
                             <td class="col-nowrap"><code>{{ f.address2 }}</code></td>
-                            <td data-order="{{ f.similarity }}">{{ "%.1f"|format(f.similarity * 100) }}%</td>
-                            <td data-order="{{ f.confidence }}">{{ "%.1f"|format(f.confidence * 100) }}%</td>
+                            <td data-order="{{ f.similarity }}">{{ f.similarity | pct }}%</td>
+                            <td data-order="{{ f.confidence }}">{{ f.confidence | pct }}%</td>
                             <td class="dt-name" style="font-size:11px; color:var(--text-secondary);" title="{{ f.algorithm_name }}">{{ f.algorithm_name }}</td>
                             <td data-order="{{ f.basicblocks if f.basicblocks is defined else f.nodes1 if f.nodes1 is defined else -1 }}">{{ f.basicblocks if f.basicblocks is defined else f.nodes1 if f.nodes1 is defined else '—' }}</td>
                             <td data-order="{{ f.instructions if f.instructions is defined else -1 }}">{{ f.instructions if f.instructions is defined else '—' }}</td>
@@ -360,6 +371,24 @@
         {% set has_un2 = unmatched_functions2 is defined and unmatched_functions2|length > 0 %}
         {% set total_un = total_unmatched is defined and total_unmatched > 0 %}
         {% if has_un1 or has_un2 %}
+        <p class="meta-text" style="margin:0 0 6px 0; font-size:12px;">
+            «Несопоставленной» считается функция, для которой анализаторы не нашли пару с достаточным совпадением.
+            Имена вида <code>unknown_libname</code>, <code>sub_…</code>, числовые (например, <code>1800224E0</code>)
+            и <code>&lt;unnamed&gt;</code> означают, что у функции нет собственного имени: в бинарнике нет отладочной
+            информации, и имя назначено автоматически. Как правило, это служебные и вспомогательные функции. Без имён
+            и сведений о них сопоставление опирается только на сравнение кода, и короткие однотипные функции нередко
+            не набирают достаточного совпадения — поэтому остаются в этом списке.
+        </p>
+        <p class="meta-text" style="margin:0 0 6px 0; font-size:12px;">
+            Одна и та же функция может оказаться в обоих списках — и в эталонном, и в сравниваемом, нередко по одному
+            и тому же адресу. Противоречия в этом нет: «несопоставлена» означает «не сопоставлена ни с чем», в том числе
+            с такой же функцией другого файла. Само по себе присутствие функции в обоих файлах по одному адресу
+            признаком различия не является.
+        </p>
+        <p class="meta-text" style="margin:0 0 10px 0; font-size:12px;">
+            Несопоставленные функции не участвуют в расчёте показателя схожести и сами по себе не означают, что файлы
+            различаются. Если функцию нужно проверить — откройте её по адресу в IDA и сравните вручную.
+        </p>
         <div class="flex-row">
             {% if has_un1 %}
             <div class="import-col">
@@ -416,7 +445,7 @@
                 <code style="margin:0 4px;">{{ f.address2 }}</code>
             </span>
             <span style="display:flex;align-items:center;gap:8px;">
-                <span class="badge">{{ "%.0f"|format(f.similarity * 100) }}%</span>
+                <span class="badge">{{ f.similarity | pct(0) }}%</span>
                 <span class="accordion-chevron">›</span>
             </span>
         </div>

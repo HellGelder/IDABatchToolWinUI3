@@ -305,17 +305,15 @@
                                 <TextBox x:Name="GitExcludesTextBox" Grid.Column="1"
                                          ToolTipService.ToolTip="Шаблоны имён файлов и каталогов; совпадение по любому компоненту пути. Пустой список — исключений нет." />
                             </Grid>
-                            <Grid ColumnSpacing="6">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" MinWidth="170" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Строк контекста:"
-                                           VerticalAlignment="Center" FontSize="12" />
-                                <TextBox x:Name="GitContextTextBox" Grid.Column="1" Text="3" MaxWidth="90"
-                                         HorizontalAlignment="Left"
-                                         ToolTipService.ToolTip="Число неизменённых строк вокруг изменений в каждом блоке диффа (0 — только изменённые строки)." />
-                            </Grid>
+                            <CheckBox x:Name="GitFullDiffCheckBox" FontSize="12"
+                                      Content="Полный дифф (все строки файлов)"
+                                      ToolTipService.ToolTip="Отмечено — в дифф пишутся все строки файлов целиком, неизменённые участки не сжимаются. Снято — стандартный контекст: 3 неизменённые строки вокруг каждого изменения." />
+                            <CheckBox x:Name="GitSourcesOnlyCheckBox" IsChecked="True" FontSize="12"
+                                      Content="Сравнивать только исходные коды (без бинарных файлов)"
+                                      ToolTipService.ToolTip="Файлы, распознанные как двоичные по содержимому, не попадают в changes.diff и HTML-отчёт — в сравнении участвуют только текстовые файлы (исходники, конфиги, документация). Двоичные файлы остаются в статистике и журнале." />
+                            <CheckBox x:Name="GitModulesCheckBox" IsThreeState="True" FontSize="12"
+                                      Content="Модульное сравнение (подпапки — отдельные модули)"
+                                      ToolTipService.ToolTip="Включено — всегда модульный режим: каждая подпапка OLD/NEW — отдельный модуль со своим changes.diff, отчётом и строкой в индексе (4 потока). Выключено — плоский режим, вся папка целиком как раньше. Частично (по умолчанию) — автоматически: есть подпапки → модульный режим, нет → плоский." />
                         </StackPanel>
                     </Border>
 
@@ -333,12 +331,69 @@
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <Button x:Name="GitStartButton" Grid.Column="0" Content="Сгенерировать дифф"
                                         Height="34" Width="160" Padding="12,6" />
                                 <Button x:Name="GitCancelButton" Grid.Column="1" Content="Отмена"
                                         Height="34" Width="80" Padding="12,6" IsEnabled="False" />
+                                <Button x:Name="GitReportButton" Grid.Column="3" Height="46" MinWidth="172"
+                                        Padding="12,4" IsEnabled="False">
+                                    <StackPanel Spacing="0" VerticalAlignment="Center">
+                                        <TextBlock Text="Сгенерировать" HorizontalAlignment="Center" FontSize="12" />
+                                        <TextBlock Text="HTML-отчёт" HorizontalAlignment="Center" FontSize="12" />
+                                    </StackPanel>
+                                </Button>
                             </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Карточки потоков (модульный режим): № потока, текущий модуль, прогресс -->
+                    <Border x:Name="GitThreadsGroup" Style="{StaticResource GroupBoxStyle}" Visibility="Collapsed">
+                        <StackPanel Spacing="6">
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Потоки" Style="{StaticResource GroupHeaderStyle}" />
+                                <TextBlock x:Name="GitModulesProgress" Grid.Column="1" Text="Готово 0/0"
+                                           FontSize="11" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </Grid>
+                            <ItemsControl x:Name="GitThreadsItems">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" Spacing="6" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:ThreadCardViewModel">
+                                        <Border Width="176" Padding="10,7"
+                                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                BorderThickness="1" CornerRadius="6">
+                                            <StackPanel Spacing="3">
+                                                <Grid ColumnSpacing="6">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{x:Bind Title}" FontSize="11" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{x:Bind StateText, Mode=OneWay}" Grid.Column="1"
+                                                               FontSize="10"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                </Grid>
+                                                <TextBlock Text="{x:Bind ModuleText, Mode=OneWay}" FontSize="11"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTipService.ToolTip="{x:Bind ModuleText, Mode=OneWay}" />
+                                                <TextBlock Text="{x:Bind ProgressText, Mode=OneWay}" FontSize="10"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </StackPanel>
                     </Border>
 

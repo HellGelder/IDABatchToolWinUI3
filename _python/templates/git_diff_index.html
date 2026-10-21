@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Индекс Git-сравнения — __COUNT__ модулей</title>
+<style>
+/* Индексный отчёт модульного Git-сравнения (без вендора: статическая таблица).
+   Визуально в одной семье с частным отчётом git_diff_report.html. */
+body { margin: 0; background: #f6f6f6; color: #1f1f1f;
+       font-family: "Segoe UI", "Segoe UI Emoji", sans-serif; font-size: 13px; }
+.gdx-header { position: sticky; top: 0; z-index: 10; background: #fff;
+              border-bottom: 1px solid #e0e0e0; padding: 10px 16px 8px; }
+.gdx-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.gdx-paths { font-size: 12px; color: #444; line-height: 1.45; word-break: break-all; }
+.gdx-paths b { font-weight: 600; }
+.gdx-meta { font-size: 11px; color: #767676; margin-top: 3px; word-break: break-all; }
+.gdx-wrap { margin: 12px 16px; background: #fff; border: 1px solid #e3e3e3;
+            border-radius: 6px; overflow-x: auto; }
+table.gdx { width: 100%; border-collapse: collapse; font-size: 12px; }
+.gdx th { background: #f7f7f7; text-align: left; padding: 7px 10px;
+          border-bottom: 1px solid #e3e3e3; font-weight: 600; white-space: nowrap; }
+.gdx td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+.gdx tbody tr:hover td { background: #f5f8fd; }
+/* числовые колонки центрированы — и в шапке, и в данных */
+.gdx th.num { text-align: center; }
+.gdx td.num { text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gdx .mod { color: #9a6700; font-weight: 600; }
+.gdx .add { color: #1a7f37; font-weight: 600; }
+.gdx .del { color: #cf222e; font-weight: 600; }
+.gdx a { color: #0969da; text-decoration: none; white-space: nowrap; }
+.gdx a:hover { text-decoration: underline; }
+.gdx .name { font-weight: 600; word-break: break-all; }
+tr.gdx-total td { background: #fafbfc; font-weight: 600; border-top: 2px solid #e3e3e3; }
+.gdx-status { font-size: 11px; padding: 1px 8px; border-radius: 10px;
+              border: 1px solid transparent; white-space: nowrap; }
+.gdx-status-modified  { background: #fff3cd; color: #7a5b00; border-color: #e8dca0; }
+.gdx-status-added     { background: #e2f5e7; color: #1a7f37; border-color: #b7e2c2; }
+.gdx-status-deleted   { background: #fde8e8; color: #cf222e; border-color: #f3c1c1; }
+.gdx-status-unchanged { background: #ececf1; color: #57606a; border-color: #d8dee4; }
+.gdx-status-error     { background: #ffe0e0; color: #a40e26; border-color: #f3b6b6; }
+.gdx-quiet { color: #767676; }
+</style>
+</head>
+<body>
+<header class="gdx-header">
+  <div class="gdx-title">Индекс Git-сравнения модулей</div>
+  <div class="gdx-paths">
+    <b>OLD:</b> __OLD_DIR__<br>
+    <b>NEW:</b> __NEW_DIR__
+  </div>
+  <div class="gdx-meta">Сгенерировано: __GENERATED__ · модулей: __COUNT__ · нажмите «отчёт» для перехода к частному diff-отчёту модуля</div>
+</header>
+<main>
+  <div class="gdx-wrap">
+    <table class="gdx">
+      <thead>
+        <tr>
+          <th>Модуль</th>
+          <th class="num">Изменено</th>
+          <th class="num">Добавлено</th>
+          <th class="num">Удалено</th>
+          <th>Статус</th>
+          <th>Файлы</th>
+        </tr>
+      </thead>
+      <tbody>
+__ROWS__
+      </tbody>
+    </table>
+  </div>
+</main>
+</body>
+</html>

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Git-сравнение — __SOURCE_NAME__</title>
+<style>
+/*__VENDOR_CSS__*/
+
+/* ── Оформление отчёта Git-сравнения: шапка, список файлов, свёртка ──
+   Содержимое рендерит diff2html (вендор инлайнится ниже скриптом генерации). */
+body { margin: 0; background: #f6f6f6; color: #1f1f1f;
+       font-family: "Segoe UI", "Segoe UI Emoji", sans-serif; font-size: 13px; }
+.gdr-header { position: sticky; top: 0; z-index: 10; background: #ffffff;
+              border-bottom: 1px solid #e0e0e0; padding: 10px 16px 8px; }
+.gdr-back { font-size: 12px; margin-bottom: 2px; }
+.gdr-back a { color: #0969da; text-decoration: none; }
+.gdr-back a:hover { text-decoration: underline; }
+.gdr-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.gdr-paths { font-size: 12px; color: #444; line-height: 1.45; word-break: break-all; }
+.gdr-paths b { font-weight: 600; }
+.gdr-meta { font-size: 11px; color: #767676; margin-top: 3px; word-break: break-all; }
+.gdr-summary { font-size: 12px; margin-top: 6px; }
+.gdr-summary .gdr-add { color: #1a7f37; font-weight: 600; }
+.gdr-summary .gdr-del { color: #cf222e; font-weight: 600; }
+.gdr-controls { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+.gdr-btn { border: 1px solid #d0d0d0; background: #fff; border-radius: 4px;
+           padding: 4px 10px; font-size: 12px; cursor: pointer; color: #1f1f1f; }
+.gdr-btn:hover { background: #f0f0f0; }
+.gdr-btn.gdr-active { background: #e8f0fe; border-color: #7aa7e0; color: #174ea6; font-weight: 600; }
+
+.gdr-file { margin: 10px 16px; background: #fff; border: 1px solid #e3e3e3;
+            border-radius: 6px; overflow: hidden; }
+.gdr-file-head { display: flex; align-items: center; gap: 8px;
+                 padding: 6px 12px; cursor: pointer; user-select: none; }
+.gdr-file-head:hover { background: #f5f8fd; }
+.gdr-caret { display: inline-block; width: 12px; color: #767676; font-size: 11px; }
+.gdr-status { font-size: 11px; padding: 1px 8px; border-radius: 10px;
+              border: 1px solid transparent; white-space: nowrap; }
+.gdr-status-modified { background: #fff3cd; color: #7a5b00; border-color: #e8dca0; }
+.gdr-status-added    { background: #e2f5e7; color: #1a7f37; border-color: #b7e2c2; }
+.gdr-status-deleted  { background: #fde8e8; color: #cf222e; border-color: #f3c1c1; }
+.gdr-name { font-weight: 600; word-break: break-all; }
+.gdr-file-stats { margin-left: auto; white-space: nowrap; font-size: 11px; }
+.gdr-add { color: #1a7f37; font-weight: 600; }
+.gdr-del { color: #cf222e; font-weight: 600; }
+.gdr-file-body { border-top: 1px solid #eee; }
+/* Встроенную шапку файла diff2html скрываем: имя и +/− показывает своя строка-заголовок */
+.gdr-file-body .d2h-file-header { display: none !important; }
+.gdr-empty { margin: 24px 16px; padding: 18px; background: #fff; border: 1px dashed #d0d0d0;
+             border-radius: 6px; color: #57606a; text-align: center; }
+</style>
+</head>
+<body>
+<header class="gdr-header">
+  <div class="gdr-back">__BACK_LINK__</div>
+  <div class="gdr-title">Отчёт Git-сравнения каталогов</div>
+  <div class="gdr-paths">
+    <b>OLD:</b> __OLD_DIR__<br>
+    <b>NEW:</b> __NEW_DIR__
+  </div>
+  <div class="gdr-meta">Сгенерировано: __GENERATED__ · источник: __SOURCE_NAME__ (__SOURCE_DIR__)</div>
+  <div class="gdr-summary" id="gdr-summary">Разбор диффа…</div>
+  <div class="gdr-controls" id="gdr-controls" style="display:none">
+    <button class="gdr-btn" id="gdr-mode-side" type="button">Рядом (side-by-side)</button>
+    <button class="gdr-btn" id="gdr-mode-unified" type="button">Строками (unified)</button>
+    <button class="gdr-btn" id="gdr-expand-all" type="button">Развернуть все</button>
+    <button class="gdr-btn" id="gdr-collapse-all" type="button">Свернуть все</button>
+  </div>
+</header>
+<main id="gdr-files"></main>
+<noscript>Для просмотра отчёта включите JavaScript.</noscript>
+
+<script>
+/*__VENDOR_JS__*/
+</script>
+<script>
+'use strict';
+(function () {
+    var DIFF_TEXT = "__DIFF_JSON__";
+
+    /* Разбор единого диффа на чанки по файлам: «diff --git …» начинает запись,
+       строки содержимого всегда начинаются с « », «+», «-» или «@@». */
+    function splitFiles(text) {
+        var lines = text.split('\n');
+        var chunks = [], cur = null;
+        for (var i = 0; i < lines.length; i++) {
+            var ln = lines[i];
+            if (ln.lastIndexOf('diff --git ', 0) === 0) { cur = [ln]; chunks.push(cur); }
+            else if (cur) cur.push(ln);
+        }
+        var out = [];
+        for (var k = 0; k < chunks.length; k++) {
+            var s = chunks[k].join('\n');
+            if (s.replace(/\s+$/, '').length) out.push(s);
+        }
+        return out;
+    }
+
+    /* Метаданные файла: имя, статус, счётчики +/− по строкам ханков
+       (служебные «+++»/«---» и строки без префикса не считаются). */
+    function fileMeta(chunk, index) {
+        var lines = chunk.split('\n');
+        var newPath = null, oldPath = null;
+        var add = 0, del = 0;
+        for (var i = 0; i < lines.length; i++) {
+            var ln = lines[i];
+            if (ln.lastIndexOf('+++ ', 0) === 0 && newPath === null) newPath = ln.slice(4);
+            else if (ln.lastIndexOf('--- ', 0) === 0 && oldPath === null) oldPath = ln.slice(4);
+            else if (ln.charAt(0) === '+') add++;
+            else if (ln.charAt(0) === '-') del++;
+        }
+        /* Бинарные чанки не содержат «---»/«+++» — имя берём из строки
+           «diff --git old/X new/Y» (как в диффах DirectoriesDiffService). */
+        var name = null;
+        var first = lines[0] || '';
+        if (first.lastIndexOf('diff --git ', 0) === 0) {
+            var rest = first.slice('diff --git '.length);
+            var sep = rest.lastIndexOf(' new/');
+            if (sep >= 0) name = rest.slice(sep + 5);
+            else {
+                var sp = rest.lastIndexOf(' ');
+                if (sp >= 0) name = rest.slice(sp + 1);
+            }
+        }
+        if (newPath && newPath !== '/dev/null') name = newPath.replace(/^new\//, '');
+        else if (oldPath && oldPath !== '/dev/null') name = oldPath.replace(/^old\//, '');
+        if (!name) name = 'файл ' + (index + 1);
+        var status = 'modified';
+        if (/^Binary files /m.test(chunk)) status = 'binary';
+        else if (/^deleted file mode/m.test(chunk)) status = 'deleted';
+        else if (/^new file mode/m.test(chunk)) status = 'added';
+        return { name: name, status: status, add: add, del: del, chunk: chunk };
+    }
+
+    var STATUS_LABEL = { modified: 'изменён', added: 'новый', deleted: 'удалён' };
+    var state = { mode: 'side-by-side', files: [], bodies: [], heads: [], expanded: [] };
+
+    function setMode(mode) {
+        state.mode = mode;
+        document.getElementById('gdr-mode-side').classList.toggle('gdr-active', mode === 'side-by-side');
+        document.getElementById('gdr-mode-unified').classList.toggle('gdr-active', mode === 'line-by-line');
+        for (var i = 0; i < state.files.length; i++) {
+            if (state.expanded[i]) {
+                var body = state.bodies[i];
+                body.innerHTML = '';
+                delete body.dataset.rendered;
+                renderBody(i);
+            }
+        }
+    }
+
+    function renderBody(i) {
+        var body = state.bodies[i];
+        if (body.dataset.rendered) return;
+        body.innerHTML = Diff2Html.html(state.files[i].chunk, {
+            inputFormat: 'diff',
+            outputFormat: state.mode,
+            drawFileList: false
+        });
+        body.dataset.rendered = '1';
+    }
+
+    function setExpanded(i, expand) {
+        state.expanded[i] = expand;
+        var body = state.bodies[i];
+        var caret = state.heads[i].querySelector('.gdr-caret');
+        if (expand) { renderBody(i); body.style.display = ''; caret.textContent = '▾'; }
+        else { body.style.display = 'none'; caret.textContent = '▸'; }
+    }
+
+    function build() {
+        var root = document.getElementById('gdr-files');
+        var summary = document.getElementById('gdr-summary');
+        var controls = document.getElementById('gdr-controls');
+        var chunks = splitFiles(DIFF_TEXT);
+
+        if (!chunks.length) {
+            summary.textContent = 'Различий не найдено.';
+            root.innerHTML = '<div class="gdr-empty">Изменений между каталогами нет.</div>';
+            return;
+        }
+
+        var totAdd = 0, totDel = 0;
+        state.files = chunks.map(fileMeta);
+        for (var t = 0; t < state.files.length; t++) {
+            totAdd += state.files[t].add;
+            totDel += state.files[t].del;
+        }
+        summary.innerHTML = 'Файлов: <b>' + state.files.length + '</b> · ' +
+            '<span class="gdr-add">+' + totAdd + '</span> · ' +
+            '<span class="gdr-del">−' + totDel + '</span>' +
+            ' — нажмите на файл, чтобы развернуть';
+
+        for (var i = 0; i < state.files.length; i++) {
+            var f = state.files[i];
+            var wrap = document.createElement('div'); wrap.className = 'gdr-file';
+            var head = document.createElement('div'); head.className = 'gdr-file-head';
+            var caret = document.createElement('span'); caret.className = 'gdr-caret'; caret.textContent = '▸';
+            var st = document.createElement('span');
+            // Для двоичных файлов чип статуса не рисуется — тема двоичных из
+            // отчёта исключена (см. v1.0.0.15); содержимое блока «Binary files …
+            // differ» показывает сам diff2html при разворачивании
+            if (f.status !== 'binary') {
+                st.className = 'gdr-status gdr-status-' + f.status;
+                st.textContent = STATUS_LABEL[f.status];
+            }
+            var nm = document.createElement('span'); nm.className = 'gdr-name';
+            nm.textContent = f.name; nm.title = f.name;
+            var stats = document.createElement('span'); stats.className = 'gdr-file-stats';
+            var ad = document.createElement('span'); ad.className = 'gdr-add'; ad.textContent = '+' + f.add;
+            var de = document.createElement('span'); de.className = 'gdr-del'; de.textContent = '−' + f.del;
+            de.style.marginLeft = '6px';
+            stats.appendChild(ad); stats.appendChild(de);
+            head.appendChild(caret); head.appendChild(st); head.appendChild(nm); head.appendChild(stats);
+            var body = document.createElement('div'); body.className = 'gdr-file-body'; body.style.display = 'none';
+
+            (function (idx) {
+                head.addEventListener('click', function () {
+                    setExpanded(idx, !state.expanded[idx]);
+                });
+            })(i);
+
+            wrap.appendChild(head); wrap.appendChild(body); root.appendChild(wrap);
+            state.bodies.push(body); state.heads.push(head); state.expanded.push(false);
+        }
+
+        controls.style.display = '';
+        document.getElementById('gdr-mode-side').addEventListener('click', function () { setMode('side-by-side'); });
+        document.getElementById('gdr-mode-unified').addEventListener('click', function () { setMode('line-by-line'); });
+        document.getElementById('gdr-expand-all').addEventListener('click', function () {
+            for (var j = 0; j < state.files.length; j++) setExpanded(j, true);
+        });
+        document.getElementById('gdr-collapse-all').addEventListener('click', function () {
+            for (var j = 0; j < state.files.length; j++) setExpanded(j, false);
+        });
+        setMode('side-by-side');
+    }
+
+    build();
+})();
+</script>
+</body>
+</html>

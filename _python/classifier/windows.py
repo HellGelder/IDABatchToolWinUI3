@@ -804,6 +804,20 @@ _WINDOWS_NETWORK = {
         "вызовы службы рабочей станции (NetWkstaGetInfo, информация "
         "о домене и локальной машине)."
     ),
+    # --- Bluetooth ---
+    "bluetoothapis.dll": (
+        "BluetoothAPIs — Bluetooth API: поиск устройств поблизости "
+        "(BluetoothFindFirstDevice/BluetoothFindFirstRadio), получение "
+        "сведений об адаптерах и устройствах (BLUETOOTH_DEVICE_INFO), "
+        "аутентификация и сопряжение, выбор радиомодуля. Клиентский "
+        "интерфейс над службой bthserv."
+    ),
+    "bthprops.cpl": (
+        "BthProps — Bluetooth Control Panel: элемент панели управления "
+        "и API-обёртки для устройств Bluetooth (сопряжение, передача "
+        "файлов, свойства устройства). В приложениях встречается как "
+        "импорт Bluetooth-функций наряду с bluetoothapis.dll."
+    ),
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -844,6 +858,20 @@ _WINDOWS_GRAPHICS = {
     "dwrite.dll": (
         "DWrite — DirectWrite: высококачественный рендеринг текста "
         "с поддержкой ClearType, OpenType-шрифтов, сложных скриптов."
+    ),
+    "normaliz.dll": (
+        "Normaliz — Unicode Normalization API (IDN): нормализация "
+        "Unicode-строк (NormalizeString) по стандартам NFC/NFD/NFKC/NFKD; "
+        "используется международными доменными именами (IDNA) и "
+        "подготовкой строк к сравнению. Разрешает зависимость от "
+        "icu-библиотек для старых приложений."
+    ),
+    "usp10.dll": (
+        "USP10 — Uniscribe: обработка и отрисовка сложных скриптов "
+        "(Unscribe ScriptShape/ScriptTextOut): арабский, иврит, "
+        "индийские письменности, тайский. Разбивка на глифы, шейпинг, "
+        "двунаправленный текст (bidi). Предшественник DirectWrite; "
+        "системная надстройка над GDI."
     ),
     "dcomp.dll": (
         "DComp — DirectComposition: библиотека композиции визуального "

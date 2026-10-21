@@ -18,6 +18,22 @@ public sealed partial class DiffPage : Page
     private CancellationTokenSource? _gitDiffCts;
     private DiffWorker? _worker;
     private string? _outputDir;
+    private string? _lastGitDiffPath;
+    private string? _lastModuleRunDir;
+
+    // ── Батчинг UI-обновлений диффа ──
+    // Колбэки из фоновых потоков только пишут состояние под замком; UI-поток
+    // выносит накопленное одним обновлением по таймеру (FlushGitUiUpdates).
+    // Прежний вариант — RunOnUi на каждый файл + O(n)-конкатенация строки
+    // журнала — топил UI-поток: окно «зависало», карточки не обновлялись.
+    private readonly object _gitUiGate = new();
+    private readonly Queue<string> _gitPendingLog = new();
+    private string?[] _gitPendingModule = Array.Empty<string?>();
+    private (int Cur, int Total)[] _gitPendingProgress = Array.Empty<(int, int)>();
+    private string? _gitPendingStatus;
+    private int _gitDone, _gitTotal;
+    private List<ThreadCardViewModel> _threadCards = new();
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _gitUiTimer;
     private readonly Dictionary<string, TextBlock> _stageLabels = new();
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _analyzeTimer;
     private int _analyzeGeneration;
@@ -50,7 +66,17 @@ public DiffPage()
         _analyzeTimer.IsRepeating = false;
         _analyzeTimer.Tick += (_, _) => _ = AnalyzeDirectoriesAsync();
 
-        Loaded += (_, _) => AnalyzeDirectories();
+        // Таймер батчинга прогресса диффа (см. комментарий у полей _gitUi*)
+        _gitUiTimer = DispatcherQueue.CreateTimer();
+        _gitUiTimer.Interval = TimeSpan.FromMilliseconds(150);
+        _gitUiTimer.IsRepeating = true;
+        _gitUiTimer.Tick += (_, _) => FlushGitUiUpdates();
+
+        Loaded += (_, _) =>
+        {
+            AnalyzeDirectories();
+            RefreshGitReportButton();
+        };
 
         // Подвкладка «Git-сравнение»: пикеры папок, запуск и отмена текстового диффа
         GitBrowseOldButton.Click += async (_, _) => await UiDialogs.PickFolderAsync(GitOldDirTextBox);
@@ -58,8 +84,9 @@ public DiffPage()
         GitBrowseOutButton.Click += async (_, _) => await UiDialogs.PickFolderAsync(GitOutDirTextBox);
         GitStartButton.Click += GitStart_Click;
         GitCancelButton.Click += (_, _) => _gitDiffCts?.Cancel();
+        GitReportButton.Click += GitGenerateReport_Click;
         GitExcludesTextBox.Text = DirectoriesDiffService.DefaultExcludes;
-        GitContextTextBox.Text = "3";
+        GitFullDiffCheckBox.IsChecked = false;
     }
 
     public bool IsDiffRunning() => _diffInProgress || _gitDiffInProgress;
@@ -523,8 +550,11 @@ public DiffPage()
             }
         });
 
-        await Task.Run(() => worker.Run(LeftDirTextBox.Text.Trim(), reportsDir, _outputDir,
-            LeftDirTextBox.Text.Trim(), RightDirTextBox.Text.Trim(), null, jsonFiles));
+        // UI-свойства читаем до Task.Run (см. комментарий в GitStart_Click)
+        var leftDir = LeftDirTextBox.Text.Trim();
+        var rightDir = RightDirTextBox.Text.Trim();
+        await Task.Run(() => worker.Run(leftDir, reportsDir, _outputDir,
+            leftDir, rightDir, null, jsonFiles));
     }
 
     // ──────────────────────────────────────────────
@@ -571,13 +601,11 @@ public DiffPage()
             await UiDialogs.WarnAsync("Ошибка", "Папка результата не найдена.");
             return;
         }
-        if (!int.TryParse(GitContextTextBox.Text.Trim(), out var context) || context < 0)
-        {
-            await UiDialogs.WarnAsync("Ошибка", "«Строк контекста» — укажите неотрицательное число.");
-            return;
-        }
+        // Размер диффа задаёт чекбокс «Полный дифф»: отмечен — все строки файлов,
+        // снят — стандартный контекст 3 строки (поля с числом строк больше нет)
+        var fullDiff = GitFullDiffCheckBox.IsChecked == true;
+        var context = fullDiff ? DirectoriesDiffService.FullContext : DirectoriesDiffService.DefaultContext;
 
-        var outPath = Path.Combine(outDir, "changes.diff");
         var patterns = DirectoriesDiffService.ParsePatterns(GitExcludesTextBox.Text);
         var ct = (_gitDiffCts = new CancellationTokenSource()).Token;
 
@@ -589,19 +617,46 @@ public DiffPage()
 
         try
         {
-            var stats = await Task.Run(() => DirectoriesDiffService.Run(
-                oldDir, newDir, outPath, context, patterns,
-                line => RunOnUi(() => AppendGitLog(line)),
-                (cur, total, rel) => RunOnUi(() => GitStatusText.Text = $"Файл {cur}/{total}: {rel}"),
-                ct));
+            // Состояние UI-элементов читаем ТОЛЬКО на UI-потоке — до запуска фоновой
+            // задачи: обращение к чекбоксу внутри Task.Run даёт COMException
+            // (RPC_E_WRONG_THREAD) с пустым Message — «ОШИБКА: » без причины.
+            var skipBinary = GitSourcesOnlyCheckBox.IsChecked == true;
+            var modeFlag = GitModulesCheckBox.IsChecked; // null = авто
 
-            foreach (var line in DirectoriesDiffService.Summarize(stats))
-                AppendGitLog(line);
-            GitStatusText.Text = $"Готово: {stats.OutPath} ({stats.SizeBytes / 1024f:F1} КБ)";
-            if (stats.HasErrors)
-                await UiDialogs.WarnAsync("Готово с ошибками",
-                    $"Дифф создан, но при обработке {stats.Errors} файл(ов) возникли ошибки. " +
-                    "Подробности — в журнале.");
+            var hasSubDirs = await Task.Run(() =>
+                DirectoriesDiffService.HasSubDirectories(oldDir) ||
+                DirectoriesDiffService.HasSubDirectories(newDir));
+            var moduleMode = modeFlag == true || (modeFlag is null && hasSubDirs);
+
+            if (moduleMode)
+            {
+                await RunModuleComparisonAsync(oldDir, newDir, outDir, context, patterns, skipBinary, ct);
+            }
+            else
+            {
+                GitThreadsGroup.Visibility = Visibility.Collapsed;
+                StartGitUiTimer(0); // без карточек: батчим только журнал и статус
+                var outPath = Path.Combine(outDir, "changes.diff");
+                var stats = await Task.Run(() => DirectoriesDiffService.Run(
+                    oldDir, newDir, outPath, context, patterns,
+                    line => { lock (_gitUiGate) _gitPendingLog.Enqueue(line); },
+                    (cur, total, rel) =>
+                    {
+                        lock (_gitUiGate) _gitPendingStatus = $"Файл {cur}/{total}: {rel}";
+                    },
+                    ct, skipBinary));
+
+                foreach (var line in DirectoriesDiffService.Summarize(stats))
+                    AppendGitLog(line);
+                _lastGitDiffPath = stats.OutPath;
+                _lastModuleRunDir = null;
+                GitReportButton.IsEnabled = true;
+                GitStatusText.Text = $"Готово: {stats.OutPath} ({stats.SizeBytes / 1024f:F1} КБ)";
+                if (stats.HasErrors)
+                    await UiDialogs.WarnAsync("Готово с ошибками",
+                        $"Дифф создан, но при обработке {stats.Errors} файл(ов) возникли ошибки. " +
+                        "Подробности — в журнале.");
+            }
         }
         catch (OperationCanceledException)
         {
@@ -611,11 +666,14 @@ public DiffPage()
         catch (Exception ex)
         {
             GitStatusText.Text = "Ошибка";
-            AppendGitLog("ОШИБКА: " + ex.Message);
-            await UiDialogs.WarnAsync("Ошибка", ex.Message + "\n\nПодробности — в логе на странице.");
+            // Пустой Message у COMException (RPC_E_WRONG_THREAD и т.п.) — без типа
+            // и HResult причина в журнале выглядела как «ОШИБКА: » и пустая строка
+            AppendGitLog($"ОШИБКА: {ex.GetType().Name}: {ex.Message} (HResult 0x{ex.HResult:X8})");
+            await UiDialogs.WarnAsync("Ошибка", $"{ex.GetType().Name}: {ex.Message}\n\nПодробности — в логе на странице.");
         }
         finally
         {
+            StopGitUiTimerAndFlush();
             _gitDiffInProgress = false;
             _gitDiffCts?.Dispose();
             _gitDiffCts = null;
@@ -630,6 +688,330 @@ public DiffPage()
         if (string.IsNullOrEmpty(GitLogTextBox.Text)) GitLogTextBox.Text = message;
         else GitLogTextBox.Text += Environment.NewLine + message;
         GitLogTextBox.SelectionStart = GitLogTextBox.Text.Length;
+    }
+
+    // ────────────────── Батчинг UI-обновлений диффа ──────────────────
+
+    private void StartGitUiTimer(int workers)
+    {
+        lock (_gitUiGate)
+        {
+            _gitPendingLog.Clear();
+            _gitPendingModule = new string?[workers];
+            _gitPendingProgress = new (int, int)[workers];
+            _gitDone = 0;
+            _gitTotal = 0;
+            _gitPendingStatus = null;
+        }
+        _gitUiTimer.Start();
+    }
+
+    /// <summary>Останов таймера и финальный вынос накопленного (вызывается на UI-потоке).</summary>
+    private void StopGitUiTimerAndFlush()
+    {
+        _gitUiTimer.Stop();
+        lock (_gitUiGate)
+        {
+            // Итоговый статус уже выставлен явно — промежуточный не применяем
+            _gitDone = 0;
+            _gitTotal = 0;
+            _gitPendingStatus = null;
+        }
+        FlushGitUiUpdates();
+        while (true)
+        {
+            var batch = DrainPendingLog();
+            if (batch.Length == 0) break;
+            AppendGitLogBatch(batch);
+        }
+    }
+
+    /// <summary>Очередь журнала опустошаем порциями, чтобы один тик не съедал секунды.</summary>
+    private string[] DrainPendingLog()
+    {
+        lock (_gitUiGate)
+        {
+            int n = Math.Min(64, _gitPendingLog.Count);
+            var arr = new string[n];
+            for (int i = 0; i < n; i++) arr[i] = _gitPendingLog.Dequeue();
+            return arr;
+        }
+    }
+
+    /// <summary>Единственная точка обновления журнала/карточек/статуса во время прогона:
+    /// накопленное с прошлого тика применяется одним обновлением каждого элемента.</summary>
+    private void FlushGitUiUpdates()
+    {
+        var batch = DrainPendingLog();
+        if (batch.Length > 0) AppendGitLogBatch(batch);
+
+        var cards = _threadCards;
+        for (int t = 0; t < cards.Count && t < _gitPendingModule.Length; t++)
+        {
+            string? module;
+            (int cur, int total) prog;
+            lock (_gitUiGate)
+            {
+                module = _gitPendingModule[t];
+                prog = _gitPendingProgress[t];
+            }
+            if (module == null)
+            {
+                if (cards[t].StateText != "свободен") cards[t].SetIdle();
+                continue;
+            }
+            if (cards[t].ModuleText != module) cards[t].SetModule(module);
+            if (prog.total > 0) cards[t].SetProgress(prog.cur, prog.total);
+        }
+
+        lock (_gitUiGate)
+        {
+            if (_gitPendingStatus != null)
+            {
+                GitStatusText.Text = _gitPendingStatus;
+                _gitPendingStatus = null;
+            }
+            if (_gitTotal > 0)
+            {
+                GitModulesProgress.Text = $"Готово {_gitDone}/{_gitTotal}";
+                GitStatusText.Text = $"Модулей готово: {_gitDone}/{_gitTotal}";
+            }
+        }
+    }
+
+    /// <summary>Пакетный журнал: одна конкатенация на пакет; хвост ограничен —
+    /// полный журнал живёт в changes.diff.log (плоский режим) и журналах модулей.</summary>
+    private void AppendGitLogBatch(IReadOnlyList<string> lines)
+    {
+        var add = string.Join(Environment.NewLine, lines);
+        var text = string.IsNullOrEmpty(GitLogTextBox.Text) ? add : GitLogTextBox.Text + Environment.NewLine + add;
+        if (text.Length > 160_000)
+        {
+            var parts = text.Split('\n');
+            text = string.Join(Environment.NewLine, parts[^401..]).TrimEnd('\r');
+        }
+        GitLogTextBox.Text = text;
+        GitLogTextBox.SelectionStart = GitLogTextBox.Text.Length;
+    }
+
+    /// <summary>Кнопка HTML-отчёта активна, если есть что отчитать:
+    /// существующий changes.diff (плоский режим) или манифест модулей.</summary>
+    private void RefreshGitReportButton() =>
+        GitReportButton.IsEnabled = ResolveGitDiffPath() != null || ResolveModuleRunDir() != null;
+
+    /// <summary>
+    /// Путь к последнему changes.diff: результат текущего сеанса либо
+    /// changes.diff в указанной папке результата (после перезапуска приложения).
+    /// </summary>
+    private string? ResolveGitDiffPath()
+    {
+        if (_lastGitDiffPath != null && File.Exists(_lastGitDiffPath)) return _lastGitDiffPath;
+        var outDir = GitOutDirTextBox.Text.Trim();
+        if (outDir.Length == 0) return null;
+        var candidate = Path.Combine(outDir, "changes.diff");
+        return File.Exists(candidate) ? candidate : null;
+    }
+
+    /// <summary>
+    /// Папка модульного прогона: текущая сессия либо манифест modules.json
+    /// в указанной папке результата (после перезапуска приложения).
+    /// </summary>
+    private string? ResolveModuleRunDir()
+    {
+        if (_lastModuleRunDir != null &&
+            File.Exists(Path.Combine(_lastModuleRunDir, GitDiffReportService.ManifestFileName)))
+            return _lastModuleRunDir;
+        var outDir = GitOutDirTextBox.Text.Trim();
+        if (outDir.Length > 0 &&
+            File.Exists(Path.Combine(outDir, GitDiffReportService.ManifestFileName)))
+            return outDir;
+        return null;
+    }
+
+    private async Task RunModuleComparisonAsync(string oldDir, string newDir, string outDir,
+        int context, IReadOnlyList<string> patterns, bool skipBinary, CancellationToken ct)
+    {
+        var modules = await Task.Run(() => DirectoriesDiffService.DiscoverModules(oldDir, newDir));
+        if (modules.Count == 0)
+        {
+            await UiDialogs.WarnAsync("Модули не найдены",
+                "В OLD/NEW нет подпапок-модулей.\nДля плоского сравнения снимите галку «Модульное сравнение».");
+            return;
+        }
+
+        // Карточки потоков: по одной на воркер; обновления — через батч-таймер
+        var workers = Math.Min(4, modules.Count);
+        _threadCards = Enumerable.Range(1, workers).Select(i => new ThreadCardViewModel(i)).ToList();
+        GitThreadsItems.ItemsSource = _threadCards;
+        GitThreadsGroup.Visibility = Visibility.Visible;
+        StartGitUiTimer(workers);
+
+        var result = await Task.Run(() => DirectoriesDiffService.RunModules(
+            modules, oldDir, newDir, outDir, context, patterns, skipBinary,
+            line => { lock (_gitUiGate) _gitPendingLog.Enqueue(line); },
+            (t, mod, cur, total) =>
+            {
+                lock (_gitUiGate)
+                {
+                    _gitPendingModule[t] = mod;
+                    _gitPendingProgress[t] = (cur, total);
+                }
+            },
+            (t, mod) =>
+            {
+                lock (_gitUiGate)
+                {
+                    _gitPendingModule[t] = mod;
+                    if (mod == null) _gitPendingProgress[t] = (0, 0);
+                }
+            },
+            (done, totalModules) =>
+            {
+                lock (_gitUiGate)
+                {
+                    _gitDone = done;
+                    _gitTotal = totalModules;
+                }
+            },
+            ct));
+
+        _lastGitDiffPath = null;
+        _lastModuleRunDir = outDir;
+        GitReportButton.IsEnabled = true;
+        GitModulesProgress.Text = $"Готово {result.TotalModules}/{result.TotalModules}";
+
+        var changedCount = result.Outcomes.Count(o => o.Kind != "unchanged");
+        GitStatusText.Text = $"Готово: модулей {result.TotalModules}, с изменениями {changedCount} " +
+                             $"(потоков {result.Workers}) — отчёт: «Сгенерировать HTML-отчёт»";
+
+        var entries = result.Outcomes.Select(o => new ModuleManifestEntry(
+            o.Module, o.Kind,
+            o.Stats?.Modified ?? 0, o.Stats?.Added ?? 0, o.Stats?.Deleted ?? 0,
+            o.Stats?.Binary ?? 0, o.Error)).ToList();
+        await Task.Run(() => GitDiffReportService.WriteManifest(outDir, entries));
+        AppendGitLog($"Манифест модулей: {Path.Combine(outDir, GitDiffReportService.ManifestFileName)}");
+
+        var errors = result.Outcomes.Where(o => o.Error != null)
+            .Select(o => $"{o.Module}: {o.Error}").Take(10).ToList();
+        if (errors.Count > 0)
+            await UiDialogs.WarnAsync("Готово с ошибками",
+                $"При сравнении модулей возникли ошибки:\n" + string.Join("\n", errors));
+    }
+
+    private async Task GenerateModuleReportsAsync(string moduleDir)
+    {
+        var entries = await Task.Run(() => GitDiffReportService.ReadManifest(moduleDir));
+        if (entries == null || entries.Count == 0)
+        {
+            await UiDialogs.WarnAsync("Манифест недоступен",
+                "modules.json не найден или пуст — повторите модульное сравнение.");
+            return;
+        }
+
+        // UI-свойства — до фоновых задач (см. комментарий в GitStart_Click)
+        var oldDir = GitOldDirTextBox.Text.Trim();
+        var newDir = GitNewDirTextBox.Text.Trim();
+        var withDiff = entries.Where(e => e.HasDiff).ToList();
+
+        GitReportButton.IsEnabled = false;
+        GitProgress.Visibility = Visibility.Visible;
+        try
+        {
+            int i = 0;
+            foreach (var entry in withDiff)
+            {
+                i++;
+                GitStatusText.Text = $"Отчёт {i}/{withDiff.Count}: {entry.Module}";
+                var diffPath = Path.Combine(moduleDir, entry.Module, "changes.diff");
+                // обратная ссылка — относительная: отчёт переносим вместе с папкой
+                await Task.Run(() => GitDiffReportService.Generate(diffPath, oldDir, newDir,
+                    backToIndexUrl: "../" + GitDiffReportService.IndexFileName));
+            }
+
+            var indexPath = await Task.Run(() =>
+                GitDiffReportService.GenerateIndex(moduleDir, oldDir, newDir, entries));
+            GitStatusText.Text = $"Индекс: {indexPath}";
+            AppendGitLog($"HTML-индекс сгенерирован: {indexPath} (частных отчётов: {withDiff.Count})");
+
+            var choice = await UiDialogs.AskButtonsAsync("HTML-отчёты готовы", indexPath,
+                new[] { "Открыть индекс", "Открыть папку", "ОК" }, defaultIndex: 0);
+            if (choice == 0)
+            {
+                try { _ = Windows.System.Launcher.LaunchUriAsync(new Uri(indexPath)); } catch { }
+            }
+            else if (choice == 1 && Directory.Exists(moduleDir))
+            {
+                _ = Windows.System.Launcher.LaunchFolderPathAsync(moduleDir);
+            }
+        }
+        catch (Exception ex)
+        {
+            GitStatusText.Text = "Ошибка генерации отчётов";
+            AppendGitLog($"ОШИБКА отчёта: {ex.GetType().Name}: {ex.Message} (HResult 0x{ex.HResult:X8})");
+            await UiDialogs.WarnAsync("Ошибка", $"Не удалось сгенерировать HTML-отчёты:\n{ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            GitProgress.Visibility = Visibility.Collapsed;
+            GitReportButton.IsEnabled = true;
+        }
+    }
+
+    private async void GitGenerateReport_Click(object sender, RoutedEventArgs e)
+    {
+        if (_gitDiffInProgress) return;
+
+        // Модульный режим: индекс + частные отчёты по манифесту
+        var moduleDir = ResolveModuleRunDir();
+        if (moduleDir != null)
+        {
+            await GenerateModuleReportsAsync(moduleDir);
+            return;
+        }
+
+        var diffPath = ResolveGitDiffPath();
+        if (diffPath == null)
+        {
+            await UiDialogs.WarnAsync("Нет диффа",
+                "changes.diff не найден.\nСначала сгенерируйте дифф кнопкой «Сгенерировать дифф».");
+            return;
+        }
+
+        GitReportButton.IsEnabled = false;
+        GitProgress.Visibility = Visibility.Visible;
+        GitStatusText.Text = "Генерация HTML-отчёта...";
+
+        try
+        {
+            var oldDir = GitOldDirTextBox.Text.Trim();
+            var newDir = GitNewDirTextBox.Text.Trim();
+            var reportPath = await Task.Run(() => GitDiffReportService.Generate(diffPath, oldDir, newDir));
+            GitStatusText.Text = $"Отчёт: {reportPath}";
+            AppendGitLog("HTML-отчёт сгенерирован: " + reportPath);
+
+            // По образцу AnalysisPage: диалог «Открыть…» после готовности отчёта
+            var choice = await UiDialogs.AskButtonsAsync("HTML-отчёт готов", reportPath,
+                new[] { "Открыть отчёт", "Открыть папку", "ОК" }, defaultIndex: 0);
+            if (choice == 0)
+            {
+                try { _ = Windows.System.Launcher.LaunchUriAsync(new Uri(reportPath)); } catch { }
+            }
+            else if (choice == 1 && Directory.Exists(Path.GetDirectoryName(reportPath)))
+            {
+                _ = Windows.System.Launcher.LaunchFolderPathAsync(Path.GetDirectoryName(reportPath)!);
+            }
+        }
+        catch (Exception ex)
+        {
+            GitStatusText.Text = "Ошибка генерации отчёта";
+            AppendGitLog($"ОШИБКА отчёта: {ex.GetType().Name}: {ex.Message} (HResult 0x{ex.HResult:X8})");
+            await UiDialogs.WarnAsync("Ошибка", $"Не удалось сгенерировать HTML-отчёт:\n{ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            GitProgress.Visibility = Visibility.Collapsed;
+            GitReportButton.IsEnabled = true;
+        }
     }
 
     private void RunOnUi(Action a) => DispatcherQueue.TryEnqueue(() => a());

@@ -40,11 +40,11 @@
         </div>
         {% if has_bindiff %}
         <div class="stat-tile">
-            <div class="stat-value">{{ "%.1f"|format(avg_similarity * 100) }}%</div>
+            <div class="stat-value">{{ avg_similarity | pct }}%</div>
             <div class="stat-label" title="Среднее арифметическое значений общей схожести (от 0 до 1) для всех пар файлов. Позволяет быстро оценить, насколько в среднем изменились файлы между двумя версиями директории. Не учитывает пары с ошибками сравнения.">Средняя схожесть</div>
         </div>
         <div class="stat-tile">
-            <div class="stat-value">{{ "%.1f"|format(avg_confidence * 100) }}%</div>
+            <div class="stat-value">{{ avg_confidence | pct }}%</div>
             <div class="stat-label" title="Среднее арифметическое значений уверенности (от 0 до 1) по всем успешно сравнённым парам. Даёт представление о надёжности полученных результатов в целом по директории.">Средняя уверенность</div>
         </div>
         {% endif %}
@@ -77,22 +77,21 @@
                     <td style="font-family:ui-monospace,'SF Mono','Consolas',monospace; font-size:12px;">{{ pair.stem }}</td>
                     {% if has_bindiff %}
                     <td>
-                        {% set pct = pair.display_similarity if pair.display_similarity is defined and pair.display_similarity > 0 else pair.similarity %}
-                        {% set pct = pct * 100 %}
-                        {% if pct >= 80 %}<span class="similarity-high">{{ "%.1f"|format(pct) }}%</span>
-                        {% elif pct >= 50 %}<span class="similarity-medium">{{ "%.1f"|format(pct) }}%</span>
-                        {% else %}<span class="similarity-low">{{ "%.1f"|format(pct) }}%</span>
+                        {% set dsim = pair.display_similarity if pair.display_similarity is defined and pair.display_similarity > 0 else pair.similarity %}
+                        {% if dsim * 100 >= 80 %}<span class="similarity-high">{{ dsim | pct(guard=99.0) }}%</span>
+                        {% elif dsim * 100 >= 50 %}<span class="similarity-medium">{{ dsim | pct(guard=99.0) }}%</span>
+                        {% else %}<span class="similarity-low">{{ dsim | pct(guard=99.0) }}%</span>
                         {% endif %}
                     </td>
                     <td>
-                        {% set hdpct = pair.hexdump_similarity * 100 if pair.hexdump_similarity is defined and pair.hexdump_similarity > 0 else 0.0 %}
-                        {% if hdpct >= 99.99 %}<span class="similarity-high">{{ "%.1f"|format(hdpct) }}%</span>
-                        {% elif hdpct >= 50 %}<span class="similarity-medium">{{ "%.1f"|format(hdpct) }}%</span>
-                        {% elif hdpct > 0 %}<span class="similarity-low">{{ "%.1f"|format(hdpct) }}%</span>
+                        {% set hdsim = pair.hexdump_similarity if pair.hexdump_similarity is defined and pair.hexdump_similarity > 0 else 0.0 %}
+                        {% if hdsim >= 0.9999 %}<span class="similarity-high">{{ hdsim | pct }}%</span>
+                        {% elif hdsim * 100 >= 50 %}<span class="similarity-medium">{{ hdsim | pct }}%</span>
+                        {% elif hdsim > 0 %}<span class="similarity-low">{{ hdsim | pct }}%</span>
                         {% else %}<span class="tag tag--neutral">—</span>
                         {% endif %}
                     </td>
-                    <td>{{ "%.1f"|format(pair.confidence * 100) }}%</td>
+                    <td>{{ pair.confidence | pct(guard=99.0) }}%</td>
                     {% endif %}
                     <td>{{ pair.matched_count }}</td>
                     {% if has_bindiff %}

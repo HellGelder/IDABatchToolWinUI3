@@ -4,6 +4,17 @@ using System.Text;
 
 namespace IDABatchToolWinUI.Services;
 
+/// <summary>Модуль модульного сравнения: подпапка OLD/NEW (одна из сторон может отсутствовать —
+/// тогда модуль «удалён целиком» / «новый»). SizeBytes — оценка объёма работы (байты файлов).</summary>
+public sealed record ModuleInfo(string Name, string? OldPath, string? NewPath, long SizeBytes);
+
+/// <summary>Итог сравнения одного модуля. Kind: modified | added | deleted | unchanged | error.
+/// Для unchanged папка модуля не создаётся, но Stats сохраняются (в т.ч. счётчик двоичных).</summary>
+public sealed record ModuleOutcome(string Module, string Kind, DirsDiffStats? Stats, string? Error);
+
+/// <summary>Итог модульного прогона: результаты по модулям (отсортированы по имени) и параметры.</summary>
+public sealed record ModuleRunResult(IReadOnlyList<ModuleOutcome> Outcomes, int Workers, int TotalModules);
+
 /// <summary>Итог текстового диффа двух директорий.</summary>
 public sealed record DirsDiffStats(
     int Modified, int Added, int Deleted, int Binary, int Errors, int Unchanged,
@@ -27,6 +38,16 @@ public static class DirectoriesDiffService
     public const string DefaultExcludes =
         ".git, .svn, __pycache__, *.pyc, .venv, venv, node_modules, .idea, .vscode, dist, build, *.log";
 
+    /// <summary>Контекст по умолчанию: 3 неизменённые строки вокруг изменений (unified diff).</summary>
+    public const int DefaultContext = 3;
+
+    /// <summary>
+    /// «Полный дифф»: контекст, заведомо накрывающий файл целиком — в дифф
+    /// пишутся все строки. Верхний предел подобран так, чтобы 2*n в AppendHunks
+    /// не переполнялся; реальных файлов длиннее не бывает.
+    /// </summary>
+    public const int FullContext = int.MaxValue / 4;
+
     private const int BinarySniffBytes = 8192;
     private const int MaxEditDistance = 2048;
 
@@ -43,13 +64,16 @@ public static class DirectoriesDiffService
     /// Сравнивает две директории и пишет единый дифф. Бросает
     /// OperationCanceledException при отмене. Лог-колбэк получает готовые
     /// строки (они же пишутся в &lt;outPath&gt;.log), прогресс — (cur, total, rel).
+    /// При skipBinary файлы, распознанные как двоичные, не попадают в дифф
+    /// (учитываются только в статистике и журнале) — остаются текстовые файлы.
     /// </summary>
     public static DirsDiffStats Run(
         string oldDir, string newDir, string outPath, int context,
         IReadOnlyList<string> patterns,
         Action<string>? log = null,
         Action<int, int, string>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        bool skipBinary = false)
     {
         var started = System.Diagnostics.Stopwatch.StartNew();
         var logLines = new List<string>();
@@ -66,7 +90,14 @@ public static class DirectoriesDiffService
         L("INFO", $"NEW: {newDir}");
         L("INFO", $"Результат: {outPath}");
         L("INFO", "Исключения: " + (patterns.Count > 0 ? string.Join(", ", patterns) : "(нет)"));
-        L("INFO", $"Строк контекста: {context}");
+        L("INFO", IsFullContext(context) ? "Полный дифф (все строки файлов)" : $"Строк контекста: {context}");
+
+        // Предварительная проверка: если папки совпадают побайтово, пофайловое
+        // сравнение не запускается — все файлы сразу помечаются без изменений
+        L("INFO", "Проверка контрольных сумм OLD/NEW...");
+        var identical = FoldersIdentical(oldDir, newDir, patterns, L, ct);
+        if (identical)
+            L("INFO", "Контрольные суммы совпали — содержимое идентично, пофайловое сравнение пропущено");
 
         L("INFO", $"Обход папки OLD: {oldDir}");
         var (oldFiles, oldExcluded) = Collect(oldDir, patterns, L, ct);
@@ -86,35 +117,49 @@ public static class DirectoriesDiffService
         var rels = oldFiles.Keys.Union(newFiles.Keys).OrderBy(k => k, StringComparer.Ordinal).ToList();
         int total = rels.Count;
         if (total == 0) L("WARNING", "В папках не найдено ни одного файла для сравнения!");
-        L("INFO", $"Сравнение {total} файлов (контекст: {context} строк)");
+        L("INFO", identical
+            ? $"Построчное сравнение {total} файлов не требуется (все без изменений)"
+            : IsFullContext(context)
+                ? $"Сравнение {total} файлов (все строки файлов)"
+                : $"Сравнение {total} файлов (контекст: {context} строк)");
 
         var chunks = new List<string>();
-        for (int idx = 0; idx < total; idx++)
+        if (identical)
         {
-            ct.ThrowIfCancellationRequested();
-            var rel = rels[idx];
-            var prefix = $"[{idx + 1}/{total}]";
-            try
+            unchanged = total;
+        }
+        else
+        {
+            for (int idx = 0; idx < total; idx++)
             {
-                var (kind, chunk) = ComparePair(rel,
-                    oldFiles.GetValueOrDefault(rel), newFiles.GetValueOrDefault(rel), context);
-                if (kind == "same") { unchanged++; continue; }
-                switch (kind)
+                ct.ThrowIfCancellationRequested();
+                var rel = rels[idx];
+                var prefix = $"[{idx + 1}/{total}]";
+                try
                 {
-                    case "modified": modified.Add(rel); break;
-                    case "added": added.Add(rel); break;
-                    case "deleted": deleted.Add(rel); break;
-                    case "binary": binary.Add(rel); break;
+                    var (kind, chunk) = ComparePair(rel,
+                        oldFiles.GetValueOrDefault(rel), newFiles.GetValueOrDefault(rel), context);
+                    if (kind == "same") { unchanged++; continue; }
+                    switch (kind)
+                    {
+                        case "modified": modified.Add(rel); break;
+                        case "added": added.Add(rel); break;
+                        case "deleted": deleted.Add(rel); break;
+                        case "binary": binary.Add(rel); break;
+                    }
+                    // Двоичные файлы не имеют построчного содержимого: при skipBinary
+                    // в дифф они не пишутся (информация остаётся в статистике и журнале)
+                    var omitted = kind == "binary" && skipBinary;
+                    if (chunk != null && !omitted) chunks.Add(chunk);
+                    L("INFO", $"{prefix} {rel} — {KindLabel(kind)}{(omitted ? " (пропущен: только исходные коды)" : "")}");
                 }
-                if (chunk != null) chunks.Add(chunk);
-                L("INFO", $"{prefix} {rel} — {KindLabel(kind)}");
+                catch (Exception exc)
+                {
+                    L("ERROR", $"{prefix} {rel} — ОШИБКА ОБРАБОТКИ: {exc.Message}");
+                    errors.Add($"{rel}: {exc.Message}");
+                }
+                progress?.Invoke(idx + 1, total, rel);
             }
-            catch (Exception exc)
-            {
-                L("ERROR", $"{prefix} {rel} — ОШИБКА ОБРАБОТКИ: {exc.Message}");
-                errors.Add($"{rel}: {exc.Message}");
-            }
-            progress?.Invoke(idx + 1, total, rel);
         }
 
         var sb = new StringBuilder();
@@ -140,17 +185,10 @@ public static class DirectoriesDiffService
             $"Изменённых файлов: {s.Modified}",
             $"Новых файлов:      {s.Added}",
             $"Удалённых файлов:  {s.Deleted}",
-            $"Двоичных (без содержимого): {s.Binary}",
             $"Ошибок:            {s.Errors}",
             $"Файл диффа: {s.OutPath} ({s.SizeBytes / 1024f:F1} КБ)",
             $"Журнал: {s.LogPath}",
         };
-        if (s.BinaryFiles.Count > 0)
-        {
-            var shown = string.Join(", ", s.BinaryFiles.Take(10));
-            var more = s.BinaryFiles.Count > 10 ? $" ...и ещё {s.BinaryFiles.Count - 10}" : "";
-            lines.Add($"Двоичные файлы: {shown}{more}");
-        }
         if (s.ErrorDetails.Count > 0)
         {
             lines.Add("Ошибки (подробности — в журнале):");
@@ -212,6 +250,71 @@ public static class DirectoriesDiffService
 
         Walk(root, "");
         return (files, excluded);
+    }
+
+    /// <summary>
+    /// Предварительная проверка «папки идентичны»: сопоставляются наборы
+    /// относительных путей (с учётом исключений), затем размеры и содержимое
+    /// файлов. Совпадение гарантирует пустой результат диффа — пофайловое
+    /// сравнение можно пропустить; расхождение — обычный путь. Папка, отсутствующая
+    /// с обеих сторон, считается совпадением (сравнивать нечего); только с одной —
+    /// расхождением (без лишних предупреждений от Collect о недоступных путях).
+    /// </summary>
+    private static bool FoldersIdentical(
+        string oldDir, string newDir, IReadOnlyList<string> patterns,
+        Action<string, string> log, CancellationToken ct)
+    {
+        bool hasOld = Directory.Exists(oldDir), hasNew = Directory.Exists(newDir);
+        if (hasOld != hasNew) return false;
+        if (!hasOld) return true;
+
+        var (oldFiles, _) = Collect(oldDir, patterns, log, ct);
+        var (newFiles, _) = Collect(newDir, patterns, log, ct);
+        if (oldFiles.Count != newFiles.Count ||
+            !oldFiles.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(newFiles.Keys))
+            return false;
+
+        var rels = oldFiles.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList();
+        foreach (var rel in rels)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (new FileInfo(oldFiles[rel]).Length != new FileInfo(newFiles[rel]).Length)
+                return false;
+        }
+        foreach (var rel in rels)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!FileEquals(oldFiles[rel], newFiles[rel])) return false;
+        }
+        return true;
+    }
+
+    /// <summary>Побайтовое равенство двух файлов (потоковое, без загрузки в память целиком).</summary>
+    private static bool FileEquals(string pathA, string pathB)
+    {
+        const int BufSize = 1 << 16;
+        using var fa = File.OpenRead(pathA);
+        using var fb = File.OpenRead(pathB);
+        if (fa.Length != fb.Length) return false;
+        var bufA = new byte[BufSize];
+        var bufB = new byte[BufSize];
+        int readA;
+        while ((readA = ReadFull(fa, bufA)) > 0)
+        {
+            int readB = ReadFull(fb, bufB);
+            if (readA != readB || !bufA.AsSpan(0, readA).SequenceEqual(bufB.AsSpan(0, readB)))
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>Читает в буфер до его заполнения или конца потока (частичные Read склеиваются).</summary>
+    private static int ReadFull(FileStream stream, byte[] buffer)
+    {
+        int total = 0, read;
+        while (total < buffer.Length && (read = stream.Read(buffer, total, buffer.Length - total)) > 0)
+            total += read;
+        return total;
     }
 
     /// <summary>Шаблон совпадает с любым компонентом пути или с путём целиком (fnmatch).</summary>
@@ -423,6 +526,9 @@ public static class DirectoriesDiffService
         return ops;
     }
 
+    /// <summary>Задан ли полный дифф (контекст накрывает файл целиком — все строки).</summary>
+    private static bool IsFullContext(int context) => context >= FullContext;
+
     /// <summary>Группировка операций в ханки с контекстом n (семантика unified diff).</summary>
     private static void AppendHunks(
         List<string> output, List<(byte Kind, int A, int B)> ops, string[] a, string[] b, int n)
@@ -485,5 +591,233 @@ public static class DirectoriesDiffService
         if (length == 1) return start1Based.ToString(CultureInfo.InvariantCulture);
         if (length == 0) return (start1Based - 1).ToString(CultureInfo.InvariantCulture) + ",0";
         return start1Based.ToString(CultureInfo.InvariantCulture) + "," + length.ToString(CultureInfo.InvariantCulture);
+    }
+
+    // ───────────────────── модульное сравнение ─────────────────────
+
+    /// <summary>Есть ли в каталоге подпапки (для авто-режима «Модульного сравнения»).</summary>
+    public static bool HasSubDirectories(string dir)
+    {
+        try { return Directory.EnumerateDirectories(dir).Any(); }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// Модули = подпапки первого уровня OLD/NEW, пары по имени. Модуль, существующий
+    /// только с одной стороны, — полноценный участник («удалён целиком»/«новый»).
+    /// Размер для балансировки — суммарный объём файлов (макс. из двух сторон).
+    /// </summary>
+    public static List<ModuleInfo> DiscoverModules(string oldDir, string newDir)
+    {
+        var names = SafeSubDirNames(oldDir)
+            .Union(SafeSubDirNames(newDir), StringComparer.Ordinal)
+            .OrderBy(n => n, StringComparer.Ordinal);
+
+        var list = new List<ModuleInfo>();
+        foreach (var name in names)
+        {
+            var oldPath = Path.Combine(oldDir, name);
+            var newPath = Path.Combine(newDir, name);
+            var hasOld = Directory.Exists(oldPath);
+            var hasNew = Directory.Exists(newPath);
+            var size = Math.Max(hasOld ? SafeDirSize(oldPath) : 0, hasNew ? SafeDirSize(newPath) : 0);
+            list.Add(new ModuleInfo(name, hasOld ? oldPath : null, hasNew ? newPath : null, size));
+        }
+        return list;
+    }
+
+    private static IEnumerable<string> SafeSubDirNames(string dir)
+    {
+        string[] dirs;
+        try { dirs = Directory.GetDirectories(dir); }
+        catch { yield break; }
+        foreach (var d in dirs) yield return Path.GetFileName(d);
+    }
+
+    /// <summary>Суммарный размер файлов каталога (рекурсивно, без чтения содержимого);
+    /// недоступные подкаталоги пропускаются.</summary>
+    public static long SafeDirSize(string root)
+    {
+        long total = 0;
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            var dir = pending.Pop();
+            string[] files;
+            try { files = Directory.GetFiles(dir); }
+            catch { continue; }
+            foreach (var f in files)
+            {
+                try { total += new FileInfo(f).Length; } catch { }
+            }
+            string[] sub;
+            try { sub = Directory.GetDirectories(dir); }
+            catch { continue; }
+            foreach (var d in sub) pending.Push(d);
+        }
+        return total;
+    }
+
+    private static int SafeFileCount(string dir)
+    {
+        try { return Directory.GetFiles(dir).Length; }
+        catch { return 0; }
+    }
+
+    private static string SizeText(long bytes) =>
+        bytes < 1024 * 1024 ? $"{bytes / 1024.0:F0} КБ" : $"{bytes / 1024.0 / 1024.0:F1} МБ";
+
+    /// <summary>
+    /// Аккуратное разбиение модулей на пулы: модули по убыванию размера жадно
+    /// кладутся в наименее загруженный пул — внутри пула порядок тоже «крупные вперёд».
+    /// </summary>
+    public static List<Queue<ModuleInfo>> BuildPools(IReadOnlyList<ModuleInfo> modules, int workerCount)
+    {
+        var pools = Enumerable.Range(0, workerCount).Select(_ => new Queue<ModuleInfo>()).ToList();
+        var totals = new long[workerCount];
+        foreach (var m in modules.OrderByDescending(m => m.SizeBytes).ThenBy(m => m.Name, StringComparer.Ordinal))
+        {
+            int min = 0;
+            for (int k = 1; k < workerCount; k++)
+                if (totals[k] < totals[min]) min = k;
+            pools[min].Enqueue(m);
+            totals[min] += m.SizeBytes;
+        }
+        return pools;
+    }
+
+    /// <summary>
+    /// Модульное сравнение: min(4, модулей) воркеров, у каждого свой пул (см. BuildPools).
+    /// Воркер обрабатывает только свой пул; когда пул опустел, под замком атомарно
+    /// забирает следующий непроизведённый модуль из любого пула — освободившиеся
+    /// потоки делят остаток, модуль не обрабатывается дважды. Модуль, изменившийся
+    /// только двоичными файлами при skipBinary, считается «без изменений».
+    /// </summary>
+    /// <param name="log">Готовая строка для журнала страницы (префиксы [T№][модуль] ставятся здесь).</param>
+    /// <param name="progress">(поток, модуль, cur, total) — прогресс по файлам для карточки потока.</param>
+    /// <param name="threadModule">(поток, модуль | null) — карточка: текущий модуль / поток свободен.</param>
+    /// <param name="moduleDone">(готово, всего) — счётчик завершённых модулей.</param>
+    public static ModuleRunResult RunModules(
+        IReadOnlyList<ModuleInfo> modules, string oldDir, string newDir, string outDir,
+        int context, IReadOnlyList<string> patterns, bool skipBinary,
+        Action<string> log,
+        Action<int, string, int, int> progress,
+        Action<int, string?> threadModule,
+        Action<int, int> moduleDone,
+        CancellationToken ct)
+    {
+        if (modules.Count == 0)
+            return new ModuleRunResult(Array.Empty<ModuleOutcome>(), 0, 0);
+
+        int workers = Math.Min(4, modules.Count);
+        int total = modules.Count;
+        var started = System.Diagnostics.Stopwatch.StartNew();
+
+        var rootFiles = SafeFileCount(oldDir) + SafeFileCount(newDir);
+        if (rootFiles > 0)
+            log($"Файлов в корне OLD/NEW (вне подпапок-модулей): {rootFiles} — не сравниваются");
+
+        var pools = BuildPools(modules, workers);
+        log($"Потоков: {workers}; распределение: " +
+            string.Join(", ", pools.Select((p, i) => $"T{i + 1} — {p.Count} мод. / {SizeText(p.Sum(m => m.SizeBytes))}")));
+
+        var queues = pools.Select(p => new ConcurrentQueue<ModuleInfo>(p)).ToArray();
+        var outcomes = new ConcurrentBag<ModuleOutcome>();
+        var gate = new object();
+        int done = 0;
+
+        void Worker(int t)
+        {
+            while (true)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                ModuleInfo? mod = null;
+                if (!queues[t].TryDequeue(out mod))
+                {
+                    // Свой пул пуст: под замком забираем первый непроизведённый
+                    // модуль из любого пула — атомарно, без дублей
+                    lock (gate)
+                    {
+                        foreach (var q in queues)
+                            if (q.TryDequeue(out mod)) break;
+                    }
+                }
+                if (mod == null) break; // все модули распределены и обработаны
+
+                threadModule(t, mod.Name);
+                log($"[T{t + 1}][{mod.Name}] старт, размер {SizeText(mod.SizeBytes)}");
+
+                var moduleOutDir = Path.Combine(outDir, mod.Name);
+                Directory.CreateDirectory(moduleOutDir);
+                var diffPath = Path.Combine(moduleOutDir, "changes.diff");
+                try
+                {
+                    var stats = Run(
+                        mod.OldPath ?? Path.Combine(oldDir, mod.Name),
+                        mod.NewPath ?? Path.Combine(newDir, mod.Name),
+                        diffPath, context, patterns,
+                        // В UI-журнал — только предупреждения и ошибки: полный журнал
+                        // по модулю Run пишет сам в changes.diff.log, а пофайловый INFO
+                        // в UI тоннами строк вешает интерфейс (см. FlushGitUiUpdates)
+                        line =>
+                        {
+                            if (line.Contains("[WARNING]") || line.Contains("[ERROR]"))
+                                log($"[T{t + 1}][{mod.Name}] {line}");
+                        },
+                        (cur, tot, _) => progress(t, mod.Name, cur, tot),
+                        ct, skipBinary);
+
+                    // Текстовые изменения определяют «есть ли что показать»:
+                    // модуль, изменившийся только пропущенными двоичными, — без изменений
+                    var textChanges = stats.Modified + stats.Added + stats.Deleted;
+                    string kind = mod.OldPath == null ? "added"
+                        : mod.NewPath == null ? "deleted"
+                        : textChanges == 0 ? "unchanged"
+                        : "modified";
+                    if (kind == "unchanged")
+                    {
+                        TryDeleteDir(moduleOutDir);
+                        log($"[T{t + 1}][{mod.Name}] без изменений");
+                    }
+                    else
+                    {
+                        log($"[T{t + 1}][{mod.Name}] готово: измен. {stats.Modified}, новых {stats.Added}, " +
+                            $"удал. {stats.Deleted}, двоич. {stats.Binary}" +
+                            (stats.HasErrors ? $", ОШИБОК: {stats.Errors}" : ""));
+                    }
+                    outcomes.Add(new ModuleOutcome(mod.Name, kind, stats, null));
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    log($"[T{t + 1}][{mod.Name}] ОШИБКА: {ex.GetType().Name}: {ex.Message} (HResult 0x{ex.HResult:X8})");
+                    outcomes.Add(new ModuleOutcome(mod.Name, "error", null, ex.Message));
+                }
+                moduleDone(Interlocked.Increment(ref done), total);
+            }
+            threadModule(t, null);
+        }
+
+        var tasks = Enumerable.Range(0, workers).Select(t => Task.Run(() => Worker(t))).ToArray();
+        try
+        {
+            Task.WaitAll(tasks);
+        }
+        catch (AggregateException ex) when (ex.InnerExceptions.All(e => e is OperationCanceledException))
+        {
+            throw new OperationCanceledException(ct);
+        }
+
+        started.Stop();
+        log($"Модульное сравнение завершено за {started.Elapsed.TotalSeconds:F1} с: модулей {total}, потоков {workers}");
+        return new ModuleRunResult(
+            outcomes.OrderBy(o => o.Module, StringComparer.Ordinal).ToList(), workers, total);
+    }
+
+    private static void TryDeleteDir(string dir)
+    {
+        try { Directory.Delete(dir, recursive: true); } catch { }
     }
 }

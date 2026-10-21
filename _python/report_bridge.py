@@ -86,8 +86,43 @@ def _jinja_env():
             lstrip_blocks=True,
         )
         env.globals["inline_vendor"] = inline_vendor
+        env.filters["pct"] = format_percent
         _JINJA_ENV = env
     return _JINJA_ENV
+
+
+def format_percent(value, digits=1, guard=None):
+    """Доля [0..1] в проценты с адаптивной точностью.
+
+    Обычно 1 знак после запятой; если округление до него даёт 100.0 (или 0.0),
+    а значение не равно 1 (0) — знаков больше, пока «100.0%» не станет честным
+    (99.98%). Ровно 100.0% показываем только при полном совпадении.
+    guard — порог в процентах, который округлением вверх нельзя «пройти»:
+    если округление даёт ровно guard, а значение меньше него (98.97 → «99.0»),
+    знаков больше, пока порог не будет виден честно (98.97%).
+    """
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        v = 0.0
+    pct = v * 100.0
+    rounded = round(pct, digits)
+    if rounded == 100.0 and pct != 100.0:
+        for d in range(digits + 1, digits + 4):
+            if round(pct, d) != 100.0:
+                return f"{pct:.{d}f}"
+        return f"{pct:.{digits + 3}f}"
+    if guard is not None and rounded == guard and pct < guard:
+        for d in range(digits + 1, digits + 5):
+            if round(pct, d) != guard:
+                return f"{pct:.{d}f}"
+        return f"{pct:.{digits + 4}f}"
+    if rounded == 0.0 and pct != 0.0:
+        for d in range(digits + 1, digits + 4):
+            if round(pct, d) != 0.0:
+                return f"{pct:.{d}f}"
+        return f"{pct:.{digits + 3}f}"
+    return f"{pct:.{digits}f}"
 
 
 def render_template(name, **ctx):
@@ -1660,6 +1695,8 @@ def generate_diff_report(json_path, output_html, reports_dir):
         "real_secondary": data.get("real_secondary", ""),
         "back_link": _back_link(output_html, reports_dir),
         "error": data.get("error"),
+        "identical": data.get("identical", False),
+        "add_analysis_note": data.get("add_analysis_note"),
         # `or {}` — ключ может присутствовать со значением null (generate_diff_index
         # защищается от того же случая isinstance-проверкой).
         "file1": data.get("file1") or {},

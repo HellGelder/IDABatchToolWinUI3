@@ -116,7 +116,13 @@ CPP_NAMES_RE = "([a-zA-Z_][a-zA-Z0-9_]{3,}((::){0,1}[a-zA-Z0-9_]+)*)"
 
 #-------------------------------------------------------------------------------
 fmt = "[Diaphora: %(asctime)s] %(levelname)s: %(message)s"
-logging.basicConfig(format=fmt, level=logging.INFO)
+LOGGER = logging.getLogger("diaphora")
+LOGGER.setLevel(logging.INFO)
+LOGGER.propagate = False
+if not LOGGER.handlers:
+  handler = logging.StreamHandler()
+  handler.setFormatter(logging.Formatter(fmt))
+  LOGGER.addHandler(handler)
 
 #-------------------------------------------------------------------------------
 def load_source(modname, filename):
@@ -192,7 +198,7 @@ def log(message):
   if IS_IDA or os.getenv("DIAPHORA_LOG_PRINT") is not None:
     print(f"[Diaphora: {time.asctime()}] {message}")
   else:
-    logging.info(message)
+    LOGGER.info(message)
 
 
 #-------------------------------------------------------------------------------
@@ -557,8 +563,17 @@ class CBinDiff:
     """
     value = os.getenv(f"DIAPHORA_{value_name.upper()}")
     if value is not None:
-      if isinstance(value, type(default)):
-        value = type(default)(value)
+      try:
+        # os.getenv всегда возвращает str; isinstance(str, bool/int) == False,
+        # поэтому исходная ветка ниже никогда не срабатывала: '0' оставался
+        # строкой (truthy) и флаги-«выключатели» через окружение не работали,
+        # а числовые значения (SQL_TIMEOUT_LIMIT) ломали сравнение с float.
+        if isinstance(default, bool):
+          value = value.strip().lower() in ("1", "true", "yes", "on")
+        else:
+          value = type(default)(value)
+      except (ValueError, TypeError):
+        pass
       return value
     return default
 
@@ -954,7 +969,7 @@ class CBinDiff:
       try:
         cur.execute(sql, new_props)
       except:
-        logging.error(
+        LOGGER.error(
           "Error handling props in save_function(): %s", str(new_props)
         )
         traceback.print_exc()
@@ -1851,7 +1866,7 @@ class CBinDiff:
           r = self.check_ratio(main_d, diff_d)
           if debug:
             msg = "0x%x 0x%x %d" % (int(ea), int(ea2), r)
-            logging.debug(msg)
+            LOGGER.debug(msg)
         else:
           r = ratio
 
@@ -1869,8 +1884,6 @@ class CBinDiff:
     """
     Determine if more rows should be read at the given stage
     """
-    if self.sql_max_processed_rows:
-      return True
     if self.sql_max_processed_rows != 0 and i < self.sql_max_processed_rows:
       return True
     return False
@@ -2650,15 +2663,15 @@ class CBinDiff:
         for row in rows:
           name = row["name"]
           d = self.matched_primary
-          l = list(main)
+          l = main
           if row["db_name"] == "diff":
             d = self.matched_secondary
-            l = list(diff)
+            l = diff
 
           if name not in d:
             ea = row["address"]
             key = [ea, name]
-            if key not in main:
+            if key not in l:
               l.append(key)
     finally:
       cur.close()
@@ -3447,9 +3460,9 @@ class CBinDiff:
           continue
 
         main_start_ea = float(main_row["start_ea"])
-        main_end_ea   = float(main_row["start_ea"])
+        main_end_ea   = float(main_row["end_ea"])
         diff_start_ea = float(diff_row["start_ea"])
-        diff_end_ea   = float(diff_row["start_ea"])
+        diff_end_ea   = float(diff_row["end_ea"])
         cur.execute(sql, (main_start_ea, main_end_ea, diff_start_ea, diff_end_ea))
         self.add_matches_internal(cur, "best", "partial")
     finally:

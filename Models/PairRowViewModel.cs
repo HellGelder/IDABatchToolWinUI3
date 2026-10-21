@@ -57,6 +57,7 @@ public sealed class PairRowViewModel : INotifyPropertyChanged
         "error" => "ошибка",
         "not_selected" => "не выбран",
         "no_analysis" => "без анализа",
+        "identical" => "идентичен",
         _ => key,
     };
 

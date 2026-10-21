@@ -34,6 +34,9 @@ from idautils import *
 
 import idaapi
 import ida_pro
+import ida_idp
+import ida_graph
+import ida_kernwin
 
 idaapi.require("diaphora")
 
@@ -836,6 +839,58 @@ class uitimercallback_t(object):
     return -1
 
 #-------------------------------------------------------------------------------
+class CGraphSyncHook(ida_kernwin.View_Hooks):
+  """
+  Sync pan and zoom for two graph views
+  """
+  def __init__(self, viewers):
+    ida_kernwin.View_Hooks.__init__(self)
+    self.viewers = viewers
+    self.syncing = False
+
+  def install(self):
+    self.hook()
+
+  def remove(self):
+    self.unhook()
+
+  def source_viewer(self, view):
+    title = ida_kernwin.get_widget_title(view)
+    for v in self.viewers:
+      if v._title == title:
+        return v
+    return None
+
+  def view_loc_changed(self, view, now, was):
+    if self.syncing:
+      return
+
+    src = self.source_viewer(view)
+    if src is None:
+      return
+
+    ri = now.renderer_info()
+    if ri is None:
+      return
+
+    gli = ri.gli
+    self.syncing = True
+    try:
+      for v in self.viewers:
+        if v is src:
+          continue
+
+        widget = ida_kernwin.find_widget(v._title)
+        if widget is None:
+          continue
+        
+        gv = ida_graph.get_graph_viewer(widget)
+        if gv:
+          ida_graph.viewer_set_gli(gv, gli)
+    finally:
+      self.syncing = False
+
+#-------------------------------------------------------------------------------
 class CDiffGraphViewer(GraphViewer):
   """
   Class used to show graphs.
@@ -892,6 +947,12 @@ class CDiffGraphViewer(GraphViewer):
 
   def Show(self):
     return GraphViewer.Show(self)
+
+  def OnClose(self):
+    hook = getattr(self, "sync_hook", None)
+    if hook is not None:
+      hook.remove()
+      self.sync_hook = None
 
 #-------------------------------------------------------------------------------
 class CCallGraphViewer(GraphViewer):
@@ -1168,6 +1229,9 @@ class CIDABinDiff(diaphora.CBinDiff):
         h, m = divmod(m, 60)
         m_elapsed, s_elapsed = divmod(elapsed, 60)
         h_elapsed, m_elapsed = divmod(m_elapsed, 60)
+        # Патч поставки: дублируем строку прогресса в stdout — батч-обёртка
+        # (IDABatchToolWinUI) читает её и показывает процент экспорта в GUI.
+        log(line % (i, total_funcs, h_elapsed, m_elapsed, s_elapsed, h, m, s))
         replace_wait_box(
           line % (i, total_funcs, h_elapsed, m_elapsed, s_elapsed, h, m, s)
         )
@@ -1695,6 +1759,14 @@ class CIDABinDiff(diaphora.CBinDiff):
     set_dock_pos(title2, title1, DP_RIGHT)
     uitimercallback_t(g1, 100)
     uitimercallback_t(g2, 100)
+
+    try:
+      sync = CGraphSyncHook([g1, g2])
+      sync.install()
+      g1.sync_hook = sync
+      g2.sync_hook = sync
+    except Exception:
+      log("Graph synchronization failed: %s" % str(sys.exc_info()[1]))
 
   def graph_diff_internal(self, ea1, name1, ea2, name2, asm_type, title_prefix):
     g1 = self.get_graph(str(ea1), True, asm_type)
@@ -3397,6 +3469,12 @@ or selecting Edit -> Plugins -> Diaphora - Show results"""
     filename, _ = os.path.splitext(idb_path)
     til_path = f"{filename}.til"
 
+    # When WORKDIR is set in ida.cfg the .til will be in that directory
+    workdir = ida_idp.get_config_value("WORKDIR")
+    if workdir:
+      base = os.path.basename(filename)
+      til_path = os.path.join(workdir, f"{base}.til")
+
     with open(til_path, "rb") as f:
       line = f.readline()
       pos = line.find(b"Local type definitions")
@@ -3979,8 +4057,10 @@ def main():
       "function_summaries_only", bd.function_summaries_only
     )
     bd.min_ea = int(bd.get_value_for("from_address", "0"), 16)
+    # Ключ был "self.export_microcode" — такое env-имя (DIAPHORA_SELF.EXPORT_MICROCODE)
+    # не задать, микрокод не отключался через окружение. Исправлено.
     bd.export_microcode = bd.get_value_for(
-      "self.export_microcode", bd.export_microcode
+      "export_microcode", bd.export_microcode
     )
 
     _to_ea = bd.get_value_for("to_address", None)

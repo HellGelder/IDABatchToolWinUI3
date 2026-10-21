@@ -143,6 +143,11 @@ THIRD_PARTY_WINDOWS = {
     "libssl-3-x64.dll": "OpenSSL 3.x SSL/TLS Library (64-bit)",
     "libcrypto-3.dll": "OpenSSL 3.x Encryption Library (32-bit)",
     "libssl-3.dll": "OpenSSL 3.x SSL/TLS Library (32-bit)",
+    # ossl_register — псевдомодуль: имя, которое Diaphora/IDA показывает
+    # для объектов регистрации провайдеров/алгоритмов OpenSSL, вкомпилированных
+    # в анализируемый бинарник (статическая линковка libcrypto), а не
+    # для отдельной библиотеки.
+    "ossl_register": "OpenSSL (статически слинкованный) — внутренние объекты регистрации алгоритмов/провайдеров (ossl_register)",
 }
 
 THIRD_PARTY_LINUX = {
