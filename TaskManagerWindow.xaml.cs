@@ -14,7 +14,8 @@ public sealed record TaskRow(
     string Cpu,
     string Memory,
     string OsThreads,
-    string StartedAt);
+    string StartedAt,
+    string Pulse);
 
 /// <summary>Карточка рабочего потока над таблицей: занятый слот показывает файл.</summary>
 public sealed class TaskThreadCard
@@ -110,7 +111,8 @@ public sealed partial class TaskManagerWindow : Window
             e.CpuTime,
             e.MemoryMb,
             e.OsThreads,
-            e.StartedAt?.ToString("HH:mm:ss") ?? "—")).ToList();
+            e.StartedAt?.ToString("HH:mm:ss") ?? "—",
+            string.IsNullOrEmpty(e.Pulse) ? "—" : e.Pulse)).ToList();
 
         RefreshThreadCards(entries);
 

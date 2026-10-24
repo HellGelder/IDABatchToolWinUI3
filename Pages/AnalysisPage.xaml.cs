@@ -319,6 +319,12 @@ public sealed partial class AnalysisPage : Page
             AnalysisMonitor.SetProcessInfo(AnalysisMonitor.NormalizeName(name), pid, tid);
             AppendLog($"Запущен процесс: {name} (PID {pid})");
         });
+        w.PulseUpdated += (name, text) => RunOnUi(() =>
+        {
+            // Пульс: жив/работает/затих — в строку статуса и в диспетчер задач.
+            AnalysisMonitor.SetPulse(AnalysisMonitor.NormalizeName(name), text);
+            ProcessStatusText.Text = text;
+        });
         w.AnalysisProgress += (name, cur, total) => RunOnUi(() =>
         {
             ProcessStatusText.Text = $"Анализ: {cur}/{total} – {name}";

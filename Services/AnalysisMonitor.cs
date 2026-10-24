@@ -45,6 +45,8 @@ public sealed class MonitorEntry
     public string CpuTime { get; set; } = "—";
     public string MemoryMb { get; set; } = "—";
     public string OsThreads { get; set; } = "—";
+    /// <summary>Текст пульса: время, CPU, артефакты, последняя активность.</summary>
+    public string Pulse { get; set; } = "";
 
     public string PhaseText => Phase switch
     {
@@ -110,6 +112,13 @@ public static class AnalysisMonitor
         }
     }
 
+    /// <summary>Пульс процесса: время, CPU, артефакты, давность активности.</summary>
+    public static void SetPulse(string fileName, string text)
+    {
+        foreach (var e in FindAll(fileName))
+            e.Pulse = text;
+    }
+
     /// <summary>Файл обработан (успешно или с ошибкой).</summary>
     public static void MarkCompleted(string fileName, bool ok)
     {
@@ -117,6 +126,7 @@ public static class AnalysisMonitor
         {
             e.Status = ok ? MonitorFileStatus.Done : MonitorFileStatus.Failed;
             e.EndedAt = DateTime.Now;
+            e.Pulse = "";
         }
     }
 

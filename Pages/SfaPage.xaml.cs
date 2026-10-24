@@ -319,6 +319,12 @@ public SfaPage()
             SfaProcessStatusText.Text = $"Анализ: {cur}/{total} – {name}";
             if (total > 0) SfaProcessProgress.Value = 100.0 * cur / total;
         });
+        w.PulseUpdated += (_, text) => RunOnUi(() =>
+        {
+            // Долгий модуль: показываем, что процесс жив и работает, даже если
+            // прогресс по файлам давно не менялся.
+            SfaProcessStatusText.Text = text;
+        });
         w.AnalysisFileStarted += name => RunOnUi(() =>
         {
             SetFileStatusByName(name, AnalysisStatus.InProgress);

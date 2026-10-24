@@ -28,6 +28,9 @@ public sealed class IdaRunner : IDisposable
     /// <summary>Причина неудачи процесса — для журнала и UI (код выхода, хвост stderr).</summary>
     public Action<string>? ErrorCallback { get; set; }
 
+    /// <summary>(имя файла, текст пульса) — для строки статуса и диспетчера анализа.</summary>
+    public Action<string, string>? PulseCallback { get; set; }
+
     public IdaRunner(string idatPath, int maxWorkers)
     {
         IdatPath = idatPath;
@@ -166,9 +169,18 @@ public sealed class IdaRunner : IDisposable
         psi.ArgumentList.Add("-P+");
         psi.ArgumentList.Add(file);
 
+        var pulseName = Path.GetFileName(file);
+        var pulse = new ProcessPulse(
+            $"Анализ {pulseName}",
+            TimeSpan.FromSeconds(10),
+            TimeSpan.FromMinutes(30),
+            AnalysisWatchPaths(idbPath, logPath));
+        pulse.Updated += s => PulseCallback?.Invoke(pulseName, s.Text);
+
         var result = await ProcessRunner.RunAsync(
             psi, ct,
-            pid => ProcessStartedCallback?.Invoke(Path.GetFileName(file), pid, Environment.CurrentManagedThreadId));
+            pid => ProcessStartedCallback?.Invoke(Path.GetFileName(file), pid, Environment.CurrentManagedThreadId),
+            pulse);
 
         if (!result.Success)
         {
@@ -250,13 +262,41 @@ public sealed class IdaRunner : IDisposable
         psi.ArgumentList.Add($"-L{logPath}");
         psi.ArgumentList.Add(idbPath);
 
+        var pulseName = Path.GetFileName(idbPath);
+        var pulse = new ProcessPulse(
+            $"Экспорт {pulseName}",
+            TimeSpan.FromSeconds(10),
+            TimeSpan.FromMinutes(30),
+            ExportWatchPaths(idbPath, logPath));
+        pulse.Updated += s => PulseCallback?.Invoke(pulseName, s.Text);
+
         var result = await ProcessRunner.RunAsync(
             psi, ct,
-            pid => ProcessStartedCallback?.Invoke(Path.GetFileName(idbPath), pid, Environment.CurrentManagedThreadId));
+            pid => ProcessStartedCallback?.Invoke(Path.GetFileName(idbPath), pid, Environment.CurrentManagedThreadId),
+            pulse);
 
         if (!result.Success)
             ErrorCallback?.Invoke(result.Describe($"Экспорт {Path.GetFileName(idbPath)}"));
         return result.Success;
+    }
+
+    /// <summary>Файлы, по которым видно прогресс анализа IDA (база, временные, лог).</summary>
+    private static IEnumerable<string> AnalysisWatchPaths(string idbPath, string logPath)
+    {
+        yield return idbPath;
+        yield return Path.ChangeExtension(idbPath, ".id0");
+        yield return Path.ChangeExtension(idbPath, ".id1");
+        yield return Path.ChangeExtension(idbPath, ".nam");
+        yield return Path.ChangeExtension(idbPath, ".til");
+        yield return logPath;
+    }
+
+    /// <summary>Файлы, по которым видно прогресс экспорта (база, JSON, лог скрипта).</summary>
+    private static IEnumerable<string> ExportWatchPaths(string idbPath, string logPath)
+    {
+        yield return idbPath;
+        yield return idbPath + ".export.json";
+        yield return logPath;
     }
 
     private static void SafeDelete(string file, int retries = CleanupRetries, double delay = CleanupRetryDelaySec)

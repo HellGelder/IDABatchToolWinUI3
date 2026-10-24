@@ -47,7 +47,8 @@ public static class ProcessRunner
     public static async Task<ProcessResult> RunAsync(
         ProcessStartInfo psi,
         CancellationToken ct,
-        Action<int>? onStarted = null)
+        Action<int>? onStarted = null,
+        ProcessPulse? pulse = null)
     {
         var started = Stopwatch.StartNew();
         using var proc = new Process { StartInfo = psi };
@@ -66,6 +67,7 @@ public static class ProcessRunner
         onStarted?.Invoke(pid);
         ProcessRegistry.Register(pid);
         JobObject.Current?.Assign(proc);
+        pulse?.Attach(proc);
 
         var stdoutTask = proc.StandardOutput.ReadToEndAsync();
         var stderrTask = proc.StandardError.ReadToEndAsync();
@@ -82,6 +84,7 @@ public static class ProcessRunner
         }
         finally
         {
+            pulse?.Detach();
             // После kill даём процессу и потокам шанс закрыться, но не бесконечно.
             try { await proc.WaitForExitAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5)); }
             catch { /* уже завершён или не отвечает */ }

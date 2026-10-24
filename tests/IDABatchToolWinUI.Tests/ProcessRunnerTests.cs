@@ -58,6 +58,23 @@ public sealed class ProcessRunnerTests
     }
 
     [Fact]
+    public async Task Pulse_EmitsSnapshot_WhileProcessRuns()
+    {
+        var pulse = new ProcessPulse(
+            "ping", TimeSpan.FromMilliseconds(100), TimeSpan.FromMinutes(1), Array.Empty<string>());
+        var snapshot = new TaskCompletionSource<ProcessPulseSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
+        pulse.Updated += s => snapshot.TrySetResult(s);
+
+        var result = await ProcessRunner.RunAsync(
+            Cmd("ping -n 3 127.0.0.1 >nul & exit 0"), TestContext.Current.CancellationToken, pulse: pulse);
+
+        Assert.True(result.Success);
+        var last = await snapshot.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        Assert.Contains("ping", last.Text, StringComparison.OrdinalIgnoreCase);
+        Assert.False(last.IsQuiet);
+    }
+
+    [Fact]
     public async Task MissingExecutable_ReturnsNotStarted()
     {
         var psi = new ProcessStartInfo

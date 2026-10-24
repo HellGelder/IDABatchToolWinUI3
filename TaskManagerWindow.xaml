@@ -68,7 +68,7 @@
                 BorderThickness="1" CornerRadius="6"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                <StackPanel MinWidth="870">
+                <StackPanel MinWidth="1090">
                     <Grid ColumnSpacing="10" Padding="12,8"
                           Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
                           BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
@@ -82,6 +82,7 @@
                             <ColumnDefinition Width="92" />
                             <ColumnDefinition Width="76" />
                             <ColumnDefinition Width="110" />
+                            <ColumnDefinition Width="220" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="Файл" FontWeight="SemiBold" FontSize="11" />
                         <TextBlock Grid.Column="1" Text="PID" FontWeight="SemiBold" FontSize="11" />
@@ -91,6 +92,7 @@
                         <TextBlock Grid.Column="5" Text="Память" FontWeight="SemiBold" FontSize="11" />
                         <TextBlock Grid.Column="6" Text="Потоки ОС" FontWeight="SemiBold" FontSize="11" />
                         <TextBlock Grid.Column="7" Text="Запущен" FontWeight="SemiBold" FontSize="11" />
+                        <TextBlock Grid.Column="8" Text="Пульс" FontWeight="SemiBold" FontSize="11" />
                     </Grid>
 
                     <ItemsControl x:Name="RowsList">
@@ -108,6 +110,7 @@
                                         <ColumnDefinition Width="92" />
                                         <ColumnDefinition Width="76" />
                                         <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="220" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="{x:Bind FileName}" FontSize="11"
                                                TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
@@ -120,6 +123,9 @@
                                     <TextBlock Grid.Column="5" Text="{x:Bind Memory}" FontSize="11" VerticalAlignment="Center" />
                                     <TextBlock Grid.Column="6" Text="{x:Bind OsThreads}" FontSize="11" VerticalAlignment="Center" />
                                     <TextBlock Grid.Column="7" Text="{x:Bind StartedAt}" FontSize="11" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="8" Text="{x:Bind Pulse}" FontSize="11" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTipService.ToolTip="{x:Bind Pulse}" />
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -132,7 +138,7 @@
             <TextBlock x:Name="SummaryText" FontSize="11" FontWeight="SemiBold" />
             <TextBlock FontSize="10"
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                       Text="PID — процесс idat.exe для файла; CPU, память и потоки ОС обновляются раз в секунду. Анализируемые файлы — вверху таблицы, завершённые опускаются в конец." />
+                       Text="PID — процесс idat.exe для файла; CPU, память и потоки ОС обновляются раз в секунду. Пульс — время, CPU, рост артефактов и давность активности (обновляется воркером). Анализируемые файлы — вверху таблицы, завершённые опускаются в конец." />
         </StackPanel>
     </Grid>
 </Window>

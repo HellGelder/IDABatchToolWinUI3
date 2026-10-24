@@ -29,6 +29,8 @@ public sealed class AnalysisWorker : IDisposable
     public event Action<string>? ExportFileStarted;
     public event Action<string, bool>? ExportFileCompleted;
     public event Action<string>? ErrorOccurred;
+    /// <summary>(имя файла, текст пульса процесса) — для строки статуса/диспетчера.</summary>
+    public event Action<string, string>? PulseUpdated;
     public event Action<int, int>? Finished;
 
     public AnalysisWorker(
@@ -57,6 +59,7 @@ public sealed class AnalysisWorker : IDisposable
         };
         _runner.ProcessStartedCallback = (name, pid, tid) => ProcessStarted?.Invoke(name, pid, tid);
         _runner.ErrorCallback = msg => ErrorOccurred?.Invoke(msg);
+        _runner.PulseCallback = (name, text) => PulseUpdated?.Invoke(name, text);
     }
 
     public void Start()
