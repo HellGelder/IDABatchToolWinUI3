@@ -40,6 +40,29 @@ public sealed class DiffProcessRunner
     public Action<string, string, string>? PairStatus { get; set; }    // (relKey, engine, status)
     public Action<string>? ErrorOccurred { get; set; }
 
+    /// <summary>Порог «крупного файла» (последовательная обработка в основных фазах).</summary>
+    public const long LargeFileThreshold = 100L * 1024 * 1024;
+
+    public static bool IsLarge(string path)
+        => File.Exists(path) && new FileInfo(path).Length >= LargeFileThreshold;
+
+    /// <summary>Базовый ProcessStartInfo для idat: UTF-8 потоки, скрытое окно, -A.</summary>
+    public static ProcessStartInfo CreateIdatPsi(string idatPath)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = idatPath,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+        };
+        psi.ArgumentList.Add("-A");
+        return psi;
+    }
+
     public async Task<DiffProcResult> RunAsync(ProcessStartInfo psi, string relKey, CancellationToken ct)
     {
         using var proc = Process.Start(psi);

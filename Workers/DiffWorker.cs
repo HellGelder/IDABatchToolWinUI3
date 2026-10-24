@@ -31,6 +31,9 @@ public sealed class DiffWorker : IDisposable
 
     /// <summary>Единый запуск внешних процессов diff-конвейера (реестр PID, job, пульс Diaphora).</summary>
     private readonly DiffProcessRunner _proc = new();
+    private readonly BinDiffService _binDiff;
+    private readonly DiaphoraService _diaphora;
+    private readonly ExportJsonService _exportJson;
 
     public IReadOnlyList<DiffPair> Pairs { get; }
     public string IdatPath { get; }
@@ -42,7 +45,6 @@ public sealed class DiffWorker : IDisposable
     public string? AddOutputDir { get; }
     public int MaxWorkers { get; }
 
-    private const long LargeFileThreshold = 100L * 1024 * 1024;
     public DiffWorker(
         IReadOnlyList<DiffPair> pairs,
         string idatPath,
@@ -66,6 +68,9 @@ public sealed class DiffWorker : IDisposable
         _proc.PairProcessStarted = (k, pid) => PairProcessStarted?.Invoke(k, pid);
         _proc.PairStatus = (k, eng, st) => PairStatus?.Invoke(k, eng, st);
         _proc.ErrorOccurred = e => ErrorOccurred?.Invoke(e);
+        _binDiff = new BinDiffService(_proc, idatPath, bindiffPath, e => ErrorOccurred?.Invoke(e));
+        _diaphora = new DiaphoraService(_proc, idatPath, DiaphoraPath, e => ErrorOccurred?.Invoke(e));
+        _exportJson = new ExportJsonService(_proc, idatPath, ExportScript);
     }
 
     public void Start()
@@ -326,8 +331,7 @@ public sealed class DiffWorker : IDisposable
         }
     }
 
-    private static bool IsLarge(string path)
-        => File.Exists(path) && new FileInfo(path).Length >= LargeFileThreshold;
+    private static bool IsLarge(string path) => DiffProcessRunner.IsLarge(path);
 
     // ─────────────────────────────────────────────────────────────────
     //  BinDiff
@@ -358,58 +362,11 @@ public sealed class DiffWorker : IDisposable
         return true;
     }
 
-    private async Task<bool> ExportBinExportAsync(string i64Path, string outputFile, string relKey, CancellationToken ct)
-    {
-        if (ct.IsCancellationRequested) return false;
-        if (File.Exists(outputFile)) File.Delete(outputFile);
+    private Task<bool> ExportBinExportAsync(string i64Path, string outputFile, string relKey, CancellationToken ct)
+        => _binDiff.ExportBinExportAsync(i64Path, outputFile, relKey, ct);
 
-        var psi = NewIdatPsi();
-        psi.ArgumentList.Add("-A");
-        psi.ArgumentList.Add("-OBinExportAutoAction:BinExportBinary");
-        psi.ArgumentList.Add($"-OBinExportModule:{outputFile}");
-        psi.ArgumentList.Add(i64Path);
-        var (rc, _, _) = await _proc.RunAsync(psi, relKey, ct);
-        return rc == 0 && File.Exists(outputFile);
-    }
-
-    private async Task<bool> RunBindiffAsync(string primary, string secondary, string output, string relKey, CancellationToken ct)
-    {
-        var tmpDir = Path.Combine(Path.GetDirectoryName(output)!, Path.GetFileNameWithoutExtension(output) + "_tmp");
-        if (Directory.Exists(tmpDir)) Directory.Delete(tmpDir, recursive: true);
-        Directory.CreateDirectory(tmpDir);
-
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = BindiffPath,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            };
-            psi.ArgumentList.Add("--primary"); psi.ArgumentList.Add(primary);
-            psi.ArgumentList.Add("--secondary"); psi.ArgumentList.Add(secondary);
-            psi.ArgumentList.Add("--output_dir"); psi.ArgumentList.Add(tmpDir);
-            var (rc, _, _) = await _proc.RunAsync(psi, relKey, ct);
-            if (rc != 0) return false;
-
-            var diffFiles = Directory.GetFiles(tmpDir, "*.BinDiff");
-            if (diffFiles.Length == 0) return false;
-            if (File.Exists(output)) File.Delete(output);
-            File.Move(diffFiles[0], output);
-            return true;
-        }
-        catch (Exception e)
-        {
-            ErrorOccurred?.Invoke($"BinDiff: {e.Message}");
-            return false;
-        }
-        finally
-        {
-            try { Directory.Delete(tmpDir, recursive: true); } catch { /* ignore */ }
-        }
-    }
+    private Task<bool> RunBindiffAsync(string primary, string secondary, string output, string relKey, CancellationToken ct)
+        => _binDiff.RunBindiffAsync(primary, secondary, output, relKey, ct);
 
     // ─────────────────────────────────────────────────────────────────
     //  Diaphora
@@ -472,69 +429,11 @@ public sealed class DiffWorker : IDisposable
         return true;
     }
 
-    private async Task<(bool Ok, string? Reason)> RunDiaphoraExportAsync(string i64Path, string outSqlite, string relKey, CancellationToken ct)
-    {
-        var psi = NewIdatPsi();
-        var env = psi.Environment;
-        env["DIAPHORA_AUTO"] = "1";
-        env["DIAPHORA_EXPORT_FILE"] = outSqlite;
-        // Облегчённый профиль экспорта (перенос из исполнения 1): псевдокод-эвристики
-        // работают, микрокод off — Hex-Rays вызывается один раз на функцию вместо двух.
-        // Работает только с патчем get_value_for (иначе '0' остаётся строкой и не
-        // отключает флаг) и патчем ключа export_microcode в diaphora_ida.py.
-        env["DIAPHORA_USE_DECOMPILER"] = "1";
-        env["DIAPHORA_EXPORT_MICROCODE"] = "0";
-        env["DIAPHORA_FUNCTION_SUMMARIES_ONLY"] = "0";
+    private Task<(bool Ok, string? Reason)> RunDiaphoraExportAsync(string i64Path, string outSqlite, string relKey, CancellationToken ct)
+        => _diaphora.ExportAsync(i64Path, outSqlite, relKey, ct);
 
-        // Для крупных файлов — как в исполнении 1: увеличенная виртуальная память,
-        // отключение undo, отдельный лог IDA.
-        if (IsLarge(i64Path))
-        {
-            psi.ArgumentList.Add("-dVPAGESIZE=16384");
-            psi.ArgumentList.Add("-dUNDO_MAXSIZE=0");
-            var idaLog = Path.Combine(Path.GetDirectoryName(outSqlite) ?? ".", Path.GetFileNameWithoutExtension(outSqlite) + ".ida.log");
-            psi.ArgumentList.Add($"-L{idaLog}");
-        }
-
-        psi.ArgumentList.Add("-A");
-        // Важно: без кавычек внутри аргумента — ProcessStartInfo.ArgumentList сам
-        // экранирует путь; кавычки в значении ломали нахождение скрипта IDA.
-        psi.ArgumentList.Add($"-S{DiaphoraPath}");
-        psi.ArgumentList.Add(i64Path);
-
-        var (rc, stdout, stderr) = await _proc.RunWithPulseAsync(psi, relKey, "экспорт", outSqlite, ct);
-        if (rc == 0 && File.Exists(outSqlite)) return (true, null);
-        return (false, DiffProcessRunner.DescribeProcFailure(rc, stdout, stderr, $"экспорт {Path.GetFileName(i64Path)}"));
-    }
-
-    private async Task<(bool Ok, string? Reason)> RunDiaphoraDiffAsync(string db1, string db2, string outSqlite, string relKey, CancellationToken ct)
-    {
-        var psi = new ProcessStartInfo
-        {
-            FileName = AppConstants.PythonwPath,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-        };
-        // Быстрый профиль дифа (перенос из исполнения 1): медленные и экспериментальные
-        // эвристики избыточны, таймаут эвристики снижен, чтобы одна тяжёлая эвристика
-        // не растягивала диф на часы. Нужен патч get_value_for в diaphora.py —
-        // без него env-строки не приводятся к bool/int и флаги не работают.
-        psi.Environment["DIAPHORA_SLOW_HEURISTICS"] = "0";
-        psi.Environment["DIAPHORA_EXPERIMENTAL"] = "0";
-        psi.Environment["DIAPHORA_UNRELIABLE"] = "0";
-        psi.Environment["DIAPHORA_SQL_TIMEOUT_LIMIT"] = "60";
-
-        psi.ArgumentList.Add(DiaphoraPath);
-        psi.ArgumentList.Add(db1);
-        psi.ArgumentList.Add(db2);
-        psi.ArgumentList.Add("-o");
-        psi.ArgumentList.Add(outSqlite);
-        var (rc, stdout, stderr) = await _proc.RunWithPulseAsync(psi, relKey, "диф", outSqlite, ct);
-        if (rc == 0 && File.Exists(outSqlite)) return (true, null);
-        return (false, DiffProcessRunner.DescribeProcFailure(rc, stdout, stderr, "сравнение БД"));
-    }
+    private Task<(bool Ok, string? Reason)> RunDiaphoraDiffAsync(string db1, string db2, string outSqlite, string relKey, CancellationToken ct)
+        => _diaphora.DiffAsync(db1, db2, outSqlite, relKey, ct);
 
     // ─────────────────────────────────────────────────────────────────
     //  Пост-анализ
@@ -602,46 +501,9 @@ public sealed class DiffWorker : IDisposable
         return true;
     }
 
-    private async Task<(string? Primary, string? Secondary)> ExportJsonPairAsync(
+    private Task<(string? Primary, string? Secondary)> ExportJsonPairAsync(
         string primaryI64, string primaryOut, string secondaryI64, string secondaryOut, string relKey, CancellationToken ct)
-    {
-        var result = (Primary: (string?)null, Secondary: (string?)null);
-        foreach (var (i64, outPath, isPrimary) in new[]
-                 {
-                     (primaryI64, primaryOut, true),
-                     (secondaryI64, secondaryOut, false),
-                 })
-        {
-            if (ct.IsCancellationRequested) break;
-
-            // Старый export.json не должен пережить неудачный запуск и попасть в отчёт.
-            try { if (File.Exists(outPath)) File.Delete(outPath); } catch { /* файл занят */ }
-
-            var psi = NewIdatPsi();
-            psi.ArgumentList.Add("-A");
-            psi.ArgumentList.Add($"-S\"{ExportScript}\" pseudocode=1");
-            psi.ArgumentList.Add(i64);
-            var (rc, _, _) = await _proc.RunAsync(psi, relKey, ct);
-            if (rc != 0) continue;
-
-            var src = i64 + ".export.json";
-            if (File.Exists(src) && src != outPath)
-            {
-                if (File.Exists(outPath)) File.Delete(outPath);
-                File.Move(src, outPath);
-            }
-            if (ArtifactValidator.IsValidExportJson(outPath, out _))
-            {
-                if (isPrimary) result.Primary = outPath;
-                else result.Secondary = outPath;
-            }
-            else if (File.Exists(outPath))
-            {
-                try { File.Delete(outPath); } catch { /* файл занят */ }
-            }
-        }
-        return result;
-    }
+        => _exportJson.ExportPairAsync(primaryI64, primaryOut, secondaryI64, secondaryOut, relKey, ct);
 
     // ─────────────────────────────────────────────────────────────────
     //  HTML-отчёты
@@ -913,108 +775,15 @@ public sealed class DiffWorker : IDisposable
     //  Hexdump diff (аналог _compute_hexdump_diff)
     // ─────────────────────────────────────────────────────────────────
 
-    /// <summary>Побайтовое равенство двух файлов (размер + содержимое, потоково).</summary>
-    private static bool FilesEqual(string path1, string path2)
-    {
-        try
-        {
-            var fi1 = new FileInfo(path1);
-            var fi2 = new FileInfo(path2);
-            if (fi1.Length != fi2.Length) return false;
-            using var s1 = fi1.OpenRead();
-            using var s2 = fi2.OpenRead();
-            var buf1 = new byte[81920];
-            var buf2 = new byte[81920];
-            int n1, n2;
-            do
-            {
-                n1 = s1.Read(buf1, 0, buf1.Length);
-                n2 = s2.Read(buf2, 0, buf2.Length);
-                if (n1 != n2) return false;
-                for (int i = 0; i < n1; i++)
-                    if (buf1[i] != buf2[i]) return false;
-            } while (n1 > 0);
-            return true;
-        }
-        catch { return false; }
-    }
+    private static bool FilesEqual(string path1, string path2) => IdenticalPairsService.FilesEqual(path1, path2);
 
-    /// <summary>Заглушка diff.json для побайтно идентичной пары: без запуска
-    /// BinDiff/Diaphora — сходство полная и по определению.</summary>
-    private void WriteIdenticalJson(DiffPair p)
-    {
-        var jsonOutput = Path.Combine(OutputDir, $"{p.Stem}.diff.json");
-        var orig1 = FindOriginalBinary(p.Primary);
-        var orig2 = FindOriginalBinary(p.Secondary);
-        var now = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-        var data = new Dictionary<string, object?>
-        {
-            ["primary"] = p.Primary, ["secondary"] = p.Secondary,
-            ["real_primary"] = orig1 ?? p.Primary, ["real_secondary"] = orig2 ?? p.Secondary,
-            ["similarity"] = 1.0, ["confidence"] = 1.0,
-            ["hexdump_similarity"] = 1.0,
-            ["description"] = "", ["version"] = "", ["created"] = now, ["modified"] = now,
-            ["file1"] = new Dictionary<string, object?>(), ["file2"] = new Dictionary<string, object?>(),
-            ["matched_functions"] = new List<object?>(),
-            ["matched_summary"] = new Dictionary<string, object?>
-                { ["total"] = 0, ["bindiff_only"] = 0, ["diaphora_only"] = 0, ["both"] = 0 },
-            ["unmatched_functions1"] = new List<object?>(),
-            ["unmatched_functions2"] = new List<object?>(),
-            ["total_functions1"] = 0, ["total_functions2"] = 0,
-            ["total_matched"] = 0, ["total_unmatched"] = 0,
-            ["identical"] = true,
-            ["add_analysis_done"] = true,
-            ["error"] = null,
-        };
-        if (orig1 != null && orig2 != null)
-        {
-            data["global_hex_diff"] = new List<object?>
-            {
-                new Dictionary<string, object?>
-                {
-                    ["name1"] = Path.GetFileName(orig1), ["path1"] = orig1,
-                    ["name2"] = Path.GetFileName(orig2), ["path2"] = orig2,
-                    ["hexdump_similarity"] = 1.0,
-                }
-            };
-        }
-        WriteJson(jsonOutput, data);
-    }
+    private void WriteIdenticalJson(DiffPair p) => IdenticalPairsService.WriteIdenticalJson(p, OutputDir);
 
-
-    private static string? FindOriginalBinary(string i64Path)
-    {
-        var stem = Path.GetFileNameWithoutExtension(i64Path); // uprngctl64.exe.i64 -> uprngctl64.exe
-        var dir = Path.GetDirectoryName(i64Path)!;
-        var cand = Path.Combine(dir, stem);
-        if (File.Exists(cand)) return cand;
-        foreach (var ext in new[] { ".exe", ".dll", ".bin", ".sys", ".elf", ".so", ".o", ".out", ".wasm", ".pyc", ".class", ".jar", ".apk", ".dex" })
-        {
-            cand = Path.Combine(dir, stem + ext);
-            if (File.Exists(cand)) return cand;
-        }
-        return null;
-    }
+    private static string? FindOriginalBinary(string i64Path) => IdenticalPairsService.FindOriginalBinary(i64Path);
 
     // ─────────────────────────────────────────────────────────────────
     //  Вспомогательное
     // ─────────────────────────────────────────────────────────────────
-
-    private ProcessStartInfo NewIdatPsi()
-    {
-        var psi = new ProcessStartInfo
-        {
-            FileName = IdatPath,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
-        psi.ArgumentList.Add("-A");
-        return psi;
-    }
 
     public void Dispose() => _cts?.Cancel();
 }
