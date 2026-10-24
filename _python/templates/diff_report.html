@@ -154,6 +154,15 @@
         {% else %}
             {% set hd = global_hex_diff[0] %}
             {% set hd_sim = hd.hexdump_similarity if hd.hexdump_similarity is defined else 0.0 %}
+            {% if hd.hexdump_skipped is defined and hd.hexdump_skipped %}
+            <p class="meta-text" style="margin-bottom:4px;">
+                Схожесть hex-дампов: <strong>не рассчитана</strong> — {{ hd.hexdump_skip_reason if hd.hexdump_skip_reason is defined else 'файлы слишком большие' }}.
+            </p>
+            <p class="meta-text" style="margin-bottom:8px;">
+                Эталонный файл: <code>{{ hd.name1 }}</code><br>
+                Контрольный файл: <code>{{ hd.name2 }}</code>
+            </p>
+            {% else %}
             <p class="meta-text" style="margin-bottom:4px;">
                 Схожесть hex-дампов: <strong>{{ hd_sim | pct(2) }}%</strong>
                 <span style="font-size:10px; color:var(--text-tertiary); cursor:help;" title="Доля байт эталонного файла, для которых найдена идентичная последовательность (≥16 байт) в контрольном файле. Рассчитывается как matching_bytes / len(эталонный_файл).">ⓘ</span>
@@ -163,6 +172,7 @@
                 Эталонный файл: <code>{{ hd.name1 }}</code><br>
                 Контрольный файл: <code>{{ hd.name2 }}</code>
             </p>
+            {% endif %}
         {% endif %}
     </div>
 
@@ -241,6 +251,15 @@
     <div class="card">
         <div class="flex-row">
             <div>
+                {% if display_sim < 0 %}
+                <div class="stat-value">—</div>
+                <div class="stat-label" style="margin-bottom:4px;">
+                    Схожесть не рассчитана
+                    {% if total_functions1 == 0 %}
+                    <span class="badge" style="font-size:9px; background:var(--warning-tint); color:var(--warning);">HEXDUMP</span>
+                    {% endif %}
+                </div>
+                {% else %}
                 <div class="stat-value">{{ display_sim | pct(2, guard=99.0) }}%</div>
                 <div class="stat-label" style="margin-bottom:4px;">
                     Схожесть
@@ -249,6 +268,7 @@
                     {% endif %}
                 </div>
                 <div class="progress-bar"><div class="progress-fill" style="width:{{ display_sim * 100 }}%;"></div></div>
+                {% endif %}
             </div>
             <div>
                 <div class="stat-value">{{ confidence | pct(2) }}%</div>

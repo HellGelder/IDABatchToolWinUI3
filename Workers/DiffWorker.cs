@@ -1,5 +1,6 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
+using IDABatchToolWinUI.Diff;
 using IDABatchToolWinUI.Models;
 using IDABatchToolWinUI.Services;
 
@@ -597,7 +598,7 @@ public sealed class DiffWorker : IDisposable
         {
             try
             {
-                var (_, sim) = ComputeHexdumpDiff(orig1, orig2);
+                var (sim, skipped, skipReason) = HexdumpDiffService.ComputeSimilarity(orig1, orig2);
                 var data = ReadJson(jsonOutput) ?? new Dictionary<string, object?>();
                 data["global_hex_diff"] = new List<object?>
                 {
@@ -605,12 +606,18 @@ public sealed class DiffWorker : IDisposable
                     {
                         ["name1"] = Path.GetFileName(orig1), ["path1"] = orig1,
                         ["name2"] = Path.GetFileName(orig2), ["path2"] = orig2,
-                        ["hexdump_similarity"] = sim,
+                        ["hexdump_similarity"] = skipped ? -1.0 : sim,
                     }
                 };
-                data["hexdump_similarity"] = sim;
+                data["hexdump_similarity"] = skipped ? -1.0 : sim;
                 data["real_primary"] = orig1;
                 data["real_secondary"] = orig2;
+                // Аддитивно: отчёт показывает «не рассчитана» вместо отрицательного процента.
+                if (skipped)
+                {
+                    data["hexdump_skipped"] = true;
+                    data["hexdump_skip_reason"] = skipReason;
+                }
                 WriteJson(jsonOutput, data);
             }
             catch { /* не критично */ }
@@ -852,7 +859,7 @@ public sealed class DiffWorker : IDisposable
         {
             try
             {
-                var (_, sim) = ComputeHexdumpDiff(orig1, orig2);
+                var (sim, skipped, skipReason) = HexdumpDiffService.ComputeSimilarity(orig1, orig2);
                 var data = ReadJson(jsonOutput) ?? new Dictionary<string, object?>();
                 data["global_hex_diff"] = new List<object?>
                 {
@@ -860,10 +867,15 @@ public sealed class DiffWorker : IDisposable
                     {
                         ["name1"] = Path.GetFileName(orig1), ["path1"] = orig1,
                         ["name2"] = Path.GetFileName(orig2), ["path2"] = orig2,
-                        ["hexdump_similarity"] = sim,
+                        ["hexdump_similarity"] = skipped ? -1.0 : sim,
                     }
                 };
-                data["hexdump_similarity"] = sim;
+                data["hexdump_similarity"] = skipped ? -1.0 : sim;
+                if (skipped)
+                {
+                    data["hexdump_skipped"] = true;
+                    data["hexdump_skip_reason"] = skipReason;
+                }
                 WriteJson(jsonOutput, data);
             }
             catch { /* не критично */ }
@@ -1772,148 +1784,6 @@ public sealed class DiffWorker : IDisposable
         WriteJson(jsonOutput, data);
     }
 
-
-    public static (List<object?> Rows, double Similarity) ComputeHexdumpDiff(string orig1, string orig2)
-    {
-        byte[]? d1, d2;
-        try { d1 = File.ReadAllBytes(orig1); d2 = File.ReadAllBytes(orig2); }
-        catch { return (new List<object?>(), 0.0); }
-        if (d1.Length == 0 || d2.Length == 0) return (new List<object?>(), 0.0);
-
-        const int minMatch = 16;
-        var rows = new List<object?>();
-        long matchingBytes = 0;
-
-        // Индекс 16-байтовых ключей data2: пара ulong вместо base64-строки —
-        // на каждую позицию бывшая строка давала десятки миллионов аллокаций.
-        static (ulong Lo, ulong Hi) Key16(byte[] d, int pos)
-            => (BitConverter.ToUInt64(d, pos), BitConverter.ToUInt64(d, pos + 8));
-
-        var startIndex = new Dictionary<(ulong Lo, ulong Hi), List<int>>();
-        for (int pos = 0; pos + minMatch <= d2.Length; pos++)
-        {
-            var key = Key16(d2, pos);
-            if (!startIndex.TryGetValue(key, out var l)) { l = new List<int>(); startIndex[key] = l; }
-            l.Add(pos);
-        }
-        var used2 = new bool[d2.Length];
-
-        int p1 = 0;
-        while (p1 < d1.Length)
-        {
-            int maxLen = 0, bestPos2 = -1;
-            if (d1.Length - p1 >= minMatch)
-            {
-                var key = Key16(d1, p1);
-                if (startIndex.TryGetValue(key, out var positions))
-                {
-                    foreach (var pc in positions)
-                    {
-                        int len = 0;
-                        while (p1 + len < d1.Length && pc + len < d2.Length && d1[p1 + len] == d2[pc + len]) len++;
-                        if (len > maxLen) { maxLen = len; bestPos2 = pc; }
-                    }
-                }
-            }
-
-            if (maxLen >= minMatch && bestPos2 >= 0)
-            {
-                if (p1 == bestPos2)
-                {
-                    // equal — сжато
-                    var last = rows.LastOrDefault() as Dictionary<string, object?>;
-                    long lastAddr = 0, lastCount = 0;
-                    if (last != null && Convert.ToString(last.GetValue("type")) == "equal")
-                    {
-                        lastAddr = Convert.ToInt64(last.GetValue("count") ?? 0L) * 16;
-                        lastCount = Convert.ToInt64(last.GetValue("count") ?? 0L);
-                    }
-                    if (last != null && Convert.ToString(last.GetValue("type")) == "equal" && lastAddr == p1)
-                        last["count"] = lastCount + maxLen / 16;
-                    else
-                        rows.Add(new Dictionary<string, object?> { ["type"] = "equal", ["count"] = maxLen / 16 });
-                }
-                else
-                {
-                    for (int bi = 0; bi < maxLen; bi += 16)
-                    {
-                        int end = Math.Min(bi + 16, maxLen);
-                        var b1 = d1.Skip(p1 + bi).Take(end - bi).ToArray();
-                        var b2 = d2.Skip(bestPos2 + bi).Take(end - bi).ToArray();
-                        var shift = bestPos2 - p1;
-                        rows.Add(new Dictionary<string, object?>
-                        {
-                            ["type"] = "equal_shifted",
-                            ["left_addr"] = $"{p1 + bi:x8}", ["right_addr"] = $"{bestPos2 + bi:x8}",
-                            ["left_bytes"] = MakeHexBytes(b1), ["right_bytes"] = MakeHexBytes(b2),
-                            ["left_ascii"] = MakeAscii(b1), ["right_ascii"] = MakeAscii(b2),
-                            ["shift"] = shift >= 0 ? $"+{shift:x}" : $"-{-shift:x}",
-                        });
-                    }
-                }
-                for (int k = 0; k < maxLen; k++) used2[bestPos2 + k] = true;
-                matchingBytes += maxLen;
-                p1 += maxLen;
-            }
-            else
-            {
-                int actual = Math.Min(minMatch, d1.Length - p1);
-                var chunk = d1.Skip(p1).Take(actual).ToArray();
-                rows.Add(new Dictionary<string, object?>
-                {
-                    ["type"] = "deleted",
-                    ["addr"] = $"{p1:x8}",
-                    ["left_bytes"] = MakeHexBytes(chunk),
-                    ["left_ascii"] = MakeAscii(chunk),
-                });
-                p1 += actual;
-            }
-        }
-
-        // Inserted
-        int p2 = 0;
-        while (p2 < d2.Length)
-        {
-            if (!used2[p2])
-            {
-                int end = p2 + 1;
-                while (end < d2.Length && !used2[end]) end++;
-                for (int off = p2; off < end; off += 16)
-                {
-                    int ce = Math.Min(off + 16, end);
-                    var chunk = d2.Skip(off).Take(ce - off).ToArray();
-                    rows.Add(new Dictionary<string, object?>
-                    {
-                        ["type"] = "inserted", ["addr"] = $"{off:x8}",
-                        ["right_bytes"] = MakeHexBytes(chunk), ["right_ascii"] = MakeAscii(chunk),
-                    });
-                }
-                p2 = end;
-            }
-            else p2++;
-        }
-
-        var totalLines = Math.Max(d1.Length / 16 + (d1.Length % 16 != 0 ? 1 : 0),
-                                  d2.Length / 16 + (d2.Length % 16 != 0 ? 1 : 0));
-        rows.Add(new Dictionary<string, object?> { ["type"] = "_meta", ["total_lines"] = totalLines });
-        var similarity = d1.Length > 0 ? Math.Round((double)matchingBytes / d1.Length, 6) : 0.0;
-        return (rows, similarity);
-    }
-
-    private static List<object?> MakeHexBytes(byte[] data)
-    {
-        var l = new List<object?>();
-        for (int i = 0; i < 16; i++)
-            l.Add(new Dictionary<string, object?> { ["b"] = i < data.Length ? data[i].ToString("x2") : "  ", ["d"] = 0 });
-        return l;
-    }
-
-    private static string MakeAscii(byte[] data)
-    {
-        var sb = new StringBuilder();
-        foreach (var b in data) sb.Append(b is >= 32 and < 127 ? (char)b : '.');
-        return sb.ToString();
-    }
 
     private static string? FindOriginalBinary(string i64Path)
     {

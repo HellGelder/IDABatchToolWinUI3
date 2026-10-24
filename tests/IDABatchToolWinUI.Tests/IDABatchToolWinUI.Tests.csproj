@@ -30,6 +30,7 @@
     <Compile Include="..\..\Services\ProcessPulse.cs" Link="Linked\ProcessPulse.cs" />
     <Compile Include="..\..\Services\JobObject.cs" Link="Linked\JobObject.cs" />
     <Compile Include="..\..\Services\ProcessRunner.cs" Link="Linked\ProcessRunner.cs" />
+    <Compile Include="..\..\Diff\HexdumpDiffService.cs" Link="Linked\HexdumpDiffService.cs" />
   </ItemGroup>
 
 </Project>
