@@ -2093,9 +2093,10 @@ public sealed class DiffWorker : IDisposable
         try
         {
             using var reader = proc.StandardOutput;
-            while (await reader.ReadAsync(buffer, 0, buffer.Length) > 0)
+            int n;
+            while ((n = await reader.ReadAsync(buffer, 0, buffer.Length)) > 0)
             {
-                sb.Append(buffer);
+                sb.Append(buffer, 0, n);
                 ParseExportProgress(sb.ToString(), progress);
                 // Держим хвост, достаточный для обеих regex-строк, — весь лог не копим.
                 if (sb.Length > 4096) sb.Remove(0, sb.Length - 1024);
