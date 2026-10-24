@@ -146,16 +146,25 @@
                     </Grid>
                     <ListView x:Name="PairsListView" MaxHeight="260" MinHeight="80"
                               SelectionMode="None">
+                        <ListView.ItemContainerStyle>
+                            <!-- Нулевые отступы контейнера, иначе строки едут вправо относительно шапки -->
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="Margin" Value="0" />
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="MinWidth" Value="0" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
                         <ListView.HeaderTemplate>
                             <DataTemplate>
                                 <Grid ColumnSpacing="6" Padding="0,0,0,4">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="28" />
                                         <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="80" />
-                                        <ColumnDefinition Width="70" />
-                                        <ColumnDefinition Width="90" />
-                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="76" />
+                                        <ColumnDefinition Width="52" />
+                                        <ColumnDefinition Width="1.3*" />
+                                        <ColumnDefinition Width="1.3*" />
                                     </Grid.ColumnDefinitions>
                                     <CheckBox x:Name="HeaderCheckBox" Grid.Column="0" IsChecked="True"
                                               VerticalAlignment="Center" Click="HeaderCheckBox_Click" />
@@ -173,10 +182,10 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="28" />
                                         <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="80" />
-                                        <ColumnDefinition Width="70" />
-                                        <ColumnDefinition Width="90" />
-                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="76" />
+                                        <ColumnDefinition Width="52" />
+                                        <ColumnDefinition Width="1.3*" />
+                                        <ColumnDefinition Width="1.3*" />
                                     </Grid.ColumnDefinitions>
                                     <CheckBox Grid.Column="0" IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
                                               Click="RowCheckBox_Click" />
@@ -184,10 +193,13 @@
                                                ToolTipService.ToolTip="{x:Bind ToolTip}" />
                                     <TextBlock Grid.Column="2" Text="{x:Bind SizeText}" />
                                     <!-- Динамические колонки: только Mode=OneWay, иначе x:Bind (OneTime)
-                                         не перечитывает изменения статусов/PID -->
+                                         не перечитывает изменения статусов/PID. Перенос строк, чтобы
+                                         длинный статус доанализа был виден целиком -->
                                     <TextBlock Grid.Column="3" Text="{x:Bind PidText, Mode=OneWay}" />
-                                    <TextBlock Grid.Column="4" Text="{x:Bind BindiffStatusDisplay, Mode=OneWay}" />
-                                    <TextBlock Grid.Column="5" Text="{x:Bind DiaphoraStatusDisplay, Mode=OneWay}" />
+                                    <TextBlock Grid.Column="4" Text="{x:Bind BindiffStatusDisplay, Mode=OneWay}"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock Grid.Column="5" Text="{x:Bind DiaphoraStatusDisplay, Mode=OneWay}"
+                                               TextWrapping="Wrap" />
                                 </Grid>
                             </DataTemplate>
                         </ListView.ItemTemplate>
