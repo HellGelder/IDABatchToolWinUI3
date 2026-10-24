@@ -149,6 +149,17 @@ def emit_error(message):
         pass
 
 
+def fail(message):
+    """Фатальная ошибка: сообщение + ненулевой код выхода.
+
+    GUI различает «мост отработал с частичными ошибками» (exit 0 и failed_count
+    в RESULT) и «мост не смог ничего сделать» (exit 1). Раньше оба случая
+    выглядели одинаково — процесс возвращал 0 и результат терялся.
+    """
+    emit_error(message)
+    sys.exit(1)
+
+
 def emit_result(obj):
     try:
         print("RESULT " + json.dumps(obj, ensure_ascii=False, default=str), flush=True)
@@ -2025,13 +2036,13 @@ def run_generate(args):
         else:
             json_files = _collect_export_jsons(args.json_dir, args.json_paths)
         if not json_files:
-            emit_error("Нет JSON-файлов экспорта. Сначала выполните анализ.")
-            return
+            fail("Нет JSON-файлов экспорта. Сначала выполните анализ.")
         reports_dir.mkdir(parents=True, exist_ok=True)
         # Внутренние модули проекта — все файлы исследуемой директории (как в исполнении 1).
         internal_set = _build_internal_set(input_dir)
         total = len(json_files)
         done = 0
+        failed = 0
         report_links = []
         global_modules = set()
         ida_info = None
@@ -2044,6 +2055,7 @@ def run_generate(args):
                     data = json.load(f)
             except Exception as e:
                 emit_error(f"Ошибка чтения {jp.name}: {e}")
+                failed += 1
                 done += 1
                 emit_progress(done, total, "")
                 continue
@@ -2078,6 +2090,7 @@ def run_generate(args):
                                          reports_dir=str(reports_dir))
             except Exception as e:
                 emit_error(f"Ошибка генерации отчёта {jp.name}: {e}")
+                failed += 1
                 done += 1
                 emit_progress(done, total, "")
                 continue
@@ -2116,6 +2129,7 @@ def run_generate(args):
             "reports_dir": str(reports_dir), "input_dir": str(input_dir),
             "index_path": str(index_path), "generated_count": len(report_links),
             "total_files": total_files, "total_size_bytes": total_size,
+            "failed_count": failed, "total_count": total,
         })
 
     elif args.kind == "sfa":
@@ -2126,8 +2140,7 @@ def run_generate(args):
             # Читаем пути из index-БД (JSON могут быть удалены)
             json_files = [Path(p) for p in read_index_json_paths(sfa_index_db)]
             if not json_files:
-                emit_error("Индекс БД устарел или не содержит данных. Выполните полный анализ для перестроения индекса.")
-                return
+                fail("Индекс БД устарел или не содержит данных. Выполните полный анализ для перестроения индекса.")
             # Платформа берётся из индекса: при перегенерации должны
             # использоваться те же словари, что и в анализе.
             try:
@@ -2146,8 +2159,7 @@ def run_generate(args):
             else:
                 json_files = _collect_export_jsons(args.json_dir, args.json_paths)
             if not json_files:
-                emit_error("Нет JSON-файлов экспорта.")
-                return
+                fail("Нет JSON-файлов экспорта.")
             reports_dir.mkdir(parents=True, exist_ok=True)
             emit_progress(0, max(len(json_files), 1), "Сканирование системных функций…")
             try:
@@ -2391,8 +2403,7 @@ def run_generate(args):
         else:
             json_files = _collect_export_jsons(args.json_dir, args.json_paths)
         if not json_files:
-            emit_error("Нет JSON-файлов экспорта. Сначала выполните анализ.")
-            return
+            fail("Нет JSON-файлов экспорта. Сначала выполните анализ.")
         reports_dir.mkdir(parents=True, exist_ok=True)
         log = _SfaLog(reports_dir)
 
@@ -2514,19 +2525,22 @@ def run_generate(args):
         else:
             json_files = list(Path(args.json_dir).glob("*.diff.json"))
         if not json_files:
-            emit_error("Нет JSON-файлов с результатами сравнения.")
-            return
+            fail("Нет JSON-файлов с результатами сравнения.")
         reports_dir.mkdir(parents=True, exist_ok=True)
         left = Path(args.left_dir) if args.left_dir else Path(args.json_dir)
         right = Path(args.right_dir) if args.right_dir else Path(args.json_dir)
         total = len(json_files)
         done = 0
+        generated = 0
+        failed = 0
         for jf in sorted(json_files):
             html_path = reports_dir / (jf.stem.replace(".diff", "") + ".html")
             try:
                 generate_diff_report(str(jf), str(html_path), str(reports_dir))
+                generated += 1
             except Exception as e:
                 emit_error(f"Ошибка генерации отчёта {jf.name}: {e}")
+                failed += 1
             done += 1
             emit_progress(done, total, jf.name)
 
@@ -2545,7 +2559,8 @@ def run_generate(args):
             ida_version=ida_version)
         emit_result({
             "reports_dir": str(reports_dir), "input_dir": str(input_dir),
-            "index_path": str(index_path), "generated_count": done,
+            "index_path": str(index_path), "generated_count": generated,
+            "failed_count": failed, "total_count": total,
         })
 
 

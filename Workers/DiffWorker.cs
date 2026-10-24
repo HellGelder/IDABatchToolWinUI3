@@ -25,6 +25,7 @@ public sealed class DiffWorker : IDisposable
 
     private CancellationTokenSource? _cts;
     private Task? _task;
+    private OutcomeTracker? _outcomes;
 
     public IReadOnlyList<DiffPair> Pairs { get; }
     public string IdatPath { get; }
@@ -138,6 +139,7 @@ public sealed class DiffWorker : IDisposable
             ErrorOccurred?.Invoke($"Идентичных пар (побайтно): {identical.Count} — анализ не запускается, отчёт отмечен «Модули идентичны».");
 
         var work = all.Where(p => !identical.Contains(p.Stem)).ToList();
+        _outcomes = new OutcomeTracker(all.Select(p => p.Stem));
 
         // Этапы выполнения: счётчик «шагов» не ведём — GUI показывает этапы
         // и статусы обработки каждого файла.
@@ -162,6 +164,13 @@ public sealed class DiffWorker : IDisposable
             WriteIdenticalJson(p);
             PairStatus?.Invoke(p.RelKey, "bindiff", "identical");
             PairStatus?.Invoke(p.RelKey, "diaphora", "identical");
+
+            var identicalJson = Path.Combine(OutputDir, $"{p.Stem}.diff.json");
+            if (!ArtifactValidator.IsValidDiffJson(identicalJson, out var reason))
+            {
+                _outcomes?.Fail(p.Stem);
+                ErrorOccurred?.Invoke($"Идентичная пара {p.RelKey}: {reason}");
+            }
         }
 
         // Генерация HTML-отчётов (одна фаза)
@@ -186,7 +195,7 @@ public sealed class DiffWorker : IDisposable
             }
         }
 
-        Finished?.Invoke(Math.Min(total, all.Count), total);
+        Finished?.Invoke(_outcomes?.Succeeded ?? 0, all.Count);
     }
 
     /// <summary>
@@ -246,7 +255,7 @@ public sealed class DiffWorker : IDisposable
 
     private void Abort()
     {
-        Finished?.Invoke(0, Pairs.Count);
+        Finished?.Invoke(_outcomes?.Succeeded ?? 0, Pairs.Count);
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -257,7 +266,7 @@ public sealed class DiffWorker : IDisposable
         string stage, List<DiffPair> pairs, int total, string? engine,
         string statusText,
         Func<DiffPair, Task<bool>> process, CancellationToken ct,
-        bool parallelLarge = false)
+        bool parallelLarge = false, bool trackOutcome = true)
     {
         if (pairs.Count == 0) return;
 
@@ -298,6 +307,7 @@ public sealed class DiffWorker : IDisposable
                 ok = false;
             }
             var status = ok ? "done" : "error";
+            if (!ok && trackOutcome) _outcomes?.Fail(p.Stem);
             if (engine == null)
             {
                 if (Engine is "bindiff" or "both") PairStatus?.Invoke(p.RelKey, "bindiff", status);
@@ -351,6 +361,11 @@ public sealed class DiffWorker : IDisposable
             return false;
         }
         ParseBindiffResult(diffOutput, p.Primary, p.Secondary, jsonOutput);
+        if (!ArtifactValidator.IsValidDiffJson(jsonOutput, out var reason))
+        {
+            ErrorOccurred?.Invoke($"BinDiff {stem}: {reason}");
+            return false;
+        }
         return true;
     }
 
@@ -440,16 +455,31 @@ public sealed class DiffWorker : IDisposable
             return false;
         }
 
-        if (File.Exists(dbPri) && File.Exists(dbSec))
+        if (!File.Exists(dbPri) || !File.Exists(dbSec))
         {
-            var (diffOk, diffReason) = await RunDiaphoraDiffAsync(dbPri, dbSec, result, p.RelKey, ct);
-            if (diffOk)
-                MergeDiaphoraIntoJson(jsonOutput, result, stem);
-            else
-                ErrorOccurred?.Invoke($"Diaphora диф {stem}: {diffReason}");
+            ErrorOccurred?.Invoke($"Diaphora диф {stem}: базы не созданы");
+            Cleanup(dbPri, dbSec, result);
+            return false;
+        }
+
+        var (diffOk, diffReason) = await RunDiaphoraDiffAsync(dbPri, dbSec, result, p.RelKey, ct);
+        if (diffOk)
+        {
+            MergeDiaphoraIntoJson(jsonOutput, result, stem);
+        }
+        else
+        {
+            ErrorOccurred?.Invoke($"Diaphora диф {stem}: {diffReason}");
         }
 
         Cleanup(dbPri, dbSec, result);
+        if (!diffOk) return false;
+
+        if (!ArtifactValidator.IsValidDiffJson(jsonOutput, out var reason))
+        {
+            ErrorOccurred?.Invoke($"Diaphora {stem}: {reason}");
+            return false;
+        }
         return true;
     }
 
@@ -552,6 +582,12 @@ public sealed class DiffWorker : IDisposable
         var secJson = Path.Combine(OutputDir, $"{stem}_secondary.export.json");
 
         var exported = await ExportJsonPairAsync(p.Primary, primJson, p.Secondary, secJson, p.RelKey, ct);
+        if (exported.Primary == null || exported.Secondary == null)
+        {
+            ErrorOccurred?.Invoke($"Пост-анализ {stem}: не удалось получить export.json");
+            Cleanup(primJson, secJson);
+            return false;
+        }
         EnrichDiffJson(jsonOutput, exported.Primary, exported.Secondary);
 
         // Hexdump diff
@@ -585,6 +621,12 @@ public sealed class DiffWorker : IDisposable
         ApplyIdaExportTruth(jsonOutput, exported.Primary, exported.Secondary);
 
         Cleanup(primJson, secJson);
+
+        if (!ArtifactValidator.IsValidDiffJson(jsonOutput, out var reason))
+        {
+            ErrorOccurred?.Invoke($"Пост-анализ {stem}: {reason}");
+            return false;
+        }
         return true;
     }
 
@@ -599,6 +641,10 @@ public sealed class DiffWorker : IDisposable
                  })
         {
             if (ct.IsCancellationRequested) break;
+
+            // Старый export.json не должен пережить неудачный запуск и попасть в отчёт.
+            try { if (File.Exists(outPath)) File.Delete(outPath); } catch { /* файл занят */ }
+
             var psi = NewIdatPsi();
             psi.ArgumentList.Add("-A");
             psi.ArgumentList.Add($"-S\"{ExportScript}\" pseudocode=1");
@@ -612,10 +658,14 @@ public sealed class DiffWorker : IDisposable
                 if (File.Exists(outPath)) File.Delete(outPath);
                 File.Move(src, outPath);
             }
-            if (File.Exists(outPath))
+            if (ArtifactValidator.IsValidExportJson(outPath, out _))
             {
                 if (isPrimary) result.Primary = outPath;
                 else result.Secondary = outPath;
+            }
+            else if (File.Exists(outPath))
+            {
+                try { File.Delete(outPath); } catch { /* файл занят */ }
             }
         }
         return result;
@@ -692,13 +742,13 @@ public sealed class DiffWorker : IDisposable
 
         StageChanged?.Invoke("Доанализ (Diaphora)", "started");
         await RunPass("Доанализ (Diaphora)", low, low.Count, "diaphora", "Доанализ (Diaphora)",
-            p => ProcessAddDiaphoraPairAsync(p, ct), ct, parallelLarge: true);
+            p => ProcessAddDiaphoraPairAsync(p, ct), ct, parallelLarge: true, trackOutcome: false);
         StageChanged?.Invoke("Доанализ (Diaphora)", "done");
         if (ct.IsCancellationRequested) return;
 
         StageChanged?.Invoke("Доанализ (пост-анализ)", "started");
         await RunPass("Доанализ (пост-анализ)", low, low.Count, "diaphora", "Доанализ (пост-анализ)",
-            p => ProcessAddPostPairAsync(p, ct), ct, parallelLarge: true);
+            p => ProcessAddPostPairAsync(p, ct), ct, parallelLarge: true, trackOutcome: false);
         StageChanged?.Invoke("Доанализ (пост-анализ)", "done");
         if (ct.IsCancellationRequested) return;
 
@@ -786,6 +836,12 @@ public sealed class DiffWorker : IDisposable
         var secJson = Path.Combine(AddOutputDir!, $"{stem}_secondary.export.json");
 
         var exported = await ExportJsonPairAsync(p.Primary, primJson, p.Secondary, secJson, p.RelKey, ct);
+        if (exported.Primary == null || exported.Secondary == null)
+        {
+            ErrorOccurred?.Invoke($"Доанализ {stem}: не удалось получить export.json");
+            Cleanup(primJson, secJson);
+            return false;
+        }
         EnrichDiffJson(jsonOutput, exported.Primary, exported.Secondary);
 
         var orig1 = FindOriginalBinary(p.Primary);
@@ -815,6 +871,12 @@ public sealed class DiffWorker : IDisposable
         ApplyIdaExportTruth(jsonOutput, exported.Primary, exported.Secondary);
 
         Cleanup(primJson, secJson);
+
+        if (!ArtifactValidator.IsValidDiffJson(jsonOutput, out var reason))
+        {
+            ErrorOccurred?.Invoke($"Доанализ {stem}: {reason}");
+            return false;
+        }
         return true;
     }
 

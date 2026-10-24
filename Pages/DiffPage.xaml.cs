@@ -467,7 +467,12 @@ public DiffPage()
         DiffProgressRing.IsActive = false;
         DiffProgressRing.Visibility = Visibility.Collapsed;
         // Итог — в строке текущего файла: MapStatusLabel перезапишет AnalyzeDirectories()
-        CurrentFileLabel.Text = $"Сравнение завершено: успешно {successCount} из {total} пар";
+        var failedCount = Math.Max(0, total - successCount);
+        CurrentFileLabel.Text = failedCount > 0
+            ? $"Сравнение завершено: успешно {successCount} из {total}, ошибок: {failedCount}"
+            : $"Сравнение завершено: успешно {successCount} из {total} пар";
+        if (failedCount > 0)
+            AppendError($"Сравнение: пар с ошибками — {failedCount} из {total}");
 
         AnalyzeDirectories();
 

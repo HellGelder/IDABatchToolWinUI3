@@ -14,7 +14,6 @@ public sealed class AnalysisWorker : IDisposable
     private readonly bool _cleanup;
     private readonly bool _tempCleanup;
     private readonly bool _pseudocode;
-    private readonly bool _deleteJson; // не используется в фазе анализа, оставлен для симметрии
     private readonly bool _exportOnly;
     private CancellationTokenSource? _cts;
     private Task? _task;
@@ -47,8 +46,8 @@ public sealed class AnalysisWorker : IDisposable
         _cleanup = cleanup;
         _tempCleanup = tempCleanup;
         _pseudocode = pseudocode;
-        _deleteJson = deleteJson;
         _exportOnly = exportOnly;
+        _ = deleteJson; // параметр оставлен для совместимости вызовов: JSON удаляет HTML-воркер
         _scriptsDir = AppConstants.ScriptsDir;
         _runner = new IdaRunner(idatPath, maxWorkers)
         {
@@ -71,7 +70,7 @@ public sealed class AnalysisWorker : IDisposable
     private async Task RunAsync()
     {
         var ct = _cts!.Token;
-        List<string> succeededFiles;
+        var candidates = new List<(string Source, string BasePath)>();
 
         if (!_exportOnly)
         {
@@ -95,93 +94,128 @@ public sealed class AnalysisWorker : IDisposable
                 ErrorOccurred?.Invoke($"Критическая ошибка при анализе: {e.Message}");
                 results = _files.Distinct().ToDictionary(f => f, _ => false);
             }
-            succeededFiles = results.Where(kv => kv.Value).Select(kv => kv.Key).ToList();
-        }
-        else
-        {
-            // Режим export_only: собираем существующие базы
-            PhaseChanged?.Invoke("export");
-            succeededFiles = new List<string>();
-            foreach (var f in _files)
+
+            foreach (var (file, ok) in results)
             {
-                var name = Path.GetFileName(f);
-                // Вход может быть уже базой (.i64/.idb — автоэкспорт после анализа
-                // передаёт ExpectedI64Path): имя базы повторно не наращиваем.
-                if (name.EndsWith(".i64", StringComparison.OrdinalIgnoreCase)
-                    || name.EndsWith(".idb", StringComparison.OrdinalIgnoreCase))
+                if (!ok) continue;
+                string? reason = null;
+                var basePath = ArtifactValidator.ResolveBasePath(file);
+                if (basePath == null || !ArtifactValidator.IsValidIdaDatabase(basePath, out reason))
                 {
-                    if (File.Exists(f)) succeededFiles.Add(f);
-                    else ErrorOccurred?.Invoke($"База данных не найдена для {name} (режим export_only).");
+                    ErrorOccurred?.Invoke(
+                        $"База не готова для {Path.GetFileName(file)}: {reason ?? "файл базы не найден"}");
                     continue;
                 }
-
-                // Либо исходный файл (экспорт из стартового диалога) — база рядом с ним.
-                var dir = Path.GetDirectoryName(f) ?? "";
-                var i64 = Path.Combine(dir, name + ".i64");
-                if (File.Exists(i64)) succeededFiles.Add(i64);
-                else
-                {
-                    var idb = Path.Combine(dir, name + ".idb");
-                    if (File.Exists(idb)) succeededFiles.Add(idb);
-                    else ErrorOccurred?.Invoke($"База данных не найдена для {name} (режим export_only).");
-                }
-            }
-            if (succeededFiles.Count == 0)
-            {
-                Finished?.Invoke(0, _files.Count);
-                return;
-            }
-        }
-
-        // Фаза 2: экспорт в JSON
-        if (succeededFiles.Count > 0 && !ct.IsCancellationRequested)
-        {
-            PhaseChanged?.Invoke("export");
-            var script = Path.Combine(_scriptsDir, "export_data.py");
-            if (!File.Exists(script))
-            {
-                ErrorOccurred?.Invoke($"Скрипт экспорта не найден: {script}");
-                Finished?.Invoke(0, _files.Count);
-                return;
-            }
-
-            var args = new Dictionary<string, string>();
-            if (_pseudocode) args["pseudocode"] = "1";
-
-            _runner.ProgressCallback = (name, cur, total) => ExportProgress?.Invoke(name, cur, total);
-            _runner.FileStartCallback = n => ExportFileStarted?.Invoke(n);
-            _runner.FileDoneCallback = (n, ok) => ExportFileCompleted?.Invoke(n, ok);
-
-            try
-            {
-                var exportResults = await _runner.RunScriptOnBatchAsync(succeededFiles, script, null, args, ct);
-                foreach (var (idb, ok) in exportResults)
-                    if (!ok) ErrorOccurred?.Invoke($"Ошибка экспорта для {Path.GetFileName(idb)}");
-            }
-            catch (OperationCanceledException) { /* отмена — статусы расставит EndSession */ }
-            catch (Exception e)
-            {
-                ErrorOccurred?.Invoke($"Критическая ошибка при экспорте: {e.Message}");
+                candidates.Add((file, basePath));
             }
         }
         else
         {
-            if (!_exportOnly) ErrorOccurred?.Invoke("Нет успешно проанализированных файлов для экспорта.");
-            else ErrorOccurred?.Invoke("Нет доступных баз данных для экспорта.");
+            // Режим export_only: работаем только с существующими базами.
+            foreach (var file in _files)
+            {
+                string? reason = null;
+                var basePath = ArtifactValidator.ResolveBasePath(file);
+                if (basePath == null || !ArtifactValidator.IsValidIdaDatabase(basePath, out reason))
+                {
+                    ErrorOccurred?.Invoke(
+                        $"База данных не найдена для {Path.GetFileName(file)}: {reason ?? "файл базы не найден"}");
+                    continue;
+                }
+                candidates.Add((file, basePath));
+            }
         }
 
-        // Успешно обработанные исходные файлы — те, у которых появился .i64
-        int successOriginal = 0;
-        foreach (var f in _files)
+        if (candidates.Count == 0)
         {
-            var name = Path.GetFileName(f);
-            if (name.EndsWith(".i64", StringComparison.OrdinalIgnoreCase)
-                || name.EndsWith(".idb", StringComparison.OrdinalIgnoreCase))
-                name = name[..^4];
-            var dir = Path.GetDirectoryName(f) ?? "";
-            if (File.Exists(Path.Combine(dir, name + ".i64"))) successOriginal++;
+            ErrorOccurred?.Invoke(_exportOnly
+                ? "Нет доступных баз данных для экспорта."
+                : "Нет успешно проанализированных файлов для экспорта.");
+            Finished?.Invoke(0, _files.Count);
+            return;
         }
-        Finished?.Invoke(successOriginal, _files.Count);
+
+        // Фаза 2: экспорт в JSON — успех только по валидному JSON, а не по факту
+        // существования базы: старый .i64 мог остаться от прошлого запуска.
+        PhaseChanged?.Invoke("export");
+
+        // Прошлый JSON удаляем до любых проверок: если экспорт не состоится,
+        // старый файл не должен выглядеть результатом текущего прогона.
+        foreach (var (_, basePath) in candidates)
+            SafeDelete(ArtifactValidator.ExpectedExportJsonPath(basePath));
+
+        var script = Path.Combine(_scriptsDir, "export_data.py");
+        if (!File.Exists(script))
+        {
+            ErrorOccurred?.Invoke($"Скрипт экспорта не найден: {script}");
+            Finished?.Invoke(0, _files.Count);
+            return;
+        }
+
+        var args = new Dictionary<string, string>();
+        if (_pseudocode) args["pseudocode"] = "1";
+
+        _runner.ProgressCallback = (name, cur, total) => ExportProgress?.Invoke(DisplayName(name), cur, total);
+        _runner.FileStartCallback = n => ExportFileStarted?.Invoke(DisplayName(n));
+        // Результат экспорта подтверждаем сами после проверки JSON, а не по факту
+        // завершения процесса: pythonw может выйти с кодом 0, не записав результат.
+        _runner.FileDoneCallback = (_, _) => { };
+
+        Dictionary<string, bool> exportResults;
+        try
+        {
+            exportResults = await _runner.RunScriptOnBatchAsync(
+                candidates.Select(c => c.BasePath).ToList(), script, null, args, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            exportResults = new Dictionary<string, bool>();
+        }
+        catch (Exception e)
+        {
+            ErrorOccurred?.Invoke($"Критическая ошибка при экспорте: {e.Message}");
+            exportResults = new Dictionary<string, bool>();
+        }
+
+        var succeeded = 0;
+        foreach (var (_, basePath) in candidates)
+        {
+            var jsonPath = ArtifactValidator.ExpectedExportJsonPath(basePath);
+            var processOk = exportResults.TryGetValue(basePath, out var ok) && ok;
+            string? reason = null;
+            var valid = processOk && ArtifactValidator.IsValidExportJson(jsonPath, out reason);
+
+            if (valid)
+            {
+                succeeded++;
+            }
+            else
+            {
+                var message = processOk ? reason : "процесс экспорта завершился с ошибкой";
+                ErrorOccurred?.Invoke($"Экспорт {Path.GetFileName(basePath)}: {message ?? "неизвестная ошибка"}");
+            }
+            ExportFileCompleted?.Invoke(Path.GetFileName(basePath), valid);
+        }
+
+        Finished?.Invoke(succeeded, _files.Count);
+    }
+
+    /// <summary>Имя базы для UI-событий — без служебного суффикса .i64/.idb.</summary>
+    private static string DisplayName(string fileName)
+    {
+        if (fileName.EndsWith(".i64", StringComparison.OrdinalIgnoreCase)
+            || fileName.EndsWith(".idb", StringComparison.OrdinalIgnoreCase))
+            return fileName[..^4];
+        return fileName;
+    }
+
+    private static void SafeDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+        catch { /* файл занят — экспорт всё равно перезапишет его */ }
     }
 
     public void Dispose()

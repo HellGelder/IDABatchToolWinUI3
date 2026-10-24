@@ -125,7 +125,7 @@ public SfaPage()
         UpdatePlatformBar(PlatformInfo.DetectPlatform(_cachedFiles.Select(f => f.Path)));
 
         SfaTreemap.SetData(_cachedFiles);
-        SfaGenerateHtmlButton.IsEnabled = _cachedFiles.Any(f => File.Exists(f.ExpectedI64Path));
+        SfaGenerateHtmlButton.IsEnabled = _cachedFiles.Any(f => ArtifactValidator.HasValidArtifacts(f.Path));
     }
 
     /// <summary>Поиск исполняемых файлов и распаковка архивов — вне UI-потока.</summary>
@@ -169,7 +169,8 @@ public SfaPage()
             Name = Path.GetFileName(path),
             Path = Path.GetFullPath(path),
             Size = size,
-            Status = File.Exists(Path.Combine(Path.GetDirectoryName(path)!, Path.GetFileName(path) + ".i64"))
+            // Готовность — по валидной базе и валидному export.json.
+            Status = ArtifactValidator.HasValidArtifacts(path)
                 ? AnalysisStatus.Success
                 : AnalysisStatus.NotAnalyzed,
         };
@@ -212,8 +213,8 @@ public SfaPage()
             return;
         }
 
-        var withIdb = files.Where(f => File.Exists(f.ExpectedI64Path)).ToList();
-        var withoutIdb = files.Where(f => !File.Exists(f.ExpectedI64Path)).ToList();
+        var withIdb = files.Where(f => ArtifactValidator.IsValidIdaDatabase(f.ExpectedI64Path, out _)).ToList();
+        var withoutIdb = files.Where(f => !ArtifactValidator.IsValidIdaDatabase(f.ExpectedI64Path, out _)).ToList();
         var exportOnly = false;
 
         if (withIdb.Count > 0)
@@ -324,6 +325,7 @@ public SfaPage()
         });
         w.ExportFileCompleted += (name, ok) => RunOnUi(() =>
         {
+            SetFileStatusByName(name, ok ? AnalysisStatus.Success : AnalysisStatus.Error);
             if (!ok) AppendError($"Ошибка экспорта для {name}");
             else AppendLog($"[Экспорт] {name} — успешно");
         });
@@ -342,7 +344,7 @@ public SfaPage()
         _analysisInProgress = false;
         SfaStartButton.IsEnabled = true;
         SfaCancelButton.IsEnabled = false;
-        SfaProcessStatusText.Text = $"Завершено. Обработано: {succeeded}/{total}";
+        SfaProcessStatusText.Text = $"Завершено. Успешно: {succeeded}/{total}";
         SfaProcessProgress.Value = 100;
         SetSfaProgressRunning(false);
 
@@ -350,7 +352,9 @@ public SfaPage()
         {
             _exportAllAfterAnalysis = false;
             SfaProcessStatusText.Text = "Автоматический экспорт всех баз...";
-            var allIdb = _cachedFiles.Where(f => File.Exists(f.ExpectedI64Path)).Select(f => f.ExpectedI64Path).ToList();
+            var allIdb = _cachedFiles
+                .Where(f => ArtifactValidator.IsValidIdaDatabase(f.ExpectedI64Path, out _))
+                .Select(f => f.ExpectedI64Path).ToList();
             if (allIdb.Count > 0) { _ = StartExportOnlyAsync(allIdb); return; }
             SfaProcessStatusText.Text = "Нет готовых баз для экспорта";
         }

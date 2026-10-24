@@ -156,6 +156,7 @@ public sealed class IdaRunner : IDisposable
         if (ct.IsCancellationRequested) return false;
         if (!File.Exists(file)) return false;
 
+        var startedUtc = DateTime.UtcNow;
         FileStartCallback?.Invoke(Path.GetFileName(file));
 
         var outDir = outputDir ?? Path.GetDirectoryName(file)!;
@@ -178,10 +179,44 @@ public sealed class IdaRunner : IDisposable
         psi.ArgumentList.Add(file);
 
         var ok = await RunProcessWithCancelAsync(psi, file, ct);
-        if (!ok) return false;
+        if (!ok)
+        {
+            DeletePartialBase(idbPath, startedUtc);
+            return false;
+        }
 
-        if (File.Exists(Path.ChangeExtension(idbPath, ".id0"))) return false; // IDA рухнула
-        return File.Exists(idbPath);
+        if (File.Exists(Path.ChangeExtension(idbPath, ".id0")))
+        {
+            DeletePartialBase(idbPath, startedUtc);
+            return false; // IDA рухнула
+        }
+        if (!File.Exists(idbPath)) return false;
+        try
+        {
+            if (new FileInfo(idbPath).Length == 0)
+            {
+                DeletePartialBase(idbPath, startedUtc);
+                return false;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>Удаляет только ту базу, которую создал или изменил текущий запуск:
+    /// старую валидную базу при неудачном resume не трогаем.</summary>
+    private static void DeletePartialBase(string idbPath, DateTime startedUtc)
+    {
+        try
+        {
+            if (!File.Exists(idbPath)) return;
+            if (File.GetLastWriteTimeUtc(idbPath) >= startedUtc.AddSeconds(-2))
+                File.Delete(idbPath);
+        }
+        catch { /* файл занят — оставляем как есть */ }
     }
 
     private async Task<bool> RunScriptOnBaseAsync(
@@ -189,6 +224,9 @@ public sealed class IdaRunner : IDisposable
     {
         if (ct.IsCancellationRequested) return false;
         if (!File.Exists(idbPath) || !File.Exists(scriptPath)) return false;
+        // Скрипт запускается только на готовой базе; исходник здесь недопустим,
+        // иначе IDA может незаметно переанализировать файл вместо resume.
+        if (!ArtifactValidator.IsBasePath(idbPath)) return false;
 
         FileStartCallback?.Invoke(Path.GetFileName(idbPath));
 

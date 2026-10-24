@@ -139,7 +139,7 @@ public sealed partial class AnalysisPage : Page
         UpdatePlatformBar(PlatformInfo.DetectPlatform(_cachedFiles.Select(f => f.Path)));
 
         Treemap.SetData(_cachedFiles);
-        GenerateHtmlButton.IsEnabled = _cachedFiles.Any(f => File.Exists(f.ExpectedI64Path));
+        GenerateHtmlButton.IsEnabled = _cachedFiles.Any(f => ArtifactValidator.HasValidArtifacts(f.Path));
     }
 
     /// <summary>Поиск исполняемых файлов и распаковка архивов — вне UI-потока.</summary>
@@ -192,7 +192,9 @@ public sealed partial class AnalysisPage : Page
             Name = Path.GetFileName(path),
             Path = Path.GetFullPath(path),
             Size = size,
-            Status = File.Exists(Path.Combine(Path.GetDirectoryName(path)!, Path.GetFileName(path) + ".i64"))
+            // Готовность — по валидной базе и валидному export.json, а не по факту
+            // существования .i64: иначе остатки прошлого запуска выглядят результатом.
+            Status = ArtifactValidator.HasValidArtifacts(path)
                 ? AnalysisStatus.Success
                 : AnalysisStatus.NotAnalyzed,
         };
@@ -238,8 +240,8 @@ public sealed partial class AnalysisPage : Page
             return;
         }
 
-        var withIdb = files.Where(f => File.Exists(f.ExpectedI64Path)).ToList();
-        var withoutIdb = files.Where(f => !File.Exists(f.ExpectedI64Path)).ToList();
+        var withIdb = files.Where(f => ArtifactValidator.IsValidIdaDatabase(f.ExpectedI64Path, out _)).ToList();
+        var withoutIdb = files.Where(f => !ArtifactValidator.IsValidIdaDatabase(f.ExpectedI64Path, out _)).ToList();
 
         var exportOnly = false;
         if (withIdb.Count > 0)
@@ -337,6 +339,8 @@ public sealed partial class AnalysisPage : Page
         });
         w.ExportFileCompleted += (name, ok) => RunOnUi(() =>
         {
+            // Финальный статус файла — по результату экспорта, а не по созданию базы.
+            SetFileStatusByName(name, ok ? AnalysisStatus.Success : AnalysisStatus.Error);
             if (!ok) AppendError($"Ошибка экспорта для {name}");
             else AppendLog($"[Экспорт] {name} — успешно");
             AnalysisMonitor.MarkCompleted(AnalysisMonitor.NormalizeName(name), ok);
@@ -357,17 +361,19 @@ public sealed partial class AnalysisPage : Page
         StartAnalysisButton.IsEnabled = true;
         DetailsButton.IsEnabled = false;
         CancelButton.IsEnabled = false;
-        ProcessStatusText.Text = $"Завершено. Обработано: {succeeded}/{total}";
+        ProcessStatusText.Text = $"Завершено. Успешно: {succeeded}/{total}";
         SetProgressRunning(false);  // вернуть в простой
         AppNotifier.Notify("Анализ завершён",
-            $"Обработано: {succeeded}/{total}.");
+            $"Успешно: {succeeded}/{total}.");
         AnalysisMonitor.EndSession();
 
         if (_exportAllAfterAnalysis && succeeded > 0)
         {
             _exportAllAfterAnalysis = false;
             ProcessStatusText.Text = "Автоматический экспорт всех баз...";
-            var allIdb = _cachedFiles.Where(f => File.Exists(f.ExpectedI64Path)).Select(f => f.ExpectedI64Path).ToList();
+            var allIdb = _cachedFiles
+                .Where(f => ArtifactValidator.IsValidIdaDatabase(f.ExpectedI64Path, out _))
+                .Select(f => f.ExpectedI64Path).ToList();
             if (allIdb.Count > 0)
             {
                 _ = StartExportOnlyAsync(allIdb);
