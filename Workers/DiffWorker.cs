@@ -379,7 +379,7 @@ public sealed class DiffWorker : IDisposable
         psi.ArgumentList.Add("-OBinExportAutoAction:BinExportBinary");
         psi.ArgumentList.Add($"-OBinExportModule:{outputFile}");
         psi.ArgumentList.Add(i64Path);
-        var (rc, _, _) = await RunProcAsync(psi, relKey, ct, ProcessTimeouts.BinExport);
+        var (rc, _, _) = await RunProcAsync(psi, relKey, ct);
         return rc == 0 && File.Exists(outputFile);
     }
 
@@ -402,7 +402,7 @@ public sealed class DiffWorker : IDisposable
             psi.ArgumentList.Add("--primary"); psi.ArgumentList.Add(primary);
             psi.ArgumentList.Add("--secondary"); psi.ArgumentList.Add(secondary);
             psi.ArgumentList.Add("--output_dir"); psi.ArgumentList.Add(tmpDir);
-            var (rc, _, _) = await RunProcAsync(psi, relKey, ct, ProcessTimeouts.BinDiff);
+            var (rc, _, _) = await RunProcAsync(psi, relKey, ct);
             if (rc != 0) return false;
 
             var diffFiles = Directory.GetFiles(tmpDir, "*.BinDiff");
@@ -649,7 +649,7 @@ public sealed class DiffWorker : IDisposable
             psi.ArgumentList.Add("-A");
             psi.ArgumentList.Add($"-S\"{ExportScript}\" pseudocode=1");
             psi.ArgumentList.Add(i64);
-            var (rc, _, _) = await RunProcAsync(psi, relKey, ct, ProcessTimeouts.ExportJson);
+            var (rc, _, _) = await RunProcAsync(psi, relKey, ct);
             if (rc != 0) continue;
 
             var src = i64 + ".export.json";
@@ -1951,8 +1951,7 @@ public sealed class DiffWorker : IDisposable
 
     internal record ProcResult(int ExitCode, string Stdout, string Stderr);
 
-    private async Task<ProcResult> RunProcAsync(ProcessStartInfo psi, string relKey, CancellationToken ct,
-        TimeSpan? timeout = null)
+    private async Task<ProcResult> RunProcAsync(ProcessStartInfo psi, string relKey, CancellationToken ct)
     {
         using var proc = Process.Start(psi);
         if (proc == null)
@@ -1967,20 +1966,12 @@ public sealed class DiffWorker : IDisposable
 
         var so = proc.StandardOutput.ReadToEndAsync();
         var se = proc.StandardError.ReadToEndAsync();
-        var limit = timeout ?? ProcessTimeouts.ExportJson;
         try
         {
             try
             {
-                await proc.WaitForExitAsync(ct).WaitAsync(limit, ct);
-            }
-            catch (TimeoutException)
-            {
-                try { proc.Kill(entireProcessTree: true); } catch { /* уже завершён */ }
-                ErrorOccurred?.Invoke(
-                    $"{relKey}: процесс не завершился за {limit.TotalMinutes:0} мин — остановлен по таймауту");
-                await Task.WhenAll(so, se);
-                return new ProcResult(-2, await so, await se);
+                // Ждём полного завершения: большие модули могут считаться часами.
+                await proc.WaitForExitAsync(ct);
             }
             catch (OperationCanceledException)
             {
@@ -2008,7 +1999,7 @@ public sealed class DiffWorker : IDisposable
     /// считается только одновременное затишье обоих сигналов.
     /// </summary>
     private async Task<ProcResult> RunProcWithPulseAsync(ProcessStartInfo psi, string relKey, string phaseLabel,
-        string? watchDbPath, CancellationToken ct, TimeSpan? timeout = null)
+        string? watchDbPath, CancellationToken ct)
     {
         using var proc = Process.Start(psi);
         if (proc == null)
@@ -2020,7 +2011,6 @@ public sealed class DiffWorker : IDisposable
         PairProcessStarted?.Invoke(relKey, pid);
         ProcessRegistry.Register(pid);
         JobObject.Current?.Assign(proc);
-        var limit = timeout ?? ProcessTimeouts.Diaphora;
 
         // stdout читаем построчно: из него же берём прогресс экспорта Diaphora.
         var progress = new ExportProgress();
@@ -2046,15 +2036,6 @@ public sealed class DiffWorker : IDisposable
                 if (proc.HasExited) break;
 
                 var elapsed = started.Elapsed;
-                if (elapsed >= limit)
-                {
-                    ErrorOccurred?.Invoke(
-                        $"Diaphora {relKey}: превышен лимит {limit.TotalMinutes:0} мин — процесс остановлен.");
-                    try { proc.Kill(entireProcessTree: true); } catch { }
-                    await Task.WhenAll(so, se);
-                    return new ProcResult(-2, await so, await se);
-                }
-
                 var ws = ProcWorkingSet(proc);
                 var size = watchDbPath != null ? DiaphoraDbSize(watchDbPath) : -1;
                 if (ws != lastWs || (watchDbPath != null && size != lastSize))

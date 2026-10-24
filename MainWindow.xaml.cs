@@ -89,7 +89,9 @@ public sealed partial class MainWindow : Window
         _diffPage?.CancelAll();
         _sfaPage?.CancelAll();
 
-        await ProcessRegistry.WaitForExitAsync(ProcessTimeouts.ShutdownWait);
+        // Ожидание завершения при закрытии (не таймаут фазы): даём процессам
+        // корректно завершиться, затем добиваем оставшиеся.
+        await ProcessRegistry.WaitForExitAsync(TimeSpan.FromSeconds(10));
         ProcessRegistry.KillAll();
         JobObject.Current?.Terminate();
 

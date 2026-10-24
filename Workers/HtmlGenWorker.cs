@@ -154,21 +154,9 @@ public sealed class HtmlGenWorker : IDisposable
             var stdoutTask = ReadStdoutAsync(_proc, result);
             var stderrTask = _proc.StandardError.ReadToEndAsync();
 
-            // Жёсткий предел: мост может зависнуть на npx/сети/шаблоне.
-            var finished = false;
-            try
-            {
-                finished = _proc.WaitForExit((int)ProcessTimeouts.HtmlGeneration.TotalMilliseconds);
-            }
-            catch { finished = true; /* процесс уже завершился */ }
-
-            if (!finished)
-            {
-                ErrorOccurred?.Invoke("Генерация HTML: превышен лимит времени — процесс остановлен.");
-                try { _proc.Kill(entireProcessTree: true); } catch { /* уже завершён */ }
-                try { _proc.WaitForExit(5000); } catch { /* не отвечает */ }
-            }
-
+            // Ждём полного завершения моста: большие наборы могут генерироваться
+            // долго. Прерывание — только по явной отмене (Cancel/Dispose).
+            _proc.WaitForExit();
             Task.WhenAll(stdoutTask, stderrTask).GetAwaiter().GetResult();
             ProcessRegistry.Unregister(_proc.Id);
 

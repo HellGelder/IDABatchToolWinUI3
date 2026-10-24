@@ -95,8 +95,8 @@ public static class ArchiveHandler
                 psi.ArgumentList.Add($"-o{outputDir}");
                 psi.ArgumentList.Add("-y");
 
-                // Архив может быть повреждён; без таймаута 7z способен висеть.
-                var result = ProcessRunner.RunAsync(psi, ProcessTimeouts.SevenZip, CancellationToken.None)
+                // Ждём полного завершения 7z; прерывание — только по отмене.
+                var result = ProcessRunner.RunAsync(psi, CancellationToken.None)
                     .GetAwaiter().GetResult();
                 if (!result.Started || result.ExitCode != 0)
                 {

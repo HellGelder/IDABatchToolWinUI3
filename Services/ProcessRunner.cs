@@ -8,17 +8,15 @@ public sealed record ProcessResult(
     int ExitCode,
     string Stdout,
     string Stderr,
-    bool TimedOut,
     bool Cancelled,
     TimeSpan Duration)
 {
-    public bool Success => Started && !TimedOut && !Cancelled && ExitCode == 0;
+    public bool Success => Started && !Cancelled && ExitCode == 0;
 
     /// <summary>Короткое описание для сообщения пользователю.</summary>
     public string Describe(string what)
     {
         if (!Started) return $"{what}: не удалось запустить процесс";
-        if (TimedOut) return $"{what}: таймаут ({Duration.TotalMinutes:0} мин)";
         if (Cancelled) return $"{what}: отменено";
         var tail = LastLines(Stderr, 3);
         if (string.IsNullOrEmpty(tail)) tail = LastLines(Stdout, 3);
@@ -40,14 +38,14 @@ public sealed record ProcessResult(
 
 /// <summary>
 /// Единая точка запуска внешних процессов: читает оба потока одновременно,
-/// назначает процесс в Job Object, регистрирует PID, поддерживает отмену и
-/// жёсткий таймаут (по истечении дерево процессов убивается).
+/// назначает процесс в Job Object, регистрирует PID и поддерживает отмену.
+/// Жёстких таймаутов нет: большие модули могут анализироваться часами,
+/// дождаться полного завершения — требование владельца.
 /// </summary>
 public static class ProcessRunner
 {
     public static async Task<ProcessResult> RunAsync(
         ProcessStartInfo psi,
-        TimeSpan? timeout,
         CancellationToken ct,
         Action<int>? onStarted = null)
     {
@@ -57,11 +55,11 @@ public static class ProcessRunner
         try
         {
             if (!proc.Start())
-                return new ProcessResult(false, -1, "", "Process.Start вернул false", false, false, started.Elapsed);
+                return new ProcessResult(false, -1, "", "Process.Start вернул false", false, started.Elapsed);
         }
         catch (Exception e)
         {
-            return new ProcessResult(false, -1, "", e.Message, false, false, started.Elapsed);
+            return new ProcessResult(false, -1, "", e.Message, false, started.Elapsed);
         }
 
         var pid = proc.Id;
@@ -72,19 +70,10 @@ public static class ProcessRunner
         var stdoutTask = proc.StandardOutput.ReadToEndAsync();
         var stderrTask = proc.StandardError.ReadToEndAsync();
 
-        var timedOut = false;
         var cancelled = false;
         try
         {
-            if (timeout is { } limit)
-                await proc.WaitForExitAsync(ct).WaitAsync(limit, ct);
-            else
-                await proc.WaitForExitAsync(ct);
-        }
-        catch (TimeoutException)
-        {
-            timedOut = true;
-            TryKill(proc);
+            await proc.WaitForExitAsync(ct);
         }
         catch (OperationCanceledException)
         {
@@ -102,8 +91,8 @@ public static class ProcessRunner
         var stderr = await SafeReadAsync(stderrTask);
         ProcessRegistry.Unregister(pid);
 
-        var exitCode = timedOut || cancelled ? -1 : SafeExitCode(proc);
-        return new ProcessResult(true, exitCode, stdout, stderr, timedOut, cancelled, started.Elapsed);
+        var exitCode = cancelled ? -1 : SafeExitCode(proc);
+        return new ProcessResult(true, exitCode, stdout, stderr, cancelled, started.Elapsed);
     }
 
     private static void TryKill(Process proc)

@@ -167,7 +167,7 @@ public sealed class IdaRunner : IDisposable
         psi.ArgumentList.Add(file);
 
         var result = await ProcessRunner.RunAsync(
-            psi, ProcessTimeouts.AnalyzeFile, ct,
+            psi, ct,
             pid => ProcessStartedCallback?.Invoke(Path.GetFileName(file), pid, Environment.CurrentManagedThreadId));
 
         if (!result.Success)
@@ -251,7 +251,7 @@ public sealed class IdaRunner : IDisposable
         psi.ArgumentList.Add(idbPath);
 
         var result = await ProcessRunner.RunAsync(
-            psi, ProcessTimeouts.ExportJson, ct,
+            psi, ct,
             pid => ProcessStartedCallback?.Invoke(Path.GetFileName(idbPath), pid, Environment.CurrentManagedThreadId));
 
         if (!result.Success)

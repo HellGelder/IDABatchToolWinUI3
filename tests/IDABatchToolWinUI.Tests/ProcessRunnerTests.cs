@@ -24,12 +24,11 @@ public sealed class ProcessRunnerTests
     [Fact]
     public async Task ExitZero_IsSuccess()
     {
-        var result = await ProcessRunner.RunAsync(Cmd("exit 0"), TimeSpan.FromSeconds(10), CancellationToken.None);
+        var result = await ProcessRunner.RunAsync(Cmd("exit 0"), CancellationToken.None);
 
         Assert.True(result.Started);
         Assert.True(result.Success, result.Describe("cmd"));
         Assert.Equal(0, result.ExitCode);
-        Assert.False(result.TimedOut);
         Assert.False(result.Cancelled);
     }
 
@@ -37,7 +36,7 @@ public sealed class ProcessRunnerTests
     public async Task NonZeroExit_IsFailureAndCapturesStderr()
     {
         var result = await ProcessRunner.RunAsync(
-            Cmd("echo boom 1>&2 & exit 3"), TimeSpan.FromSeconds(10), CancellationToken.None);
+            Cmd("echo boom 1>&2 & exit 3"), CancellationToken.None);
 
         Assert.True(result.Started);
         Assert.False(result.Success);
@@ -46,24 +45,12 @@ public sealed class ProcessRunnerTests
     }
 
     [Fact]
-    public async Task Timeout_KillsProcess()
-    {
-        var result = await ProcessRunner.RunAsync(
-            Cmd("ping -n 10 127.0.0.1 >nul"), TimeSpan.FromMilliseconds(400), CancellationToken.None);
-
-        Assert.True(result.Started);
-        Assert.True(result.TimedOut);
-        Assert.False(result.Success);
-        Assert.Contains("таймаут", result.Describe("ping"));
-    }
-
-    [Fact]
     public async Task Cancellation_KillsProcess()
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(400));
 
         var result = await ProcessRunner.RunAsync(
-            Cmd("ping -n 10 127.0.0.1 >nul"), TimeSpan.FromSeconds(30), cts.Token);
+            Cmd("ping -n 10 127.0.0.1 >nul"), cts.Token);
 
         Assert.True(result.Started);
         Assert.True(result.Cancelled);
@@ -81,7 +68,7 @@ public sealed class ProcessRunnerTests
             RedirectStandardError = true,
         };
 
-        var result = await ProcessRunner.RunAsync(psi, TimeSpan.FromSeconds(5), CancellationToken.None);
+        var result = await ProcessRunner.RunAsync(psi, CancellationToken.None);
 
         Assert.False(result.Started);
         Assert.False(result.Success);
