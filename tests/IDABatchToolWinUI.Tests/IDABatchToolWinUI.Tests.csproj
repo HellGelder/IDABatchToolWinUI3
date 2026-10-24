@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <PackageReference Include="xunit.v3" Version="4.0.2" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
   </ItemGroup>
 
   <!--
@@ -31,6 +32,13 @@
     <Compile Include="..\..\Services\JobObject.cs" Link="Linked\JobObject.cs" />
     <Compile Include="..\..\Services\ProcessRunner.cs" Link="Linked\ProcessRunner.cs" />
     <Compile Include="..\..\Diff\HexdumpDiffService.cs" Link="Linked\HexdumpDiffService.cs" />
+    <Compile Include="..\..\Diff\DiffJson.cs" Link="Linked\DiffJson.cs" />
+    <Compile Include="..\..\Models\FileItem.cs" Link="Linked\FileItem.cs" />
+    <Compile Include="..\..\Services\AppConstants.cs" Link="Linked\AppConstants.cs" />
+    <Compile Include="..\..\Diff\BinDiffParser.cs" Link="Linked\BinDiffParser.cs" />
+    <Compile Include="..\..\Diff\DiaphoraParser.cs" Link="Linked\DiaphoraParser.cs" />
+    <Compile Include="..\..\Diff\DiffJsonEnricher.cs" Link="Linked\DiffJsonEnricher.cs" />
+    <Compile Include="..\..\Diff\IdenticalPairsService.cs" Link="Linked\IdenticalPairsService.cs" />
   </ItemGroup>
 
 </Project>
