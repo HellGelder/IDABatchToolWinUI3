@@ -1,5 +1,6 @@
-﻿using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml;
 using System.IO;
+using IDABatchToolWinUI.Services;
 
 namespace IDABatchToolWinUI;
 
@@ -38,6 +39,10 @@ public partial class App : Application
     /// <param name="args">Details about the launch request and process.</param>
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
+        // Job Object с KILL_ON_JOB_CLOSE: при завершении приложения (включая
+        // аварийное) ОС сама убивает дочерние idat/python/bindiff/7z.
+        JobObject.Current = JobObject.Create();
+
         _window = new MainWindow();
         _window.Activate();
     }

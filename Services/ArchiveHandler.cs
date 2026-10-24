@@ -88,15 +88,21 @@ public static class ArchiveHandler
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
+                    CreateNoWindow = true,
                 };
                 psi.ArgumentList.Add("x");
                 psi.ArgumentList.Add(archive);
                 psi.ArgumentList.Add($"-o{outputDir}");
                 psi.ArgumentList.Add("-y");
-                using var proc = Process.Start(psi);
-                if (proc == null) { TryDeleteDir(outputDir); return null; }
-                proc.WaitForExit();
-                if (proc.ExitCode != 0) { TryDeleteDir(outputDir); return null; }
+
+                // Архив может быть повреждён; без таймаута 7z способен висеть.
+                var result = ProcessRunner.RunAsync(psi, ProcessTimeouts.SevenZip, CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                if (!result.Started || result.ExitCode != 0)
+                {
+                    TryDeleteDir(outputDir);
+                    return null;
+                }
                 return outputDir;
             }
         }

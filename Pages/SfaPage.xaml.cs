@@ -30,13 +30,10 @@ public SfaPage()
     {
         InitializeComponent();
         _cfg = ConfigService.Load();
-        // Потоки IDA: по умолчанию — максимум аппаратных возможностей (логические
-        // процессоры). max_ida: 0 в config.yaml означает «авто»; сохранённое
-        // значение учитывается, но не выше числа процессоров.
-        SfaMaxIdaSlider.Maximum = Environment.ProcessorCount;
-        SfaMaxIdaSlider.Value = _cfg.MaxIda > 0
-            ? Math.Min(_cfg.MaxIda, Environment.ProcessorCount)
-            : Environment.ProcessorCount;
+        // max_ida: 0 = дефолт 4; значение ограничено разумным максимумом.
+        var configuredThreads = _cfg.MaxIda > 0 ? _cfg.MaxIda : 4;
+        SfaMaxIdaSlider.Maximum = Math.Max(8, Environment.ProcessorCount);
+        SfaMaxIdaSlider.Value = Math.Clamp(configuredThreads, 1, (int)SfaMaxIdaSlider.Maximum);
         // Предупреждение о повышенной нагрузке при потоках по максимуму железа
         SfaMaxIdaSlider.ValueChanged += (_, _) => UpdateThreadsWarning();
         UpdateThreadsWarning();
@@ -59,6 +56,20 @@ public SfaPage()
     }
 
     public bool IsAnalysisRunning() => _analysisInProgress || _htmlInProgress || _docsInProgress;
+
+    /// <summary>Есть ли активная работа (для закрытия окна).</summary>
+    public bool IsBusy => _analysisInProgress || _htmlInProgress || _docsInProgress;
+
+    /// <summary>Отменяет все текущие операции (для закрытия окна).</summary>
+    public void CancelAll()
+    {
+        _analysisCancelled = true;
+        _worker?.Cancel();
+        _htmlCancelled = true;
+        _htmlWorker?.Cancel();
+        _docsCancelled = true;
+        _docsWorker?.Cancel();
+    }
 
     /// <summary>Инфобар-ворнинг: потоки на максимуме аппаратных возможностей.</summary>
     private void UpdateThreadsWarning()
@@ -363,6 +374,7 @@ public SfaPage()
         var anyJson = !string.IsNullOrEmpty(inputDir) && Directory.Exists(inputDir) &&
             ExecutableFinder.SafeEnumerateFiles(inputDir).Any(f => f.EndsWith(".export.json", StringComparison.OrdinalIgnoreCase));
         SfaGenerateHtmlButton.IsEnabled = anyJson;
+        _worker?.Dispose();
         _worker = null;
         RefreshFileList();
 
@@ -432,6 +444,7 @@ public SfaPage()
             ? "Поиск документации отменён"
             : $"Документация готова: найдено {result.FoundCount} из {result.SearchedCount}"
               + (result.CachedTotal > 0 ? $" (в кэше {result.CachedTotal} функций)" : "");
+        _docsWorker?.Dispose();
         _docsWorker = null;
     }
 
@@ -609,6 +622,7 @@ public SfaPage()
         SfaProcessProgress.Value = SfaProcessProgress.Maximum;
         SetSfaProgressRunning(false);
         SfaProcessStatusText.Text = _htmlCancelled ? "Генерация отменена" : "Готово";
+        _htmlWorker?.Dispose();
         _htmlWorker = null;
 
         if (_htmlCancelled) return;

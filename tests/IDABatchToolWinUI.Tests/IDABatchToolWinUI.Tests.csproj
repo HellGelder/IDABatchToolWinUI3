@@ -23,7 +23,12 @@
   -->
   <ItemGroup>
     <Compile Include="..\..\Services\ArtifactValidator.cs" Link="Linked\ArtifactValidator.cs" />
+    <Compile Include="..\..\Services\ArtifactCleanup.cs" Link="Linked\ArtifactCleanup.cs" />
     <Compile Include="..\..\Services\OutcomeTracker.cs" Link="Linked\OutcomeTracker.cs" />
+    <Compile Include="..\..\Services\ProcessTimeouts.cs" Link="Linked\ProcessTimeouts.cs" />
+    <Compile Include="..\..\Services\ProcessRegistry.cs" Link="Linked\ProcessRegistry.cs" />
+    <Compile Include="..\..\Services\JobObject.cs" Link="Linked\JobObject.cs" />
+    <Compile Include="..\..\Services\ProcessRunner.cs" Link="Linked\ProcessRunner.cs" />
   </ItemGroup>
 
 </Project>

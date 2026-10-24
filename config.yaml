@@ -2,8 +2,8 @@ ida:
   executable: idat.exe
 bindiff:
   executable: bindiff.exe
-# 0 = авто: число логических процессоров машины
-max_ida: 0
+# 0 = дефолт 4 (разумный предел для лицензии IDA)
+max_ida: 4
 default_inputdir: .
 log_level: INFO
 theme: light

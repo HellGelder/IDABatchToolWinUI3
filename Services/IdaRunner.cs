@@ -11,7 +11,6 @@ public sealed record FileResult(string FileName, bool Success);
 /// </summary>
 public sealed class IdaRunner : IDisposable
 {
-    private const double PollIntervalSec = 0.5;
     private const int CleanupRetries = 3;
     private const double CleanupRetryDelaySec = 1.0;
 
@@ -25,6 +24,9 @@ public sealed class IdaRunner : IDisposable
 
     /// <summary>(имя цели, PID процесса IDA, managed thread id) — вызывается сразу после запуска процесса.</summary>
     public Action<string, int, int>? ProcessStartedCallback { get; set; }
+
+    /// <summary>Причина неудачи процесса — для журнала и UI (код выхода, хвост stderr).</summary>
+    public Action<string>? ErrorCallback { get; set; }
 
     public IdaRunner(string idatPath, int maxWorkers)
     {
@@ -45,21 +47,7 @@ public sealed class IdaRunner : IDisposable
             foreach (var (f, ok) in results)
             {
                 if (!ok) continue;
-                var outDir = outputDir ?? Path.GetDirectoryName(f)!;
-                var idbPath = Path.Combine(outDir, Path.GetFileName(f) + ".i64");
-                var logPath = Path.Combine(outDir, Path.GetFileName(f) + ".log");
-                if (cleanup)
-                {
-                    SafeDelete(logPath);
-                    SafeDelete(Path.ChangeExtension(idbPath, ".asm"));
-                }
-                if (tempCleanup)
-                {
-                    foreach (var ext in new[] { ".id0", ".id1", ".nam", ".til" })
-                        if (Directory.Exists(outDir))
-                            foreach (var tmp in Directory.GetFiles(outDir, "*" + ext))
-                                SafeDelete(tmp);
-                }
+                ArtifactCleanup.DeleteKnownArtifacts(f, cleanup, tempCleanup);
             }
         }
         return results;
@@ -178,29 +166,40 @@ public sealed class IdaRunner : IDisposable
         psi.ArgumentList.Add("-P+");
         psi.ArgumentList.Add(file);
 
-        var ok = await RunProcessWithCancelAsync(psi, file, ct);
-        if (!ok)
+        var result = await ProcessRunner.RunAsync(
+            psi, ProcessTimeouts.AnalyzeFile, ct,
+            pid => ProcessStartedCallback?.Invoke(Path.GetFileName(file), pid, Environment.CurrentManagedThreadId));
+
+        if (!result.Success)
         {
+            ErrorCallback?.Invoke(result.Describe($"Анализ {Path.GetFileName(file)}"));
             DeletePartialBase(idbPath, startedUtc);
             return false;
         }
 
         if (File.Exists(Path.ChangeExtension(idbPath, ".id0")))
         {
+            ErrorCallback?.Invoke($"Анализ {Path.GetFileName(file)}: IDA оставила .id0 (аварийное завершение)");
             DeletePartialBase(idbPath, startedUtc);
             return false; // IDA рухнула
         }
-        if (!File.Exists(idbPath)) return false;
+        if (!File.Exists(idbPath))
+        {
+            ErrorCallback?.Invoke($"Анализ {Path.GetFileName(file)}: база .i64 не создана");
+            return false;
+        }
         try
         {
             if (new FileInfo(idbPath).Length == 0)
             {
+                ErrorCallback?.Invoke($"Анализ {Path.GetFileName(file)}: база .i64 пустая");
                 DeletePartialBase(idbPath, startedUtc);
                 return false;
             }
         }
-        catch
+        catch (Exception e)
         {
+            ErrorCallback?.Invoke($"Анализ {Path.GetFileName(file)}: {e.Message}");
             return false;
         }
         return true;
@@ -251,40 +250,13 @@ public sealed class IdaRunner : IDisposable
         psi.ArgumentList.Add($"-L{logPath}");
         psi.ArgumentList.Add(idbPath);
 
-        return await RunProcessWithCancelAsync(psi, idbPath, ct);
-    }
+        var result = await ProcessRunner.RunAsync(
+            psi, ProcessTimeouts.ExportJson, ct,
+            pid => ProcessStartedCallback?.Invoke(Path.GetFileName(idbPath), pid, Environment.CurrentManagedThreadId));
 
-    /// <summary>Запуск процесса с опросом и поддержкой отмены (аналог _run_process).</summary>
-    private async Task<bool> RunProcessWithCancelAsync(ProcessStartInfo psi, string target, CancellationToken ct)
-    {
-        try
-        {
-            using var proc = Process.Start(psi);
-            if (proc == null) return false;
-
-            ProcessStartedCallback?.Invoke(Path.GetFileName(target), proc.Id, Environment.CurrentManagedThreadId);
-
-            // Читаем потоки, чтобы не переполнился pipe-буфер
-            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
-            var stderrTask = proc.StandardError.ReadToEndAsync();
-
-            while (!proc.HasExited)
-            {
-                if (ct.IsCancellationRequested)
-                {
-                    try { proc.Kill(entireProcessTree: true); } catch { }
-                    await proc.WaitForExitAsync();
-                    return false;
-                }
-                await Task.Delay(TimeSpan.FromSeconds(PollIntervalSec), CancellationToken.None);
-            }
-            await Task.WhenAll(stdoutTask, stderrTask);
-            return proc.ExitCode == 0;
-        }
-        catch
-        {
-            return false;
-        }
+        if (!result.Success)
+            ErrorCallback?.Invoke(result.Describe($"Экспорт {Path.GetFileName(idbPath)}"));
+        return result.Success;
     }
 
     private static void SafeDelete(string file, int retries = CleanupRetries, double delay = CleanupRetryDelaySec)

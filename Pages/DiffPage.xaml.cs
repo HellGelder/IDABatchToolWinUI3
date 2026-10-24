@@ -91,6 +91,16 @@ public DiffPage()
 
     public bool IsDiffRunning() => _diffInProgress || _gitDiffInProgress;
 
+    /// <summary>Есть ли активная работа (для закрытия окна).</summary>
+    public bool IsBusy => _diffInProgress || _gitDiffInProgress;
+
+    /// <summary>Отменяет все текущие операции (для закрытия окна).</summary>
+    public void CancelAll()
+    {
+        _worker?.Cancel();
+        _gitDiffCts?.Cancel();
+    }
+
     /// <summary>«i» у радиокнопки BinDiff: нажатие тоглит TeachingTip.</summary>
     private void BindiffInfoButton_Click(object sender, RoutedEventArgs e)
         => BindiffTip.IsOpen = !BindiffTip.IsOpen;
@@ -367,7 +377,8 @@ public DiffPage()
         if (allRows != null) ApplyInitialStatuses(allRows);
 
         _worker = new DiffWorker(rows, idatPath, bindiffPath, outputPath, engine,
-            left, right, addOutputPath);
+            left, right, addOutputPath,
+            maxWorkers: _cfg.MaxIda > 0 ? _cfg.MaxIda : 4);
         HookWorker(_worker);
         _worker.Start();
     }
@@ -503,6 +514,7 @@ public DiffPage()
             GenerateReportButton.IsEnabled = anyJson;
         }
 
+        _worker?.Dispose();
         _worker = null;
     }
 

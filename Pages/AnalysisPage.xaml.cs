@@ -26,13 +26,10 @@ public sealed partial class AnalysisPage : Page
     {
         InitializeComponent();
         _cfg = ConfigService.Load();
-        // Потоки IDA: по умолчанию — максимум аппаратных возможностей (логические
-        // процессоры). max_ida: 0 в config.yaml означает «авто»; сохранённое
-        // значение учитывается, но не выше числа процессоров.
-        MaxIdaSlider.Maximum = Environment.ProcessorCount;
-        MaxIdaSlider.Value = _cfg.MaxIda > 0
-            ? Math.Min(_cfg.MaxIda, Environment.ProcessorCount)
-            : Environment.ProcessorCount;
+        // max_ida: 0 = дефолт 4; значение ограничено разумным максимумом.
+        var configuredThreads = _cfg.MaxIda > 0 ? _cfg.MaxIda : 4;
+        MaxIdaSlider.Maximum = Math.Max(8, Environment.ProcessorCount);
+        MaxIdaSlider.Value = Math.Clamp(configuredThreads, 1, (int)MaxIdaSlider.Maximum);
         // Предупреждение о повышенной нагрузке при потоках по максимуму железа
         MaxIdaSlider.ValueChanged += (_, _) => UpdateThreadsWarning();
         UpdateThreadsWarning();
@@ -80,6 +77,16 @@ public sealed partial class AnalysisPage : Page
     }
 
     public bool IsAnalysisRunning() => _analysisInProgress || _htmlInProgress;
+
+    /// <summary>Есть ли активная работа (для закрытия окна).</summary>
+    public bool IsBusy => _analysisInProgress || _htmlInProgress;
+
+    /// <summary>Отменяет все текущие операции (для закрытия окна).</summary>
+    public void CancelAll()
+    {
+        _worker?.Cancel();
+        _htmlWorker?.Cancel();
+    }
 
     // ──────────────────────────────────────────────
     //  Список файлов
@@ -376,6 +383,8 @@ public sealed partial class AnalysisPage : Page
                 .Select(f => f.ExpectedI64Path).ToList();
             if (allIdb.Count > 0)
             {
+                _worker?.Dispose();
+                _worker = null;
                 _ = StartExportOnlyAsync(allIdb);
                 return;
             }
@@ -388,6 +397,7 @@ public sealed partial class AnalysisPage : Page
             var anyJson = ExecutableFinder.SafeEnumerateFiles(inputDir).Any(f => f.EndsWith(".export.json", StringComparison.OrdinalIgnoreCase));
             GenerateHtmlButton.IsEnabled = anyJson;
         }
+        _worker?.Dispose();
         _worker = null;
         RefreshFileList();
     }
@@ -417,6 +427,7 @@ public sealed partial class AnalysisPage : Page
     private void Cancel_Click(object sender, RoutedEventArgs e)
     {
         _worker?.Cancel();
+        _htmlWorker?.Cancel();
         ProcessStatusText.Text = "Отмена...";
         CancelButton.IsEnabled = false;
     }
@@ -481,7 +492,7 @@ public sealed partial class AnalysisPage : Page
 
         _htmlInProgress = true;
         StartAnalysisButton.IsEnabled = false;
-        CancelButton.IsEnabled = false;
+        CancelButton.IsEnabled = true;
         GenerateHtmlButton.IsEnabled = false;
         SetProgressRunning(true);   // running-индикатор
         ProcessStatusText.Text = "Генерация HTML-отчётов...";
@@ -512,6 +523,7 @@ public sealed partial class AnalysisPage : Page
         GenerateHtmlButton.IsEnabled = true;
         SetProgressRunning(false);  // вернуть в простой
         ProcessStatusText.Text = "Готово";
+        _htmlWorker?.Dispose();
         _htmlWorker = null;
 
         CleanupAfterReport();
@@ -539,22 +551,14 @@ public sealed partial class AnalysisPage : Page
         var inputDir = InputDirTextBox.Text.Trim();
         if (string.IsNullOrEmpty(inputDir) || !Directory.Exists(inputDir)) return;
 
-        var patterns = new List<string>();
-        if (CleanupCheck.IsChecked == true) patterns.AddRange(new[] { "*.asm", "*.log" });
-        if (TempCleanupCheck.IsChecked == true) patterns.AddRange(new[] { "*.id0", "*.id1", "*.nam", "*.til" });
-        if (patterns.Count == 0) return;
+        var includeLogs = CleanupCheck.IsChecked == true;
+        var includeTemps = TempCleanupCheck.IsChecked == true;
+        if (!includeLogs && !includeTemps) return;
 
-        foreach (var pattern in patterns)
-        {
-            try
-            {
-                foreach (var f in ExecutableFinder.SafeEnumerateFiles(inputDir).Where(x => x.EndsWith(pattern[1..], StringComparison.OrdinalIgnoreCase)))
-                {
-                    try { File.Delete(f); } catch { /* файл занят */ }
-                }
-            }
-            catch { /* каталог недоступен */ }
-        }
+        // Удаляем только артефакты конкретных обработанных файлов, а не все
+        // *.log/*.asm рекурсивно: в папке могут лежать пользовательские файлы.
+        foreach (var item in _cachedFiles)
+            ArtifactCleanup.DeleteKnownArtifacts(item.Path, includeLogs, includeTemps);
     }
 
     // ──────────────────────────────────────────────

@@ -2050,6 +2050,8 @@ def run_generate(args):
         total_size = 0
 
         for jp in sorted(json_files, key=_stat_size_safe, reverse=True):
+            if _CANCEL_EVENT.is_set():
+                fail("Генерация отчётов отменена пользователем.")
             try:
                 with open(jp, "r", encoding="utf-8") as f:
                     data = json.load(f)
@@ -2534,6 +2536,8 @@ def run_generate(args):
         generated = 0
         failed = 0
         for jf in sorted(json_files):
+            if _CANCEL_EVENT.is_set():
+                fail("Генерация отчётов отменена пользователем.")
             html_path = reports_dir / (jf.stem.replace(".diff", "") + ".html")
             try:
                 generate_diff_report(str(jf), str(html_path), str(reports_dir))

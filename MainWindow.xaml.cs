@@ -24,6 +24,9 @@ public sealed partial class MainWindow : Window
     private DiffPage? _diffPage;
     private SfaPage? _sfaPage;
 
+    private bool _allowClose;
+    private bool _closePromptOpen;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -48,6 +51,70 @@ public sealed partial class MainWindow : Window
 
         // Проверка Python-окружения — после показа окна; диалог только при нехватке.
         Activated += OnFirstActivated;
+
+        // Закрытие окна: не оставляем IDA/Python/BinDiff сиротами.
+        AppWindow.Closing += OnAppWindowClosing;
+        Closed += (_, _) =>
+        {
+            JobObject.Current?.Terminate();
+            JobObject.Current?.Dispose();
+            JobObject.Current = null;
+        };
+    }
+
+    private async void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
+    {
+        if (_allowClose) return;
+
+        var busy = _analysisPage?.IsBusy == true
+                   || _diffPage?.IsBusy == true
+                   || _sfaPage?.IsBusy == true
+                   || ProcessRegistry.HasActive;
+        if (!busy)
+        {
+            _allowClose = true;
+            return;
+        }
+
+        args.Cancel = true;
+        if (_closePromptOpen) return;
+        _closePromptOpen = true;
+        bool confirmed = false;
+        try { confirmed = await ShowCloseConfirmAsync(); }
+        catch { confirmed = false; }
+        finally { _closePromptOpen = false; }
+        if (!confirmed) return;
+
+        _analysisPage?.CancelAll();
+        _diffPage?.CancelAll();
+        _sfaPage?.CancelAll();
+
+        await ProcessRegistry.WaitForExitAsync(ProcessTimeouts.ShutdownWait);
+        ProcessRegistry.KillAll();
+        JobObject.Current?.Terminate();
+
+        _allowClose = true;
+        Close();
+    }
+
+    private async Task<bool> ShowCloseConfirmAsync()
+    {
+        // XamlRoot может быть ещё не готов, если закрытие пришло очень рано:
+        // в этом случае не блокируем выход, иначе окно станет невозможно закрыть.
+        var xamlRoot = Content?.XamlRoot;
+        if (xamlRoot == null) return true;
+
+        var dialog = new ContentDialog
+        {
+            Title = "Идут задачи",
+            Content = "Анализ, сравнение или генерация отчётов ещё выполняется. " +
+                      "Отменить задачи и закрыть приложение?",
+            PrimaryButtonText = "Отменить и закрыть",
+            CloseButtonText = "Не закрывать",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = xamlRoot,
+        };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 
     private bool _envCheckStarted;

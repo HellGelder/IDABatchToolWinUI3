@@ -76,7 +76,7 @@ public sealed class DiffWorker : IDisposable
         LeftDir = leftDir;
         RightDir = rightDir;
         AddOutputDir = addOutputDir;
-        MaxWorkers = Math.Min(maxWorkers ?? 6, 6);
+        MaxWorkers = Math.Clamp(maxWorkers ?? 4, 1, 32);
     }
 
     public void Start()
@@ -379,7 +379,7 @@ public sealed class DiffWorker : IDisposable
         psi.ArgumentList.Add("-OBinExportAutoAction:BinExportBinary");
         psi.ArgumentList.Add($"-OBinExportModule:{outputFile}");
         psi.ArgumentList.Add(i64Path);
-        var (rc, _, _) = await RunProcAsync(psi, relKey, ct);
+        var (rc, _, _) = await RunProcAsync(psi, relKey, ct, ProcessTimeouts.BinExport);
         return rc == 0 && File.Exists(outputFile);
     }
 
@@ -402,7 +402,7 @@ public sealed class DiffWorker : IDisposable
             psi.ArgumentList.Add("--primary"); psi.ArgumentList.Add(primary);
             psi.ArgumentList.Add("--secondary"); psi.ArgumentList.Add(secondary);
             psi.ArgumentList.Add("--output_dir"); psi.ArgumentList.Add(tmpDir);
-            var (rc, _, _) = await RunProcAsync(psi, relKey, ct);
+            var (rc, _, _) = await RunProcAsync(psi, relKey, ct, ProcessTimeouts.BinDiff);
             if (rc != 0) return false;
 
             var diffFiles = Directory.GetFiles(tmpDir, "*.BinDiff");
@@ -649,7 +649,7 @@ public sealed class DiffWorker : IDisposable
             psi.ArgumentList.Add("-A");
             psi.ArgumentList.Add($"-S\"{ExportScript}\" pseudocode=1");
             psi.ArgumentList.Add(i64);
-            var (rc, _, _) = await RunProcAsync(psi, relKey, ct);
+            var (rc, _, _) = await RunProcAsync(psi, relKey, ct, ProcessTimeouts.ExportJson);
             if (rc != 0) continue;
 
             var src = i64 + ".export.json";
@@ -682,9 +682,11 @@ public sealed class DiffWorker : IDisposable
             var reportsDir = Path.Combine(OutputDir, "Reports");
             Directory.CreateDirectory(reportsDir);
             var jsonDir = OutputDir;
-            var worker = new HtmlGenWorker("diff", deleteJson: false, reuseCache: false, platform: "Windows");
+            using var worker = new HtmlGenWorker("diff", deleteJson: false, reuseCache: false, platform: "Windows");
             worker.ProgressUpdated += (cur, tot, msg) => StageFile?.Invoke("Генерация HTML", cur, tot, msg);
             worker.ErrorOccurred += e => ErrorOccurred?.Invoke(e);
+            // Отмена diff-воркера должна останавливать и Python-мост (CANCEL в stdin).
+            using var cancelRegistration = ct.Register(worker.Cancel);
 
             var jsonFiles = Directory.GetFiles(jsonDir, "*.diff.json").ToList();
             if (jsonFiles.Count == 0) return;
@@ -1041,9 +1043,10 @@ public sealed class DiffWorker : IDisposable
             var jsonFiles = Directory.GetFiles(AddOutputDir!, "*.diff.json").ToList();
             if (jsonFiles.Count == 0) return;
 
-            var worker = new HtmlGenWorker("diff", deleteJson: false, reuseCache: false, platform: "Windows");
+            using var worker = new HtmlGenWorker("diff", deleteJson: false, reuseCache: false, platform: "Windows");
             worker.ProgressUpdated += (cur, tot, msg) => StageFile?.Invoke("Генерация HTML (доанализ)", cur, tot, msg);
             worker.ErrorOccurred += e => ErrorOccurred?.Invoke(e);
+            using var cancelRegistration = ct.Register(worker.Cancel);
 
             await Task.Run(() => worker.Run(
                 inputDir: LeftDir, reportsDir: reportsDir, jsonDir: AddOutputDir!,
@@ -1948,7 +1951,8 @@ public sealed class DiffWorker : IDisposable
 
     internal record ProcResult(int ExitCode, string Stdout, string Stderr);
 
-    private async Task<ProcResult> RunProcAsync(ProcessStartInfo psi, string relKey, CancellationToken ct)
+    private async Task<ProcResult> RunProcAsync(ProcessStartInfo psi, string relKey, CancellationToken ct,
+        TimeSpan? timeout = null)
     {
         using var proc = Process.Start(psi);
         if (proc == null)
@@ -1956,21 +1960,41 @@ public sealed class DiffWorker : IDisposable
             PairProcessStarted?.Invoke(relKey, -1);
             return new ProcResult(-1, "", "Не удалось запустить процесс");
         }
-        PairProcessStarted?.Invoke(relKey, proc.Id);
+        var pid = proc.Id;
+        PairProcessStarted?.Invoke(relKey, pid);
+        ProcessRegistry.Register(pid);
+        JobObject.Current?.Assign(proc);
+
         var so = proc.StandardOutput.ReadToEndAsync();
         var se = proc.StandardError.ReadToEndAsync();
+        var limit = timeout ?? ProcessTimeouts.ExportJson;
         try
         {
-            await proc.WaitForExitAsync(ct);
+            try
+            {
+                await proc.WaitForExitAsync(ct).WaitAsync(limit, ct);
+            }
+            catch (TimeoutException)
+            {
+                try { proc.Kill(entireProcessTree: true); } catch { /* уже завершён */ }
+                ErrorOccurred?.Invoke(
+                    $"{relKey}: процесс не завершился за {limit.TotalMinutes:0} мин — остановлен по таймауту");
+                await Task.WhenAll(so, se);
+                return new ProcResult(-2, await so, await se);
+            }
+            catch (OperationCanceledException)
+            {
+                // Отмена: гасим дерево процессов, иначе idat.exe остаётся висеть.
+                try { proc.Kill(entireProcessTree: true); } catch { /* уже завершён */ }
+                throw;
+            }
+            await Task.WhenAll(so, se);
+            return new ProcResult(proc.ExitCode, await so, await se);
         }
-        catch (OperationCanceledException)
+        finally
         {
-            // Отмена: гасим дерево процессов, иначе idat.exe остаётся висеть.
-            try { proc.Kill(entireProcessTree: true); } catch { /* уже завершён */ }
-            throw;
+            ProcessRegistry.Unregister(pid);
         }
-        await Task.WhenAll(so, se);
-        return new ProcResult(proc.ExitCode, await so, await se);
     }
 
     /// <summary>
@@ -1984,7 +2008,7 @@ public sealed class DiffWorker : IDisposable
     /// считается только одновременное затишье обоих сигналов.
     /// </summary>
     private async Task<ProcResult> RunProcWithPulseAsync(ProcessStartInfo psi, string relKey, string phaseLabel,
-        string? watchDbPath, CancellationToken ct)
+        string? watchDbPath, CancellationToken ct, TimeSpan? timeout = null)
     {
         using var proc = Process.Start(psi);
         if (proc == null)
@@ -1992,7 +2016,12 @@ public sealed class DiffWorker : IDisposable
             PairProcessStarted?.Invoke(relKey, -1);
             return new ProcResult(-1, "", "Не удалось запустить процесс");
         }
-        PairProcessStarted?.Invoke(relKey, proc.Id);
+        var pid = proc.Id;
+        PairProcessStarted?.Invoke(relKey, pid);
+        ProcessRegistry.Register(pid);
+        JobObject.Current?.Assign(proc);
+        var limit = timeout ?? ProcessTimeouts.Diaphora;
+
         // stdout читаем построчно: из него же берём прогресс экспорта Diaphora.
         var progress = new ExportProgress();
         var so = ReadStdoutWithProgressAsync(proc, progress);
@@ -2017,6 +2046,15 @@ public sealed class DiffWorker : IDisposable
                 if (proc.HasExited) break;
 
                 var elapsed = started.Elapsed;
+                if (elapsed >= limit)
+                {
+                    ErrorOccurred?.Invoke(
+                        $"Diaphora {relKey}: превышен лимит {limit.TotalMinutes:0} мин — процесс остановлен.");
+                    try { proc.Kill(entireProcessTree: true); } catch { }
+                    await Task.WhenAll(so, se);
+                    return new ProcResult(-2, await so, await se);
+                }
+
                 var ws = ProcWorkingSet(proc);
                 var size = watchDbPath != null ? DiaphoraDbSize(watchDbPath) : -1;
                 if (ws != lastWs || (watchDbPath != null && size != lastSize))
@@ -2051,6 +2089,7 @@ public sealed class DiffWorker : IDisposable
         finally
         {
             if (!exitTask.IsCompleted) exitTask.Ignore();
+            ProcessRegistry.Unregister(pid);
         }
         await exitTask;
         await Task.WhenAll(so, se);

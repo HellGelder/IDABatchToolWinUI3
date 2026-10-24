@@ -147,12 +147,30 @@ public sealed class HtmlGenWorker : IDisposable
                 return;
             }
             _stdin = _proc.StandardInput;
+            ProcessRegistry.Register(_proc.Id);
+            JobObject.Current?.Assign(_proc);
 
             var result = new HtmlGenResult { Platform = Platform, InputDir = inputDir, ReportsDir = reportsDir };
             var stdoutTask = ReadStdoutAsync(_proc, result);
             var stderrTask = _proc.StandardError.ReadToEndAsync();
-            _proc.WaitForExit();
+
+            // Жёсткий предел: мост может зависнуть на npx/сети/шаблоне.
+            var finished = false;
+            try
+            {
+                finished = _proc.WaitForExit((int)ProcessTimeouts.HtmlGeneration.TotalMilliseconds);
+            }
+            catch { finished = true; /* процесс уже завершился */ }
+
+            if (!finished)
+            {
+                ErrorOccurred?.Invoke("Генерация HTML: превышен лимит времени — процесс остановлен.");
+                try { _proc.Kill(entireProcessTree: true); } catch { /* уже завершён */ }
+                try { _proc.WaitForExit(5000); } catch { /* не отвечает */ }
+            }
+
             Task.WhenAll(stdoutTask, stderrTask).GetAwaiter().GetResult();
+            ProcessRegistry.Unregister(_proc.Id);
 
             if (_proc.ExitCode != 0 && result.GeneratedCount == 0)
             {
@@ -248,6 +266,20 @@ public sealed class HtmlGenWorker : IDisposable
 
     public void Dispose()
     {
+        try
+        {
+            if (_proc != null)
+            {
+                try
+                {
+                    if (!_proc.HasExited) _proc.Kill(entireProcessTree: true);
+                }
+                catch { /* уже завершён */ }
+                ProcessRegistry.Unregister(_proc.Id);
+            }
+        }
+        catch { /* процесс мог не запуститься */ }
+
         try { _stdin?.Dispose(); } catch { /* уже закрыт */ }
         _proc?.Dispose();
     }

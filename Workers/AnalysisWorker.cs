@@ -56,6 +56,7 @@ public sealed class AnalysisWorker : IDisposable
             FileDoneCallback = (_, _) => { },
         };
         _runner.ProcessStartedCallback = (name, pid, tid) => ProcessStarted?.Invoke(name, pid, tid);
+        _runner.ErrorCallback = msg => ErrorOccurred?.Invoke(msg);
     }
 
     public void Start()
