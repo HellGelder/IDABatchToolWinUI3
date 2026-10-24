@@ -578,7 +578,11 @@ public DiffPage()
     //  Вспомогательное
     // ──────────────────────────────────────────────
 
-    private void AppendError(string message) => AppendLog(message);
+    private void AppendError(string message)
+    {
+        AppLog.Error(message);
+        AppendLog(message);
+    }
 
     /// <summary>Журнал выполнения: дублирует в «Лог выполнения» любые события
     /// (этапы, файлы, статусы пар, ошибки), не только ошибки.</summary>

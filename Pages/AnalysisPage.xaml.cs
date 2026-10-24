@@ -451,7 +451,11 @@ public sealed partial class AnalysisPage : Page
         _taskManagerWindow.Activate();
     }
 
-    private void AppendError(string message) => AppendLog(message);
+    private void AppendError(string message)
+    {
+        AppLog.Error(message);
+        AppendLog(message);
+    }
 
     /// <summary>Журнал выполнения: дублирует в «Лог выполнения» любые события
     /// (этапы, файлы, экспорт, ошибки), не только ошибки.</summary>

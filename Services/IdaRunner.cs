@@ -2,8 +2,6 @@ using System.Diagnostics;
 
 namespace IDABatchToolWinUI.Services;
 
-public sealed record FileResult(string FileName, bool Success);
-
 /// <summary>
 /// Пакетный запуск IDA Pro — аналог ida_batch_tool/ida/runner.py.
 /// Параллельный анализ файлов (создание .i64) и выполнение скриптов на готовых базах.
@@ -11,9 +9,6 @@ public sealed record FileResult(string FileName, bool Success);
 /// </summary>
 public sealed class IdaRunner : IDisposable
 {
-    private const int CleanupRetries = 3;
-    private const double CleanupRetryDelaySec = 1.0;
-
     public int MaxWorkers { get; }
     public string IdatPath { get; }
 
@@ -297,22 +292,6 @@ public sealed class IdaRunner : IDisposable
         yield return idbPath;
         yield return idbPath + ".export.json";
         yield return logPath;
-    }
-
-    private static void SafeDelete(string file, int retries = CleanupRetries, double delay = CleanupRetryDelaySec)
-    {
-        for (int attempt = 1; attempt <= retries; attempt++)
-        {
-            try
-            {
-                if (File.Exists(file)) File.Delete(file);
-                return;
-            }
-            catch
-            {
-                if (attempt < retries) Thread.Sleep(TimeSpan.FromSeconds(delay));
-            }
-        }
     }
 
     public void Dispose() { }

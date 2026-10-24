@@ -56,6 +56,7 @@ public sealed partial class MainWindow : Window
         AppWindow.Closing += OnAppWindowClosing;
         Closed += (_, _) =>
         {
+            AppLog.Info("Завершение приложения");
             JobObject.Current?.Terminate();
             JobObject.Current?.Dispose();
             JobObject.Current = null;

@@ -17,10 +17,6 @@ public sealed class HtmlGenResult
     public string? IndexPath { get; set; }
     public int TotalFiles { get; set; }
     public long TotalSizeBytes { get; set; }
-    public int TotalSystemModules { get; set; }
-    public int TotalSystemFunctions { get; set; }
-    public int TotalSystemNotfound { get; set; }
-    public int TotalImports { get; set; }
     public string Platform { get; set; } = "Windows";
     // Статистика предварительного поиска документации (kind = sfa-docs)
     public int SearchedCount { get; set; }
@@ -211,10 +207,6 @@ public sealed class HtmlGenWorker : IDisposable
             if (root.TryGetProperty("index_path", out var ip)) r.IndexPath = ip.GetString();
             if (root.TryGetProperty("total_files", out var tf)) r.TotalFiles = tf.GetInt32();
             if (root.TryGetProperty("total_size_bytes", out var ts)) r.TotalSizeBytes = ts.GetInt64();
-            if (root.TryGetProperty("total_system_modules", out var m)) r.TotalSystemModules = m.GetInt32();
-            if (root.TryGetProperty("total_system_functions", out var fn)) r.TotalSystemFunctions = fn.GetInt32();
-            if (root.TryGetProperty("total_system_notfound", out var nf)) r.TotalSystemNotfound = nf.GetInt32();
-            if (root.TryGetProperty("total_imports", out var ti)) r.TotalImports = ti.GetInt32();
             if (root.TryGetProperty("platform", out var pf)) r.Platform = pf.GetString() ?? r.Platform;
             if (root.TryGetProperty("reports_dir", out var rd)) r.ReportsDir = rd.GetString();
             if (root.TryGetProperty("searched", out var sd) && sd.ValueKind == JsonValueKind.Number)

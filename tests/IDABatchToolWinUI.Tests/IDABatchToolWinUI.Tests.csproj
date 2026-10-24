@@ -24,6 +24,7 @@
   <ItemGroup>
     <Compile Include="..\..\Services\ArtifactValidator.cs" Link="Linked\ArtifactValidator.cs" />
     <Compile Include="..\..\Services\ArtifactCleanup.cs" Link="Linked\ArtifactCleanup.cs" />
+    <Compile Include="..\..\Services\AppLog.cs" Link="Linked\AppLog.cs" />
     <Compile Include="..\..\Services\OutcomeTracker.cs" Link="Linked\OutcomeTracker.cs" />
     <Compile Include="..\..\Services\ProcessRegistry.cs" Link="Linked\ProcessRegistry.cs" />
     <Compile Include="..\..\Services\ProcessPulse.cs" Link="Linked\ProcessPulse.cs" />

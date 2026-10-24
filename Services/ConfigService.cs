@@ -11,7 +11,7 @@ public sealed class AppConfig
 {
     public string IdaExecutable { get; set; } = AppConstants.IdatDefaultExe;
     public string BindiffExecutable { get; set; } = AppConstants.BindiffDefaultExe;
-    /// <summary>0 = авто: число логических процессоров машины.</summary>
+    /// <summary>0 = дефолт 4 (разумный предел для лицензии IDA).</summary>
     public int MaxIda { get; set; } = 0;
     public string DefaultInputDir { get; set; } = ".";
     public string LogLevel { get; set; } = "INFO";

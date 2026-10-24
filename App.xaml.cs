@@ -1,5 +1,4 @@
 using Microsoft.UI.Xaml;
-using System.IO;
 using IDABatchToolWinUI.Services;
 
 namespace IDABatchToolWinUI;
@@ -19,16 +18,15 @@ public partial class App : Application
     {
         InitializeComponent();
 
+        // Постоянный журнал: рядом с exe и в %LOCALAPPDATA% одновременно.
+        AppLog.Initialize(ConfigService.Load().LogLevel);
+        AppLog.Info($"Запуск приложения: {AppContext.BaseDirectory}");
+
         // Журнал необработанных исключений XAML (stowed 0xc000027b выглядит в
         // журнале событий как немой нативный краш — здесь берём управляемый стек).
         UnhandledException += (s, e) =>
         {
-            try
-            {
-                var msg = $"[{DateTime.Now:HH:mm:ss.fff}] {e.Exception.GetType().FullName}: {e.Message}\n" +
-                          $"{e.Exception}\n────────────────\n";
-                File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "app-crash.log"), msg);
-            }
+            try { AppLog.Crash(e.Exception); }
             catch { /* логирование не должно мешать падению */ }
         };
     }

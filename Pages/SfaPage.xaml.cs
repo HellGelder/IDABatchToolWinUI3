@@ -495,7 +495,11 @@ public SfaPage()
         SfaCancelButton.IsEnabled = false;
     }
 
-    private void AppendError(string message) => AppendLog(message);
+    private void AppendError(string message)
+    {
+        AppLog.Error(message);
+        AppendLog(message);
+    }
 
     /// <summary>Журнал выполнения: дублирует в «Лог выполнения» любые события
     /// (этапы, файлы, экспорт, документация, ошибки), не только ошибки.</summary>
