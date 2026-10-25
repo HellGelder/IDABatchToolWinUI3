@@ -508,11 +508,7 @@ public SfaPage(IConfigStore store)
 
     /// <summary>Журнал выполнения: дублирует в «Лог выполнения» любые события
     /// (этапы, файлы, экспорт, документация, ошибки), не только ошибки.</summary>
-    private void AppendLog(string message)
-    {
-        if (string.IsNullOrEmpty(SfaErrorLogTextBox.Text)) SfaErrorLogTextBox.Text = message;
-        else SfaErrorLogTextBox.Text += Environment.NewLine + message;
-    }
+    private void AppendLog(string message) => UiLog.Append(SfaErrorLogTextBox, message);
 
     private void RunOnUi(Action a) => DispatcherQueue.TryEnqueue(() => a());
 

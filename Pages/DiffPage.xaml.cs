@@ -599,11 +599,7 @@ public sealed partial class DiffPage : Page
 
     /// <summary>Журнал выполнения: дублирует в «Лог выполнения» любые события
     /// (этапы, файлы, статусы пар, ошибки), не только ошибки.</summary>
-    private void AppendLog(string message)
-    {
-        if (string.IsNullOrEmpty(DiffErrorTextBox.Text)) DiffErrorTextBox.Text = message;
-        else DiffErrorTextBox.Text += Environment.NewLine + message;
-    }
+    private void AppendLog(string message) => UiLog.Append(DiffErrorTextBox, message);
 
     // ────────────────── Подвкладка «Git-сравнение» ──────────────────
 
@@ -720,12 +716,7 @@ public sealed partial class DiffPage : Page
         }
     }
 
-    private void AppendGitLog(string message)
-    {
-        if (string.IsNullOrEmpty(GitLogTextBox.Text)) GitLogTextBox.Text = message;
-        else GitLogTextBox.Text += Environment.NewLine + message;
-        GitLogTextBox.SelectionStart = GitLogTextBox.Text.Length;
-    }
+    private void AppendGitLog(string message) => UiLog.Append(GitLogTextBox, message, autoscroll: true);
 
     // ────────────────── Батчинг UI-обновлений диффа ──────────────────
 
@@ -819,17 +810,7 @@ public sealed partial class DiffPage : Page
     /// <summary>Пакетный журнал: одна конкатенация на пакет; хвост ограничен —
     /// полный журнал живёт в changes.diff.log (плоский режим) и журналах модулей.</summary>
     private void AppendGitLogBatch(IReadOnlyList<string> lines)
-    {
-        var add = string.Join(Environment.NewLine, lines);
-        var text = string.IsNullOrEmpty(GitLogTextBox.Text) ? add : GitLogTextBox.Text + Environment.NewLine + add;
-        if (text.Length > 160_000)
-        {
-            var parts = text.Split('\n');
-            text = string.Join(Environment.NewLine, parts[^401..]).TrimEnd('\r');
-        }
-        GitLogTextBox.Text = text;
-        GitLogTextBox.SelectionStart = GitLogTextBox.Text.Length;
-    }
+        => UiLog.Append(GitLogTextBox, string.Join(Environment.NewLine, lines), autoscroll: true);
 
     /// <summary>Кнопка HTML-отчёта активна, если есть что отчитать:
     /// существующий changes.diff (плоский режим) или манифест модулей.</summary>

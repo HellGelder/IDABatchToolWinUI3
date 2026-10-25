@@ -290,7 +290,8 @@ public sealed partial class SettingsPage : Page
 
     private async Task CheckManPagesAsync(bool showPopup = false)
     {
-        await Task.Run(() => { }); // краткая пауза для корректного обновления строки
+        // Даём строке статуса уйти в очередь отрисовки до синхронной проверки
+        await Task.Yield();
         var dbPath = ManPagesDbPath();
         if (!File.Exists(dbPath))
         {

@@ -463,11 +463,7 @@ public sealed partial class AnalysisPage : Page
 
     /// <summary>Журнал выполнения: дублирует в «Лог выполнения» любые события
     /// (этапы, файлы, экспорт, ошибки), не только ошибки.</summary>
-    private void AppendLog(string message)
-    {
-        if (string.IsNullOrEmpty(ErrorLogTextBox.Text)) ErrorLogTextBox.Text = message;
-        else ErrorLogTextBox.Text += Environment.NewLine + message;
-    }
+    private void AppendLog(string message) => UiLog.Append(ErrorLogTextBox, message);
 
     private void RunOnUi(Action a) => DispatcherQueue.TryEnqueue(() => a());
 
