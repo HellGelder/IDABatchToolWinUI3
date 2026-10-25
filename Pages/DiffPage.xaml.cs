@@ -724,7 +724,7 @@ public sealed partial class DiffPage : Page
         }
     }
 
-    private void AppendGitLog(string message) => UiLog.Append(GitLogTextBox, message, autoscroll: true);
+    private void AppendGitLog(string message) => UiLog.Append(GitLogTextBox, message);
 
     // ────────────────── Батчинг UI-обновлений диффа ──────────────────
 
@@ -818,7 +818,7 @@ public sealed partial class DiffPage : Page
     /// <summary>Пакетный журнал: одна конкатенация на пакет; хвост ограничен —
     /// полный журнал живёт в changes.diff.log (плоский режим) и журналах модулей.</summary>
     private void AppendGitLogBatch(IReadOnlyList<string> lines)
-        => UiLog.Append(GitLogTextBox, string.Join(Environment.NewLine, lines), autoscroll: true);
+        => UiLog.Append(GitLogTextBox, string.Join(Environment.NewLine, lines));
 
     /// <summary>Кнопка HTML-отчёта активна, если есть что отчитать:
     /// существующий changes.diff (плоский режим) или манифест модулей.</summary>
