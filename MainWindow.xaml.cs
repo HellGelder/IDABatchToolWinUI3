@@ -141,7 +141,7 @@ public sealed partial class MainWindow : Window
         if (_envCheckStarted) return;
         _envCheckStarted = true;
         Activated -= OnFirstActivated;
-        PythonEnvironment.EnsureEnvironmentAsync().SafeFireAndForget("Startup.PythonEnv");
+        PythonEnvironmentUi.EnsureEnvironmentAsync().SafeFireAndForget("Startup.PythonEnv");
     }
 
     private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)

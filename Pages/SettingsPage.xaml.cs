@@ -411,15 +411,3 @@ public sealed partial class SettingsPage : Page
     private void RunOnUi(Func<Task> a) => DispatcherQueue.TryEnqueue(
         () => a().SafeFireAndForget("Settings.RunOnUi"));
 }
-
-/// <summary>Применение темы оформления (платформенной) к окну.</summary>
-public static class ThemeHelper
-{
-    public static void Apply(Window? window, string theme)
-    {
-        if (window == null) return;
-        var root = window.Content as FrameworkElement;
-        if (root == null) return;
-        root.RequestedTheme = theme == "dark" ? ElementTheme.Dark : ElementTheme.Light;
-    }
-}
