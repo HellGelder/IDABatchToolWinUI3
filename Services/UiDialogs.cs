@@ -188,7 +188,14 @@ public static class UiDialogs
                     HorizontalAlignment = HorizontalAlignment.Stretch,
                     HorizontalContentAlignment = HorizontalAlignment.Center,
                 };
-                btn.Click += (_, _) => tcs.TrySetResult(idx);
+                // Кнопка внутри ContentDialog сама диалог не закрывает: без Hide()
+                // ShowAsync висит вечно и клик выглядит как «ничего не произошло».
+                // TrySetResult первым, Closing от Hide() результат не перезатрёт.
+                btn.Click += (_, _) =>
+                {
+                    tcs.TrySetResult(idx);
+                    try { dialog.Hide(); } catch { /* уже закрыт */ }
+                };
                 stack.Children.Add(btn);
             }
 
