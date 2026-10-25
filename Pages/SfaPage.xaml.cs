@@ -115,7 +115,7 @@ public SfaPage(IConfigStore store)
         List<FileItem> files;
         try
         {
-            files = await Task.Run(() => ScanInputFiles(inputDir));
+            files = await ScanInputFilesAsync(inputDir);
         }
         catch (Exception)
         {
@@ -142,7 +142,7 @@ public SfaPage(IConfigStore store)
     }
 
     /// <summary>Поиск исполняемых файлов и распаковка архивов — вне UI-потока.</summary>
-    private static List<FileItem> ScanInputFiles(string inputDir)
+    private static async Task<List<FileItem>> ScanInputFilesAsync(string inputDir)
     {
         if (string.IsNullOrEmpty(inputDir) || !Directory.Exists(inputDir))
             return new List<FileItem>();
@@ -162,7 +162,7 @@ public SfaPage(IConfigStore store)
 
             foreach (var archive in archives)
             {
-                var extracted = ArchiveHandler.ExtractArchive(archive);
+                var extracted = await ArchiveHandler.ExtractArchiveAsync(archive);
                 if (extracted != null && Directory.Exists(extracted))
                     files.AddRange(ExecutableFinder.FindExecutables(extracted, extensions));
             }
@@ -440,7 +440,7 @@ public SfaPage(IConfigStore store)
         });
         _docsWorker.Finished += result => RunOnUi(() => OnDocsFinished(result));
 
-        await Task.Run(() => _docsWorker.Run(inputDir, sfaReports, inputDir, null, null, null, jsonFiles));
+        await _docsWorker.RunAsync(inputDir, sfaReports, inputDir, null, null, null, jsonFiles);
     }
 
     private void OnDocsFinished(HtmlGenResult result)
@@ -621,8 +621,8 @@ public SfaPage(IConfigStore store)
         // приложение падало аварийно в момент завершения/отмены генерации.
         _htmlWorker.Finished += result => RunOnUi(() => OnHtmlFinishedAsync(result));
 
-        await Task.Run(() => _htmlWorker.Run(inputDir, sfaReports, inputDir, null, null,
-            manpagesDb, jsonFiles));
+        await _htmlWorker.RunAsync(inputDir, sfaReports, inputDir, null, null,
+            manpagesDb, jsonFiles);
     }
 
     private string ResolveManpagesDb(string sfaReports)

@@ -46,7 +46,7 @@ public static class ArchiveHandler
     /// Извлекает архив в папку рядом (имя = имя архива без расширения).
     /// Возвращает путь к папке или null.
     /// </summary>
-    public static string? ExtractArchive(string archivePath, string? outputDir = null)
+    public static async Task<string?> ExtractArchiveAsync(string archivePath, string? outputDir = null)
     {
         var archive = Path.GetFullPath(archivePath);
         if (!File.Exists(archive)) return null;
@@ -66,7 +66,8 @@ public static class ArchiveHandler
         {
             if (suffix is ".apk" or ".ipa")
             {
-                ZipFile.ExtractToDirectory(archive, outputDir);
+                // ZipFile — синхронный API: распаковка уже вне UI-потока (скан папки).
+                await Task.Run(() => ZipFile.ExtractToDirectory(archive, outputDir));
                 return outputDir;
             }
 
@@ -92,8 +93,7 @@ public static class ArchiveHandler
                 psi.ArgumentList.Add("-y");
 
                 // Ждём полного завершения 7z; прерывание — только по отмене.
-                var result = ProcessRunner.RunAsync(psi, CancellationToken.None)
-                    .GetAwaiter().GetResult();
+                var result = await ProcessRunner.RunAsync(psi, CancellationToken.None);
                 if (!result.Started || result.ExitCode != 0)
                 {
                     TryDeleteDir(outputDir);

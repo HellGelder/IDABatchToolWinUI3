@@ -277,13 +277,14 @@ public static class PythonEnvironment
             var outTask = proc.StandardOutput.ReadToEndAsync();
             var errTask = proc.StandardError.ReadToEndAsync();
             await proc.WaitForExitAsync();
-            Task.WhenAll(outTask, errTask).GetAwaiter().GetResult();
+            await Task.WhenAll(outTask, errTask);
 
             var sb = new StringBuilder();
             sb.AppendLine($"=== install-prereqs {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===");
-            sb.AppendLine(outTask.Result);
-            if (errTask.Result.Length > 0)
-                sb.AppendLine("--- stderr ---").AppendLine(errTask.Result);
+            sb.AppendLine(await outTask);
+            var stderr = await errTask;
+            if (stderr.Length > 0)
+                sb.AppendLine("--- stderr ---").AppendLine(stderr);
             File.WriteAllText(logPath, sb.ToString(), new UTF8Encoding(false));
             return (proc.ExitCode, logPath);
         }

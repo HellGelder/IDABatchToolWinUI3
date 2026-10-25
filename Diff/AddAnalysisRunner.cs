@@ -267,10 +267,10 @@ public sealed class AddAnalysisRunner
             worker.ErrorOccurred += e => _onError(e);
             using var cancelRegistration = ct.Register(worker.Cancel);
 
-            await Task.Run(() => worker.Run(
+            await worker.RunAsync(
                 inputDir: _leftDir, reportsDir: reportsDir, jsonDir: _addOutputDir!,
                 leftDir: _leftDir, rightDir: _rightDir, manpagesDb: null,
-                jsonPaths: jsonFiles), ct);
+                jsonPaths: jsonFiles);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception e)

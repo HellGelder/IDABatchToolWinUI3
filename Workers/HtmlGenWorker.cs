@@ -51,15 +51,15 @@ public sealed class HtmlGenWorker : IDisposable
         Platform = platform;
     }
 
-    public void Run(string inputDir, string reportsDir, string jsonDir,
-                    string? leftDir, string? rightDir, string? manpagesDb,
-                    IReadOnlyList<string>? jsonPaths = null)
+    public async Task RunAsync(string inputDir, string reportsDir, string jsonDir,
+                               string? leftDir, string? rightDir, string? manpagesDb,
+                               IReadOnlyList<string>? jsonPaths = null)
     {
-        // Страница ждёт Run через await Task.Run внутри async void: необработанное
-        // исключение здесь уронило бы приложение — гасим в событие.
+        // Исключение гасим в событие: вызовы идут через SafeFireAndForget/RunSafe,
+        // но контракт Finished должен соблюдаться всегда.
         try
         {
-            RunCore(inputDir, reportsDir, jsonDir, leftDir, rightDir, manpagesDb, jsonPaths);
+            await RunCoreAsync(inputDir, reportsDir, jsonDir, leftDir, rightDir, manpagesDb, jsonPaths);
         }
         catch (Exception e)
         {
@@ -68,9 +68,9 @@ public sealed class HtmlGenWorker : IDisposable
         }
     }
 
-    private void RunCore(string inputDir, string reportsDir, string jsonDir,
-                         string? leftDir, string? rightDir, string? manpagesDb,
-                         IReadOnlyList<string>? jsonPaths)
+    private async Task RunCoreAsync(string inputDir, string reportsDir, string jsonDir,
+                                    string? leftDir, string? rightDir, string? manpagesDb,
+                                    IReadOnlyList<string>? jsonPaths)
     {
         var bridge = Path.Combine(AppConstants.WinUiDir, "_python", "report_bridge.py");
         if (!File.Exists(bridge))
@@ -152,14 +152,14 @@ public sealed class HtmlGenWorker : IDisposable
 
             // Ждём полного завершения моста: большие наборы могут генерироваться
             // долго. Прерывание — только по явной отмене (Cancel/Dispose).
-            _proc.WaitForExit();
-            Task.WhenAll(stdoutTask, stderrTask).GetAwaiter().GetResult();
+            await _proc.WaitForExitAsync();
+            await Task.WhenAll(stdoutTask, stderrTask);
             ProcessRegistry.Unregister(_proc.Id);
 
             if (_proc.ExitCode != 0 && result.GeneratedCount == 0)
             {
                 string err = "";
-                try { err = stderrTask.Result.Trim(); } catch { /* канал закрыт */ }
+                try { err = (await stderrTask).Trim(); } catch { /* канал закрыт */ }
                 if (!string.IsNullOrEmpty(err)) ErrorOccurred?.Invoke(err);
             }
             Finished?.Invoke(result);

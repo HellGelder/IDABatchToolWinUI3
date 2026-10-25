@@ -698,7 +698,7 @@ public static class DirectoriesDiffService
     /// <param name="progress">(поток, модуль, cur, total) — прогресс по файлам для карточки потока.</param>
     /// <param name="threadModule">(поток, модуль | null) — карточка: текущий модуль / поток свободен.</param>
     /// <param name="moduleDone">(готово, всего) — счётчик завершённых модулей.</param>
-    public static ModuleRunResult RunModules(
+    public static async Task<ModuleRunResult> RunModulesAsync(
         IReadOnlyList<ModuleInfo> modules, string oldDir, string newDir, string outDir,
         int context, IReadOnlyList<string> patterns, bool skipBinary,
         Action<string> log,
@@ -803,11 +803,11 @@ public static class DirectoriesDiffService
         var tasks = Enumerable.Range(0, workers).Select(t => Task.Run(() => Worker(t))).ToArray();
         try
         {
-            Task.WaitAll(tasks);
+            await Task.WhenAll(tasks);
         }
-        catch (AggregateException ex) when (ex.InnerExceptions.All(e => e is OperationCanceledException))
+        catch (OperationCanceledException)
         {
-            throw new OperationCanceledException(ct);
+            throw;
         }
 
         started.Stop();

@@ -230,10 +230,10 @@ public sealed class DiffWorker : IDisposable
 
             var jsonFiles = Directory.GetFiles(jsonDir, "*.diff.json").ToList();
             if (jsonFiles.Count == 0) return;
-            await Task.Run(() => worker.Run(
+            await worker.RunAsync(
                 inputDir: LeftDir, reportsDir: reportsDir, jsonDir: jsonDir,
                 leftDir: LeftDir, rightDir: RightDir, manpagesDb: null,
-                jsonPaths: jsonFiles), ct);
+                jsonPaths: jsonFiles);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception e)

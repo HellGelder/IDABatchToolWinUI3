@@ -122,7 +122,7 @@ public sealed partial class AnalysisPage : Page
         List<string> errors;
         try
         {
-            (files, errors) = await Task.Run(() => ScanInputFiles(inputDir));
+            (files, errors) = await ScanInputFilesAsync(inputDir);
         }
         catch (Exception e)
         {
@@ -151,7 +151,7 @@ public sealed partial class AnalysisPage : Page
     }
 
     /// <summary>Поиск исполняемых файлов и распаковка архивов — вне UI-потока.</summary>
-    private static (List<FileItem> Files, List<string> Errors) ScanInputFiles(string inputDir)
+    private static async Task<(List<FileItem> Files, List<string> Errors)> ScanInputFilesAsync(string inputDir)
     {
         var errors = new List<string>();
         if (string.IsNullOrEmpty(inputDir) || !Directory.Exists(inputDir))
@@ -173,7 +173,7 @@ public sealed partial class AnalysisPage : Page
 
             foreach (var archive in archives)
             {
-                var extracted = ArchiveHandler.ExtractArchive(archive);
+                var extracted = await ArchiveHandler.ExtractArchiveAsync(archive);
                 if (extracted != null && Directory.Exists(extracted))
                 {
                     var archFiles = ExecutableFinder.FindExecutables(extracted, extensions);
@@ -538,7 +538,7 @@ public sealed partial class AnalysisPage : Page
         });
         _htmlWorker.Finished += result => RunOnUi(() => OnHtmlFinishedAsync(result));
 
-        await Task.Run(() => _htmlWorker.Run(inputDir, reportsDir, inputDir, null, null, null, jsonFiles));
+        await _htmlWorker.RunAsync(inputDir, reportsDir, inputDir, null, null, null, jsonFiles);
     }
 
     private async Task OnHtmlFinishedAsync(HtmlGenResult result)

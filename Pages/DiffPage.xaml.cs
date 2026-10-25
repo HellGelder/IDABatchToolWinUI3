@@ -571,8 +571,8 @@ public sealed partial class DiffPage : Page
         // UI-свойства читаем до Task.Run (см. комментарий в GitStart_Click)
         var leftDir = LeftDirTextBox.Text.Trim();
         var rightDir = RightDirTextBox.Text.Trim();
-        await Task.Run(() => worker.Run(leftDir, reportsDir, _outputDir,
-            leftDir, rightDir, null, jsonFiles));
+        await worker.RunAsync(leftDir, reportsDir, _outputDir,
+            leftDir, rightDir, null, jsonFiles);
     }
 
     private async Task OnDiffReportReadyAsync(HtmlGenResult result)
@@ -883,7 +883,7 @@ public sealed partial class DiffPage : Page
         GitThreadsGroup.Visibility = Visibility.Visible;
         StartGitUiTimer(workers);
 
-        var result = await Task.Run(() => DirectoriesDiffService.RunModules(
+        var result = await DirectoriesDiffService.RunModulesAsync(
             modules, oldDir, newDir, outDir, context, patterns, skipBinary,
             line => { lock (_gitUiGate) _gitPendingLog.Enqueue(line); },
             (t, mod, cur, total) =>
@@ -910,7 +910,7 @@ public sealed partial class DiffPage : Page
                     _gitTotal = totalModules;
                 }
             },
-            ct));
+            ct);
 
         _lastGitDiffPath = null;
         _lastModuleRunDir = outDir;
