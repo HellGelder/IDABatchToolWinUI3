@@ -38,6 +38,9 @@
     <Compile Include="..\..\Services\ConfigService.cs" Link="Linked\ConfigService.cs" />
     <Compile Include="..\..\Services\ConfigStore.cs" Link="Linked\ConfigStore.cs" />
     <Compile Include="..\..\Services\AnalysisMonitor.cs" Link="Linked\AnalysisMonitor.cs" />
+    <Compile Include="..\..\Services\ExecutableFinder.cs" Link="Linked\ExecutableFinder.cs" />
+    <Compile Include="..\..\Services\ArchiveHandler.cs" Link="Linked\ArchiveHandler.cs" />
+    <Compile Include="..\..\Services\InputScanner.cs" Link="Linked\InputScanner.cs" />
     <Compile Include="..\..\Diff\BinDiffParser.cs" Link="Linked\BinDiffParser.cs" />
     <Compile Include="..\..\Diff\DiaphoraParser.cs" Link="Linked\DiaphoraParser.cs" />
     <Compile Include="..\..\Diff\DiffJsonEnricher.cs" Link="Linked\DiffJsonEnricher.cs" />

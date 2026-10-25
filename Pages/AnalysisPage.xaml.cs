@@ -118,22 +118,21 @@ public sealed partial class AnalysisPage : Page
         var gen = ++_refreshGeneration;
         var inputDir = InputDirTextBox.Text.Trim();
 
-        List<FileItem> files;
-        List<string> errors;
+        InputScanner.ScanResult scan;
         try
         {
-            (files, errors) = await ScanInputFilesAsync(inputDir);
+            scan = await InputScanner.ScanAsync(inputDir);
         }
         catch (Exception e)
         {
             if (gen != _refreshGeneration) return;
-            files = new List<FileItem>();
-            errors = new List<string> { $"Ошибка чтения папки: {e.Message}" };
+            scan = new InputScanner.ScanResult(
+                Array.Empty<FileItem>(), new[] { $"Ошибка чтения папки: {e.Message}" });
         }
         if (gen != _refreshGeneration) return; // уже запрошен более свежий скан
 
-        foreach (var err in errors) AppendError(err);
-        _cachedFiles = files;
+        foreach (var err in scan.ArchiveErrors) AppendError(err);
+        _cachedFiles = scan.Files.ToList();
 
         if (_cachedFiles.Count == 0)
         {
@@ -148,64 +147,6 @@ public sealed partial class AnalysisPage : Page
 
         Treemap.SetData(_cachedFiles);
         GenerateHtmlButton.IsEnabled = _cachedFiles.Any(f => ArtifactValidator.HasValidArtifacts(f.Path));
-    }
-
-    /// <summary>Поиск исполняемых файлов и распаковка архивов — вне UI-потока.</summary>
-    private static async Task<(List<FileItem> Files, List<string> Errors)> ScanInputFilesAsync(string inputDir)
-    {
-        var errors = new List<string>();
-        if (string.IsNullOrEmpty(inputDir) || !Directory.Exists(inputDir))
-            return (new List<FileItem>(), errors);
-
-        // Поиск сразу по всем расширениям всех платформ: платформа определяется
-        // по фактическому содержимому папки, а не по заранее выбранной настройке.
-        // Раньше поиск шёл по расширениям текущей платформы, поэтому папка,
-        // например, только с .so-файлами давала пустой список и детект не выполнялся.
-        var extensions = PlatformInfo.AllExtensions();
-        var files = ExecutableFinder.FindExecutables(inputDir, extensions);
-
-        // Архивы: распаковываем рядом и ищем внутри
-        foreach (var ext in ArchiveHandler.ArchiveExtensions)
-        {
-            string[] archives;
-            try { archives = Directory.GetFiles(inputDir, "*" + ext); }
-            catch { continue; /* каталог недоступен для чтения */ }
-
-            foreach (var archive in archives)
-            {
-                var extracted = await ArchiveHandler.ExtractArchiveAsync(archive);
-                if (extracted != null && Directory.Exists(extracted))
-                {
-                    var archFiles = ExecutableFinder.FindExecutables(extracted, extensions);
-                    files.AddRange(archFiles);
-                }
-                else if (ext == ".dmg")
-                {
-                    errors.Add($"Не удалось извлечь {Path.GetFileName(archive)}. Убедитесь, что 7z установлен и доступен в PATH.");
-                }
-            }
-        }
-
-        return (files.Distinct().Select(MakeItem).ToList(), errors);
-    }
-
-    private static FileItem MakeItem(string path)
-    {
-        long size = 0;
-        try { size = new FileInfo(path).Length; }
-        catch { /* файл исчез или недоступен — размер 0 */ }
-
-        return new FileItem
-        {
-            Name = Path.GetFileName(path),
-            Path = Path.GetFullPath(path),
-            Size = size,
-            // Готовность — по валидной базе и валидному export.json, а не по факту
-            // существования .i64: иначе остатки прошлого запуска выглядят результатом.
-            Status = ArtifactValidator.HasValidArtifacts(path)
-                ? AnalysisStatus.Success
-                : AnalysisStatus.NotAnalyzed,
-        };
     }
 
     // ──────────────────────────────────────────────
@@ -257,7 +198,9 @@ public sealed partial class AnalysisPage : Page
         var exportOnly = false;
         if (withIdb.Count > 0)
         {
-            var action = await AskExistingBasesAsync(withIdb.Count, files.Count, withoutIdb.Count);
+            var action = await UiDialogs.AskExistingBasesAsync(
+                "Обнаружены существующие базы данных",
+                $"Готово баз: {withIdb.Count} из {files.Count}\nТребуют анализа: {withoutIdb.Count}");
             switch (action)
             {
                 case "cancel": return;
@@ -465,10 +408,9 @@ public sealed partial class AnalysisPage : Page
     /// (этапы, файлы, экспорт, ошибки), не только ошибки.</summary>
     private void AppendLog(string message) => UiLog.Append(ErrorLogTextBox, message);
 
-    private void RunOnUi(Action a) => DispatcherQueue.TryEnqueue(() => a());
+    private void RunOnUi(Action a) => UiThread.Run(DispatcherQueue, a);
 
-    private void RunOnUi(Func<Task> a) => DispatcherQueue.TryEnqueue(
-        () => a().SafeFireAndForget("Analysis.RunOnUi"));
+    private void RunOnUi(Func<Task> a) => UiThread.Run(DispatcherQueue, a, "Analysis.RunOnUi");
 
     /// <summary>Запуск задачи страницы: исключение попадает в журнал страницы и
     /// AppLog, а не роняет процесс (см. TaskExtensions.SafeFireAndForget).</summary>
@@ -588,19 +530,4 @@ public sealed partial class AnalysisPage : Page
     //  Диалог существующих баз
     // ──────────────────────────────────────────────
 
-    private static async Task<string> AskExistingBasesAsync(int ready, int total, int needAnalysis)
-    {
-        var idx = await UiDialogs.AskButtonsAsync(
-            "Обнаружены существующие базы данных",
-            $"Готово баз: {ready} из {total}\nТребуют анализа: {needAnalysis}",
-            new[] { "Доанализировать новые", "Перезаписать всё", "Экспортировать существующие", "Отмена" },
-            defaultIndex: 0);
-        return idx switch
-        {
-            0 => "continue",
-            1 => "overwrite",
-            2 => "export",
-            _ => "cancel",
-        };
-    }
 }

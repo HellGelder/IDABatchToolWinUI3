@@ -561,18 +561,26 @@ public sealed partial class DiffPage : Page
         DiffProgressRing.Visibility = Visibility.Visible;
 
         var worker = new HtmlGenWorker("diff", deleteJson: false, reuseCache: false, "Windows");
-        worker.ProgressUpdated += (cur, total, msg) => RunOnUi(() =>
+        try
         {
-            MapStatusLabel.Text = $"Генерация отчёта: {cur}/{total}";
-        });
-        worker.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
-        worker.Finished += result => RunOnUi(() => OnDiffReportReadyAsync(result));
+            worker.ProgressUpdated += (cur, total, msg) => RunOnUi(() =>
+            {
+                MapStatusLabel.Text = $"Генерация отчёта: {cur}/{total}";
+            });
+            worker.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
+            worker.Finished += result => RunOnUi(() => OnDiffReportReadyAsync(result));
 
-        // UI-свойства читаем до Task.Run (см. комментарий в GitStart_Click)
-        var leftDir = LeftDirTextBox.Text.Trim();
-        var rightDir = RightDirTextBox.Text.Trim();
-        await worker.RunAsync(leftDir, reportsDir, _outputDir,
-            leftDir, rightDir, null, jsonFiles);
+            // UI-свойства читаем до фонового запуска (см. комментарий в GitStart_Click)
+            var leftDir = LeftDirTextBox.Text.Trim();
+            var rightDir = RightDirTextBox.Text.Trim();
+            await worker.RunAsync(leftDir, reportsDir, _outputDir,
+                leftDir, rightDir, null, jsonFiles);
+        }
+        finally
+        {
+            // Раньше локальный воркер не диспозился вовсе — процесс моста мог остаться.
+            worker.Dispose();
+        }
     }
 
     private async Task OnDiffReportReadyAsync(HtmlGenResult result)
@@ -1039,10 +1047,9 @@ public sealed partial class DiffPage : Page
         }
     }
 
-    private void RunOnUi(Action a) => DispatcherQueue.TryEnqueue(() => a());
+    private void RunOnUi(Action a) => UiThread.Run(DispatcherQueue, a);
 
-    private void RunOnUi(Func<Task> a) => DispatcherQueue.TryEnqueue(
-        () => a().SafeFireAndForget("Diff.RunOnUi"));
+    private void RunOnUi(Func<Task> a) => UiThread.Run(DispatcherQueue, a, "Diff.RunOnUi");
 
     /// <summary>Запуск задачи страницы: исключение попадает в журнал страницы и
     /// AppLog, а не роняет процесс (см. TaskExtensions.SafeFireAndForget).</summary>

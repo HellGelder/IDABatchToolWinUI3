@@ -398,6 +398,7 @@ public sealed partial class SettingsPage : Page
         {
             await UiDialogs.WarnAsync("Ошибка", $"Не удалось импортировать man-pages:\n{message}");
         }
+        _manWorker?.Dispose();
         _manWorker = null;
     }
 
@@ -406,8 +407,7 @@ public sealed partial class SettingsPage : Page
     private void RunSafe(Task task, [CallerMemberName] string? context = null)
         => task.SafeFireAndForget(context ?? "Settings");
 
-    private void RunOnUi(Action a) => DispatcherQueue.TryEnqueue(() => a());
+    private void RunOnUi(Action a) => UiThread.Run(DispatcherQueue, a);
 
-    private void RunOnUi(Func<Task> a) => DispatcherQueue.TryEnqueue(
-        () => a().SafeFireAndForget("Settings.RunOnUi"));
+    private void RunOnUi(Func<Task> a) => UiThread.Run(DispatcherQueue, a, "Settings.RunOnUi");
 }

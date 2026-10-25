@@ -112,19 +112,19 @@ public SfaPage(IConfigStore store)
         var gen = ++_refreshGeneration;
         var inputDir = SfaInputDirTextBox.Text.Trim();
 
-        List<FileItem> files;
+        InputScanner.ScanResult scan;
         try
         {
-            files = await ScanInputFilesAsync(inputDir);
+            scan = await InputScanner.ScanAsync(inputDir);
         }
         catch (Exception)
         {
             if (gen != _refreshGeneration) return;
-            files = new List<FileItem>();
+            scan = new InputScanner.ScanResult(Array.Empty<FileItem>(), Array.Empty<string>());
         }
         if (gen != _refreshGeneration) return; // уже запрошен более свежий скан
 
-        _cachedFiles = files;
+        _cachedFiles = scan.Files.ToList();
 
         if (_cachedFiles.Count == 0)
         {
@@ -139,54 +139,6 @@ public SfaPage(IConfigStore store)
 
         SfaTreemap.SetData(_cachedFiles);
         SfaGenerateHtmlButton.IsEnabled = _cachedFiles.Any(f => ArtifactValidator.HasValidArtifacts(f.Path));
-    }
-
-    /// <summary>Поиск исполняемых файлов и распаковка архивов — вне UI-потока.</summary>
-    private static async Task<List<FileItem>> ScanInputFilesAsync(string inputDir)
-    {
-        if (string.IsNullOrEmpty(inputDir) || !Directory.Exists(inputDir))
-            return new List<FileItem>();
-
-        // Поиск сразу по всем расширениям всех платформ: платформа определяется
-        // по фактическому содержимому папки. Раньше поиск шёл по расширениям
-        // текущей платформы, поэтому папка только с .so-файлами давала пустой
-        // список и детект не выполнялся.
-        var extensions = PlatformInfo.AllExtensions();
-        var files = ExecutableFinder.FindExecutables(inputDir, extensions);
-
-        foreach (var ext in ArchiveHandler.ArchiveExtensions)
-        {
-            string[] archives;
-            try { archives = Directory.GetFiles(inputDir, "*" + ext); }
-            catch { continue; /* каталог недоступен для чтения */ }
-
-            foreach (var archive in archives)
-            {
-                var extracted = await ArchiveHandler.ExtractArchiveAsync(archive);
-                if (extracted != null && Directory.Exists(extracted))
-                    files.AddRange(ExecutableFinder.FindExecutables(extracted, extensions));
-            }
-        }
-
-        return files.Distinct().Select(MakeItem).ToList();
-    }
-
-    private static FileItem MakeItem(string path)
-    {
-        long size = 0;
-        try { size = new FileInfo(path).Length; }
-        catch { /* файл исчез или недоступен — размер 0 */ }
-
-        return new FileItem
-        {
-            Name = Path.GetFileName(path),
-            Path = Path.GetFullPath(path),
-            Size = size,
-            // Готовность — по валидной базе и валидному export.json.
-            Status = ArtifactValidator.HasValidArtifacts(path)
-                ? AnalysisStatus.Success
-                : AnalysisStatus.NotAnalyzed,
-        };
     }
 
     // ──────────────────────────────────────────────
@@ -235,7 +187,9 @@ public SfaPage(IConfigStore store)
 
         if (withIdb.Count > 0)
         {
-            var action = await AskExistingBasesAsync(withIdb.Count, files.Count, withoutIdb.Count);
+            var action = await UiDialogs.AskExistingBasesAsync(
+                "Существующие базы",
+                $"Готово: {withIdb.Count} из {files.Count}\nТребуют анализа: {withoutIdb.Count}");
             switch (action)
             {
                 case "cancel": return;
@@ -510,10 +464,9 @@ public SfaPage(IConfigStore store)
     /// (этапы, файлы, экспорт, документация, ошибки), не только ошибки.</summary>
     private void AppendLog(string message) => UiLog.Append(SfaErrorLogTextBox, message);
 
-    private void RunOnUi(Action a) => DispatcherQueue.TryEnqueue(() => a());
+    private void RunOnUi(Action a) => UiThread.Run(DispatcherQueue, a);
 
-    private void RunOnUi(Func<Task> a) => DispatcherQueue.TryEnqueue(
-        () => a().SafeFireAndForget("Sfa.RunOnUi"));
+    private void RunOnUi(Func<Task> a) => UiThread.Run(DispatcherQueue, a, "Sfa.RunOnUi");
 
     /// <summary>Запуск задачи страницы: исключение попадает в журнал страницы и
     /// AppLog, а не роняет процесс (см. TaskExtensions.SafeFireAndForget).</summary>
@@ -680,21 +633,6 @@ public SfaPage(IConfigStore store)
     //  Диалоги
     // ──────────────────────────────────────────────
 
-    private static async Task<string> AskExistingBasesAsync(int ready, int total, int needAnalysis)
-    {
-        var idx = await UiDialogs.AskButtonsAsync(
-            "Существующие базы",
-            $"Готово: {ready} из {total}\nТребуют анализа: {needAnalysis}",
-            new[] { "Доанализировать новые", "Перезаписать всё", "Экспортировать существующие", "Отмена" },
-            defaultIndex: 0);
-        return idx switch
-        {
-            0 => "continue",
-            1 => "overwrite",
-            2 => "export",
-            _ => "cancel",
-        };
-    }
 
     private static async Task<(string Action, object? Tag)> AskSfaCacheAsync(double sizeKb)
     {

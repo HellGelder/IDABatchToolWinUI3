@@ -206,4 +206,22 @@ public static class UiDialogs
         }
         finally { EndDialog(); }
     }
+
+    /// <summary>Диалог «существующие базы» перед анализом (AnalysisPage и SfaPage):
+    /// кнопки и маппинг ответа общие, заголовок и текст страниц различаются.</summary>
+    public static async Task<string> AskExistingBasesAsync(string title, string message)
+    {
+        var idx = await AskButtonsAsync(
+            title,
+            message,
+            new[] { "Доанализировать новые", "Перезаписать всё", "Экспортировать существующие", "Отмена" },
+            defaultIndex: 0);
+        return idx switch
+        {
+            0 => "continue",
+            1 => "overwrite",
+            2 => "export",
+            _ => "cancel",
+        };
+    }
 }
