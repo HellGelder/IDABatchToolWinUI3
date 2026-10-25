@@ -14,6 +14,26 @@ public static class AppConstants
     public static readonly string BindiffDefaultExe = "bindiff.exe";
     public static readonly string ManpagesDbFileName = "manpages.db";
 
+    // Имена папок результатов внутри входной/выходной папки (единый источник
+    // для страниц, сканера и воркеров).
+    public const string SfaReportsDirName = "SFAReports";
+    public const string IdaReportsDirName = "IDAReports";
+    public const string DiffResultsDirName = "DiffResults";
+    public const string AddDiffResultsDirName = "AddDiffResults";
+    public const string ReportsDirName = "Reports";
+
+    // Стандартные каталоги установки Windows — поиск IDA/BinDiff/7-Zip/Node.js.
+    public static readonly string[] ProgramFilesDirs =
+        { @"C:\Program Files", @"C:\Program Files (x86)" };
+
+    // Известные пути Node.js/npx для проверки окружения (SettingsPage).
+    public static readonly string[] NodeCandidates =
+    {
+        @"C:\Program Files\nodejs\node.exe",
+        @"C:\Program Files (x86)\nodejs\node.exe",
+    };
+    public const string NpxChocolateyCandidate = @"C:\ProgramData\chocolatey\bin\npx.cmd";
+
     /// <summary>
     /// Каталог приложения (исполнения 2), где лежат config.yaml, scripts/, _python/.
     /// Ищется от каталога exe вверх до каталога с _python (после копирования в bin — на месте).

@@ -124,7 +124,7 @@ public static class ToolLocator
 
     private static string? FindInProgramFiles(params string[] patterns)
     {
-        foreach (var pf in new[] { @"C:\Program Files", @"C:\Program Files (x86)" })
+        foreach (var pf in AppConstants.ProgramFilesDirs)
         {
             if (!Directory.Exists(pf)) continue;
             foreach (var pattern in patterns)

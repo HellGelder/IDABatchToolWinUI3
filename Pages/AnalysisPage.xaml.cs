@@ -513,7 +513,7 @@ public sealed partial class AnalysisPage : Page
             return;
         }
 
-        var reportsDir = Path.Combine(inputDir, "IDAReports");
+        var reportsDir = Path.Combine(inputDir, AppConstants.IdaReportsDirName);
         Directory.CreateDirectory(reportsDir);
 
         _htmlInProgress = true;
@@ -555,7 +555,7 @@ public sealed partial class AnalysisPage : Page
         CleanupAfterReport();
 
         var reportsDir = result.ReportsDir;
-        if (string.IsNullOrEmpty(reportsDir)) reportsDir = Path.Combine(InputDirTextBox.Text.Trim(), "IDAReports");
+        if (string.IsNullOrEmpty(reportsDir)) reportsDir = Path.Combine(InputDirTextBox.Text.Trim(), AppConstants.IdaReportsDirName);
 
         // Диалог: предложить открыть папку с отчётами
         var open = await UiDialogs.AskButtonsAsync("HTML-отчёты готовы",

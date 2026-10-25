@@ -37,11 +37,7 @@ public static class ArchiveHandler
                 catch { /* ignore */ }
             }
         }
-        foreach (var p in new[]
-                 {
-                     @"C:\Program Files\7-Zip\7z.exe",
-                     @"C:\Program Files (x86)\7-Zip\7z.exe",
-                 })
+        foreach (var p in AppConstants.ProgramFilesDirs.Select(pf => Path.Combine(pf, "7-Zip", "7z.exe")))
             if (File.Exists(p)) return p;
         return null;
     }

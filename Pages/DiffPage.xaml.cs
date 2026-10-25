@@ -303,14 +303,14 @@ public sealed partial class DiffPage : Page
         if (rows.Count == 0) { await UiDialogs.WarnAsync("Ошибка", "Не выбрано ни одной пары для сравнения."); return; }
 
         var outputDir = OutputDirTextBox.Text.Trim();
-        var outputPath = string.IsNullOrEmpty(outputDir) ? Path.Combine(left, "DiffResults") : outputDir;
+        var outputPath = string.IsNullOrEmpty(outputDir) ? Path.Combine(left, AppConstants.DiffResultsDirName) : outputDir;
         Directory.CreateDirectory(outputPath);
 
         var engine = SelectedEngine();
         string? addOutputPath = null;
         if (engine == "bindiff")
         {
-            addOutputPath = Path.Combine(Path.GetDirectoryName(outputPath) ?? ".", "AddDiffResults");
+            addOutputPath = Path.Combine(Path.GetDirectoryName(outputPath) ?? ".", AppConstants.AddDiffResultsDirName);
             Directory.CreateDirectory(addOutputPath);
         }
 
@@ -496,9 +496,9 @@ public sealed partial class DiffPage : Page
         _worker?.Dispose();
         _worker = null;
 
-        var reportsDir = Path.Combine(_outputDir ?? ".", "Reports");
+        var reportsDir = Path.Combine(_outputDir ?? ".", AppConstants.ReportsDirName);
         var indexHtml = Path.Combine(reportsDir, "index.html");
-        var addReportsDir = Path.Combine(Path.GetDirectoryName(_outputDir) ?? ".", "AddDiffResults", "Reports");
+        var addReportsDir = Path.Combine(Path.GetDirectoryName(_outputDir) ?? ".", AppConstants.AddDiffResultsDirName, AppConstants.ReportsDirName);
         var addIndexHtml = Path.Combine(addReportsDir, "index.html");
 
         var hasMain = File.Exists(indexHtml);
@@ -555,7 +555,7 @@ public sealed partial class DiffPage : Page
             return;
         }
 
-        var reportsDir = Path.Combine(_outputDir, "Reports");
+        var reportsDir = Path.Combine(_outputDir, AppConstants.ReportsDirName);
         Directory.CreateDirectory(reportsDir);
         DiffProgressRing.IsActive = true;
         DiffProgressRing.Visibility = Visibility.Visible;

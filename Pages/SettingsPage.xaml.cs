@@ -126,12 +126,12 @@ public sealed partial class SettingsPage : Page
 
     private static Task<(string, string)> Check7zAsync() => Task.Run(() =>
     {
-        // Только полные пути: поиск по имени зависим от рабочего каталога приложения.
-        var candidates = new List<string>
-        {
-            @"C:\Program Files\7-Zip\7z.exe",
-            @"C:\Program Files (x86)\7-Zip\7z.exe",
-        };
+        // Единая цепочка поиска с ArchiveHandler (включая портативный Tools\7-Zip),
+        // плюс where.exe — раньше настройка не видела портативную копию 7-Zip.
+        var candidates = new List<string>();
+        var found = ArchiveHandler.Find7z();
+        if (found != null) candidates.Add(found);
+        candidates.AddRange(AppConstants.ProgramFilesDirs.Select(pf => Path.Combine(pf, "7-Zip", "7z.exe")));
         candidates.AddRange(ResolveOnPath("7z.exe"));
         candidates.AddRange(ResolveOnPath("7za.exe"));
         foreach (var exe in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
@@ -163,11 +163,7 @@ public sealed partial class SettingsPage : Page
 
     private static Task<(string, string)> CheckNpxAsync() => Task.Run(() =>
     {
-        var nodeCandidates = new List<string>
-        {
-            @"C:\Program Files\nodejs\node.exe",
-            @"C:\Program Files (x86)\nodejs\node.exe",
-        };
+        var nodeCandidates = new List<string>(AppConstants.NodeCandidates);
         nodeCandidates.AddRange(ResolveOnPath("node.exe"));
 
         var nodeVersion = "";
@@ -189,7 +185,7 @@ public sealed partial class SettingsPage : Page
         var npxCandidates = new List<string>();
         if (nodeDir.Length > 0) npxCandidates.Add(Path.Combine(nodeDir, "npx.cmd"));
         npxCandidates.AddRange(ResolveOnPath("npx.cmd"));
-        npxCandidates.Add(@"C:\ProgramData\chocolatey\bin\npx.cmd");
+        npxCandidates.Add(AppConstants.NpxChocolateyCandidate);
 
         var npxVersion = "";
         var npxPath = "";
@@ -285,7 +281,7 @@ public sealed partial class SettingsPage : Page
         {
             var inputDir = string.IsNullOrWhiteSpace(_cfg.DefaultInputDir) || _cfg.DefaultInputDir == "."
                 ? Directory.GetCurrentDirectory() : _cfg.DefaultInputDir;
-            return Path.Combine(inputDir, "SFAReports", AppConstants.ManpagesDbFileName);
+            return Path.Combine(inputDir, AppConstants.SfaReportsDirName, AppConstants.ManpagesDbFileName);
         }
         var p = Path.GetFullPath(raw);
         return Path.GetExtension(p).Equals(".db", StringComparison.OrdinalIgnoreCase)

@@ -98,8 +98,8 @@ public static class ExecutableFinder
         {
             // Папки готовых отчётов исключаем
             var rel = Path.GetRelativePath(rootDir, entry);
-            if (rel.Contains("SFAReports") || rel.Contains("Reports") ||
-                rel.Contains("AddDiffResults") || rel.Contains("DiffResults")) continue;
+            if (rel.Contains(AppConstants.SfaReportsDirName) || rel.Contains(AppConstants.ReportsDirName) ||
+                rel.Contains(AppConstants.AddDiffResultsDirName) || rel.Contains(AppConstants.DiffResultsDirName)) continue;
             var ext = Path.GetExtension(entry).ToLowerInvariant();
             try
             {

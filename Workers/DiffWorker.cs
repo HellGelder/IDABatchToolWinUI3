@@ -219,7 +219,7 @@ public sealed class DiffWorker : IDisposable
     {
         try
         {
-            var reportsDir = Path.Combine(OutputDir, "Reports");
+            var reportsDir = Path.Combine(OutputDir, AppConstants.ReportsDirName);
             Directory.CreateDirectory(reportsDir);
             var jsonDir = OutputDir;
             using var worker = new HtmlGenWorker("diff", deleteJson: false, reuseCache: false, platform: "Windows");

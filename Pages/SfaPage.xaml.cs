@@ -266,7 +266,7 @@ public SfaPage(IConfigStore store)
         // анализ» — обычный цикл, документация доищется фазой после анализа.
         if (_detectedPlatform == "Windows")
         {
-            var sfaReportsDir = Path.Combine(SfaInputDirTextBox.Text.Trim(), "SFAReports");
+            var sfaReportsDir = Path.Combine(SfaInputDirTextBox.Text.Trim(), AppConstants.SfaReportsDirName);
             var cacheDbPath = Path.Combine(sfaReportsDir, "mslearn_cache.db");
             var indexDbPath = Path.Combine(sfaReportsDir, "sfa_function_index.db");
             if (File.Exists(cacheDbPath) && File.Exists(indexDbPath))
@@ -408,7 +408,7 @@ public SfaPage(IConfigStore store)
         var inputDir = SfaInputDirTextBox.Text.Trim();
         if (string.IsNullOrEmpty(inputDir) || !Directory.Exists(inputDir)) return;
 
-        var sfaReports = Path.Combine(inputDir, "SFAReports");
+        var sfaReports = Path.Combine(inputDir, AppConstants.SfaReportsDirName);
         var jsonFiles = ExecutableFinder.SafeEnumerateFiles(inputDir)
             .Where(f => f.EndsWith(".export.json", StringComparison.OrdinalIgnoreCase)).ToArray();
         if (jsonFiles.Length == 0) return;
@@ -543,7 +543,7 @@ public SfaPage(IConfigStore store)
             return;
         }
 
-        var sfaReports = Path.Combine(inputDir, "SFAReports");
+        var sfaReports = Path.Combine(inputDir, AppConstants.SfaReportsDirName);
 
         // Вопрос про кэш задаётся при запуске анализа, не здесь: к моменту
         // нажатия «Сгенерировать HTML» поиск документации уже выполнен, и

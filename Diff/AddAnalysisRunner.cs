@@ -1,4 +1,5 @@
 using IDABatchToolWinUI.Models;
+using IDABatchToolWinUI.Services;
 using static IDABatchToolWinUI.Diff.DiffJson;
 
 namespace IDABatchToolWinUI.Diff;
@@ -256,7 +257,7 @@ public sealed class AddAnalysisRunner
     {
         try
         {
-            var reportsDir = Path.Combine(_addOutputDir!, "Reports");
+            var reportsDir = Path.Combine(_addOutputDir!, AppConstants.ReportsDirName);
             Directory.CreateDirectory(reportsDir);
             var jsonFiles = Directory.GetFiles(_addOutputDir!, "*.diff.json").ToList();
             if (jsonFiles.Count == 0) return;
