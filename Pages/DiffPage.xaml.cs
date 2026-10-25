@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using IDABatchToolWinUI.Models;
 using IDABatchToolWinUI.Services;
 using IDABatchToolWinUI.Workers;
@@ -50,9 +51,9 @@ public DiffPage()
 
         // Подписки — один раз в конструкторе, чтобы при повторном показе
         // (кэш навигации) обработчики не дублировались.
-        BrowseLeftButton.Click += async (_, _) => await UiDialogs.PickFolderAsync(LeftDirTextBox);
-        BrowseRightButton.Click += async (_, _) => await UiDialogs.PickFolderAsync(RightDirTextBox);
-        BrowseOutputButton.Click += async (_, _) => await UiDialogs.PickFolderAsync(OutputDirTextBox);
+        BrowseLeftButton.Click += (_, _) => UiDialogs.PickFolderAsync(LeftDirTextBox).SafeFireAndForget("Diff.BrowseLeft");
+        BrowseRightButton.Click += (_, _) => UiDialogs.PickFolderAsync(RightDirTextBox).SafeFireAndForget("Diff.BrowseRight");
+        BrowseOutputButton.Click += (_, _) => UiDialogs.PickFolderAsync(OutputDirTextBox).SafeFireAndForget("Diff.BrowseOutput");
         StartDiffButton.Click += StartComparison_Click;
         CancelDiffButton.Click += (_, _) => CancelComparison();
         GenerateReportButton.Click += GenerateReport_Click;
@@ -64,7 +65,7 @@ public DiffPage()
         _analyzeTimer = DispatcherQueue.CreateTimer();
         _analyzeTimer.Interval = TimeSpan.FromMilliseconds(400);
         _analyzeTimer.IsRepeating = false;
-        _analyzeTimer.Tick += (_, _) => _ = AnalyzeDirectoriesAsync();
+        _analyzeTimer.Tick += (_, _) => AnalyzeDirectoriesAsync().SafeFireAndForget("Diff.AnalyzeDirs");
 
         // Таймер батчинга прогресса диффа (см. комментарий у полей _gitUi*)
         _gitUiTimer = DispatcherQueue.CreateTimer();
@@ -79,9 +80,9 @@ public DiffPage()
         };
 
         // Подвкладка «Git-сравнение»: пикеры папок, запуск и отмена текстового диффа
-        GitBrowseOldButton.Click += async (_, _) => await UiDialogs.PickFolderAsync(GitOldDirTextBox);
-        GitBrowseNewButton.Click += async (_, _) => await UiDialogs.PickFolderAsync(GitNewDirTextBox);
-        GitBrowseOutButton.Click += async (_, _) => await UiDialogs.PickFolderAsync(GitOutDirTextBox);
+        GitBrowseOldButton.Click += (_, _) => UiDialogs.PickFolderAsync(GitOldDirTextBox).SafeFireAndForget("Diff.GitBrowseOld");
+        GitBrowseNewButton.Click += (_, _) => UiDialogs.PickFolderAsync(GitNewDirTextBox).SafeFireAndForget("Diff.GitBrowseNew");
+        GitBrowseOutButton.Click += (_, _) => UiDialogs.PickFolderAsync(GitOutDirTextBox).SafeFireAndForget("Diff.GitBrowseOut");
         GitStartButton.Click += GitStart_Click;
         GitCancelButton.Click += (_, _) => _gitDiffCts?.Cancel();
         GitReportButton.Click += GitGenerateReport_Click;
@@ -285,7 +286,10 @@ public DiffPage()
         return "bindiff";
     }
 
-    private async void StartComparison_Click(object sender, RoutedEventArgs e)
+    private void StartComparison_Click(object sender, RoutedEventArgs e)
+        => RunSafe(StartComparisonAsync());
+
+    private async Task StartComparisonAsync()
     {
         if (_diffInProgress) return;
 
@@ -415,7 +419,7 @@ public DiffPage()
                 AppendLog($"[{engine}] {relKey} — {(status == "done" ? "успешно" : "ошибка")}");
         });
         w.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
-        w.Finished += (ok, total) => RunOnUi(() => OnDiffFinished(ok, total));
+        w.Finished += (ok, total) => RunOnUi(() => OnDiffFinishedAsync(ok, total));
     }
 
     // ──────────────────────────────────────────────
@@ -470,7 +474,7 @@ public DiffPage()
             : $"{stage}: {file} ({current} / {total})";
     }
 
-    private async void OnDiffFinished(int successCount, int total)
+    private async Task OnDiffFinishedAsync(int successCount, int total)
     {
         _diffInProgress = false;
         StartDiffButton.IsEnabled = true;
@@ -505,7 +509,8 @@ public DiffPage()
             if (openIndex)
             {
                 var target = hasMain ? indexHtml : addIndexHtml;
-                try { _ = Windows.System.Launcher.LaunchUriAsync(new Uri(target)); } catch { }
+                Windows.System.Launcher.LaunchUriAsync(new Uri(target))
+                    .AsTask().SafeFireAndForget("Diff.LaunchReport");
             }
         }
         else if (_outputDir != null && Directory.Exists(_outputDir))
@@ -530,7 +535,10 @@ public DiffPage()
     //  Отчёт
     // ──────────────────────────────────────────────
 
-    private async void GenerateReport_Click(object sender, RoutedEventArgs e)
+    private void GenerateReport_Click(object sender, RoutedEventArgs e)
+        => RunSafe(GenerateReportAsync());
+
+    private async Task GenerateReportAsync()
     {
         if (string.IsNullOrEmpty(_outputDir) || !Directory.Exists(_outputDir))
         {
@@ -556,22 +564,25 @@ public DiffPage()
             MapStatusLabel.Text = $"Генерация отчёта: {cur}/{total}";
         });
         worker.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
-        worker.Finished += result => RunOnUi(async () =>
-        {
-            DiffProgressRing.IsActive = false;
-            DiffProgressRing.Visibility = Visibility.Collapsed;
-            if (result.IndexPath != null)
-            {
-                await UiDialogs.InfoAsync("Готово", $"Отчёт сгенерирован:\n{result.IndexPath}");
-                try { _ = Windows.System.Launcher.LaunchUriAsync(new Uri(result.IndexPath)); } catch { }
-            }
-        });
+        worker.Finished += result => RunOnUi(() => OnDiffReportReadyAsync(result));
 
         // UI-свойства читаем до Task.Run (см. комментарий в GitStart_Click)
         var leftDir = LeftDirTextBox.Text.Trim();
         var rightDir = RightDirTextBox.Text.Trim();
         await Task.Run(() => worker.Run(leftDir, reportsDir, _outputDir,
             leftDir, rightDir, null, jsonFiles));
+    }
+
+    private async Task OnDiffReportReadyAsync(HtmlGenResult result)
+    {
+        DiffProgressRing.IsActive = false;
+        DiffProgressRing.Visibility = Visibility.Collapsed;
+        if (result.IndexPath != null)
+        {
+            await UiDialogs.InfoAsync("Готово", $"Отчёт сгенерирован:\n{result.IndexPath}");
+            Windows.System.Launcher.LaunchUriAsync(new Uri(result.IndexPath))
+                .AsTask().SafeFireAndForget("Diff.LaunchReport");
+        }
     }
 
     // ──────────────────────────────────────────────
@@ -594,7 +605,10 @@ public DiffPage()
 
     // ────────────────── Подвкладка «Git-сравнение» ──────────────────
 
-    private async void GitStart_Click(object sender, RoutedEventArgs e)
+    private void GitStart_Click(object sender, RoutedEventArgs e)
+        => RunSafe(GitStartAsync());
+
+    private async Task GitStartAsync()
     {
         if (_gitDiffInProgress) return;
 
@@ -958,11 +972,13 @@ public DiffPage()
                 new[] { "Открыть индекс", "Открыть папку", "ОК" }, defaultIndex: 0);
             if (choice == 0)
             {
-                try { _ = Windows.System.Launcher.LaunchUriAsync(new Uri(indexPath)); } catch { }
+                Windows.System.Launcher.LaunchUriAsync(new Uri(indexPath))
+                    .AsTask().SafeFireAndForget("Diff.LaunchIndex");
             }
             else if (choice == 1 && Directory.Exists(moduleDir))
             {
-                _ = Windows.System.Launcher.LaunchFolderPathAsync(moduleDir);
+                Windows.System.Launcher.LaunchFolderPathAsync(moduleDir)
+                    .AsTask().SafeFireAndForget("Diff.LaunchFolder");
             }
         }
         catch (Exception ex)
@@ -978,7 +994,10 @@ public DiffPage()
         }
     }
 
-    private async void GitGenerateReport_Click(object sender, RoutedEventArgs e)
+    private void GitGenerateReport_Click(object sender, RoutedEventArgs e)
+        => RunSafe(GitGenerateReportAsync());
+
+    private async Task GitGenerateReportAsync()
     {
         if (_gitDiffInProgress) return;
 
@@ -1015,11 +1034,13 @@ public DiffPage()
                 new[] { "Открыть отчёт", "Открыть папку", "ОК" }, defaultIndex: 0);
             if (choice == 0)
             {
-                try { _ = Windows.System.Launcher.LaunchUriAsync(new Uri(reportPath)); } catch { }
+                Windows.System.Launcher.LaunchUriAsync(new Uri(reportPath))
+                    .AsTask().SafeFireAndForget("Diff.LaunchReport");
             }
             else if (choice == 1 && Directory.Exists(Path.GetDirectoryName(reportPath)))
             {
-                _ = Windows.System.Launcher.LaunchFolderPathAsync(Path.GetDirectoryName(reportPath)!);
+                Windows.System.Launcher.LaunchFolderPathAsync(Path.GetDirectoryName(reportPath)!)
+                    .AsTask().SafeFireAndForget("Diff.LaunchFolder");
             }
         }
         catch (Exception ex)
@@ -1036,6 +1057,15 @@ public DiffPage()
     }
 
     private void RunOnUi(Action a) => DispatcherQueue.TryEnqueue(() => a());
+
+    private void RunOnUi(Func<Task> a) => DispatcherQueue.TryEnqueue(
+        () => a().SafeFireAndForget("Diff.RunOnUi"));
+
+    /// <summary>Запуск задачи страницы: исключение попадает в журнал страницы и
+    /// AppLog, а не роняет процесс (см. TaskExtensions.SafeFireAndForget).</summary>
+    private void RunSafe(Task task, [CallerMemberName] string? context = null)
+        => task.SafeFireAndForget(context ?? "Diff",
+            ex => RunOnUi(() => AppendError($"{context}: {ex.Message}")));
 
     private static Task<string> AskExistingResultsAsync(int count)
     {

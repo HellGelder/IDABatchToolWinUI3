@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using IDABatchToolWinUI.Models;
 using IDABatchToolWinUI.Services;
 using IDABatchToolWinUI.Workers;
@@ -52,7 +53,7 @@ public sealed partial class AnalysisPage : Page
         _refreshTimer = DispatcherQueue.CreateTimer();
         _refreshTimer.Interval = TimeSpan.FromMilliseconds(400);
         _refreshTimer.IsRepeating = false;
-        _refreshTimer.Tick += (_, _) => _ = RefreshFileListAsync();
+        _refreshTimer.Tick += (_, _) => RefreshFileListAsync().SafeFireAndForget("Analysis.Refresh");
 
         Loaded += OnLoaded;
     }
@@ -102,8 +103,8 @@ public sealed partial class AnalysisPage : Page
         PlatformInfoBar.IsOpen = true;
     }
 
-    private async void BrowseDir_Click(object sender, RoutedEventArgs e)
-        => await UiDialogs.PickFolderAsync(InputDirTextBox);
+    private void BrowseDir_Click(object sender, RoutedEventArgs e)
+        => UiDialogs.PickFolderAsync(InputDirTextBox).SafeFireAndForget("Analysis.BrowseDir");
 
     private void RefreshFileList()
     {
@@ -211,7 +212,10 @@ public sealed partial class AnalysisPage : Page
     //  Запуск анализа
     // ──────────────────────────────────────────────
 
-    private async void StartAnalysis_Click(object sender, RoutedEventArgs e)
+    private void StartAnalysis_Click(object sender, RoutedEventArgs e)
+        => RunSafe(StartAnalysisAsync());
+
+    private async Task StartAnalysisAsync()
     {
         if (_analysisInProgress) return;
 
@@ -391,7 +395,7 @@ public sealed partial class AnalysisPage : Page
             {
                 _worker?.Dispose();
                 _worker = null;
-                _ = StartExportOnlyAsync(allIdb);
+                StartExportOnlyAsync(allIdb).SafeFireAndForget("Analysis.ExportOnly");
                 return;
             }
             ProcessStatusText.Text = "Нет готовых баз для экспорта";
@@ -467,6 +471,15 @@ public sealed partial class AnalysisPage : Page
 
     private void RunOnUi(Action a) => DispatcherQueue.TryEnqueue(() => a());
 
+    private void RunOnUi(Func<Task> a) => DispatcherQueue.TryEnqueue(
+        () => a().SafeFireAndForget("Analysis.RunOnUi"));
+
+    /// <summary>Запуск задачи страницы: исключение попадает в журнал страницы и
+    /// AppLog, а не роняет процесс (см. TaskExtensions.SafeFireAndForget).</summary>
+    private void RunSafe(Task task, [CallerMemberName] string? context = null)
+        => task.SafeFireAndForget(context ?? "Analysis",
+            ex => RunOnUi(() => AppendError($"{context}: {ex.Message}")));
+
     // ──────────────────────────────────────────────
     //  HTML-отчёты
     // ──────────────────────────────────────────────
@@ -478,7 +491,10 @@ public sealed partial class AnalysisPage : Page
     private void PseudocodeInfoButton_Click(object sender, RoutedEventArgs e)
         => PseudocodeTip.IsOpen = !PseudocodeTip.IsOpen;
 
-    private async void GenerateHtml_Click(object sender, RoutedEventArgs e)
+    private void GenerateHtml_Click(object sender, RoutedEventArgs e)
+        => RunSafe(GenerateHtmlAsync());
+
+    private async Task GenerateHtmlAsync()
     {
         if (_htmlInProgress) return;
 
@@ -520,12 +536,12 @@ public sealed partial class AnalysisPage : Page
         {
             if (msg.Length > 0) AppendLog($"[HTML] {msg}");
         });
-        _htmlWorker.Finished += result => RunOnUi(() => OnHtmlFinished(result));
+        _htmlWorker.Finished += result => RunOnUi(() => OnHtmlFinishedAsync(result));
 
         await Task.Run(() => _htmlWorker.Run(inputDir, reportsDir, inputDir, null, null, null, jsonFiles));
     }
 
-    private async void OnHtmlFinished(HtmlGenResult result)
+    private async Task OnHtmlFinishedAsync(HtmlGenResult result)
     {
         _htmlInProgress = false;
         StartAnalysisButton.IsEnabled = true;
@@ -548,7 +564,8 @@ public sealed partial class AnalysisPage : Page
             defaultIndex: 0);
         if (open == 0 && Directory.Exists(reportsDir))
         {
-            _ = Windows.System.Launcher.LaunchFolderPathAsync(reportsDir);
+            Windows.System.Launcher.LaunchFolderPathAsync(reportsDir)
+                .AsTask().SafeFireAndForget("Analysis.LaunchReports");
         }
     }
 

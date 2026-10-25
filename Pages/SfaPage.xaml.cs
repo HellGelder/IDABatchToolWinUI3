@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using IDABatchToolWinUI.Models;
 using IDABatchToolWinUI.Services;
 using IDABatchToolWinUI.Workers;
@@ -40,7 +41,8 @@ public SfaPage()
 
         // Подписки — один раз в конструкторе, чтобы при повторном показе
         // не дублировались (страница кэшируется в MainWindow).
-        SfaBrowseDirButton.Click += async (_, _) => await UiDialogs.PickFolderAsync(SfaInputDirTextBox);
+        SfaBrowseDirButton.Click += (_, _) =>
+            UiDialogs.PickFolderAsync(SfaInputDirTextBox).SafeFireAndForget("Sfa.BrowseDir");
         SfaStartButton.Click += StartAnalysis_Click;
         SfaCancelButton.Click += (_, _) => CancelAnalysis();
         SfaGenerateHtmlButton.Click += GenerateHtml_Click;
@@ -50,7 +52,7 @@ public SfaPage()
         _refreshTimer = DispatcherQueue.CreateTimer();
         _refreshTimer.Interval = TimeSpan.FromMilliseconds(400);
         _refreshTimer.IsRepeating = false;
-        _refreshTimer.Tick += (_, _) => _ = RefreshFileListAsync();
+        _refreshTimer.Tick += (_, _) => RefreshFileListAsync().SafeFireAndForget("Sfa.Refresh");
 
         Loaded += (_, _) => RefreshFileList();
     }
@@ -191,7 +193,10 @@ public SfaPage()
     //  Анализ
     // ──────────────────────────────────────────────
 
-    private async void StartAnalysis_Click(object sender, RoutedEventArgs e)
+    private void StartAnalysis_Click(object sender, RoutedEventArgs e)
+        => RunSafe(StartAnalysisAsync());
+
+    private async Task StartAnalysisAsync()
     {
         if (_analysisInProgress) return;
 
@@ -372,7 +377,7 @@ public SfaPage()
             var allIdb = _cachedFiles
                 .Where(f => ArtifactValidator.IsValidIdaDatabase(f.ExpectedI64Path, out _))
                 .Select(f => f.ExpectedI64Path).ToList();
-            if (allIdb.Count > 0) { _ = StartExportOnlyAsync(allIdb); return; }
+            if (allIdb.Count > 0) { StartExportOnlyAsync(allIdb).SafeFireAndForget("Sfa.ExportOnly"); return; }
             SfaProcessStatusText.Text = "Нет готовых баз для экспорта";
         }
 
@@ -393,7 +398,7 @@ public SfaPage()
             return;
         }
         if (anyJson && _detectedPlatform == "Windows")
-            _ = StartDocsSearchAsync();
+            StartDocsSearchAsync().SafeFireAndForget("Sfa.DocsSearch");
     }
 
     /// <summary>Поиск документации MS Learn по всем export.json — выполняется
@@ -511,11 +516,23 @@ public SfaPage()
 
     private void RunOnUi(Action a) => DispatcherQueue.TryEnqueue(() => a());
 
+    private void RunOnUi(Func<Task> a) => DispatcherQueue.TryEnqueue(
+        () => a().SafeFireAndForget("Sfa.RunOnUi"));
+
+    /// <summary>Запуск задачи страницы: исключение попадает в журнал страницы и
+    /// AppLog, а не роняет процесс (см. TaskExtensions.SafeFireAndForget).</summary>
+    private void RunSafe(Task task, [CallerMemberName] string? context = null)
+        => task.SafeFireAndForget(context ?? "Sfa",
+            ex => RunOnUi(() => AppendError($"{context}: {ex.Message}")));
+
     // ──────────────────────────────────────────────
     //  HTML-отчёты СФ (с кэшем MS Learn)
     // ──────────────────────────────────────────────
 
-    private async void GenerateHtml_Click(object sender, RoutedEventArgs e)
+    private void GenerateHtml_Click(object sender, RoutedEventArgs e)
+        => RunSafe(GenerateHtmlAsync());
+
+    private async Task GenerateHtmlAsync()
     {
         if (_htmlInProgress) return;
 
@@ -602,7 +619,7 @@ public SfaPage()
         // Finished приходит из фонового потока Task.Run: без RunOnUi обработчик
         // трогал UI (кнопки, прогресс, ContentDialog) из не-UI потока —
         // приложение падало аварийно в момент завершения/отмены генерации.
-        _htmlWorker.Finished += result => RunOnUi(() => OnHtmlFinished(result));
+        _htmlWorker.Finished += result => RunOnUi(() => OnHtmlFinishedAsync(result));
 
         await Task.Run(() => _htmlWorker.Run(inputDir, sfaReports, inputDir, null, null,
             manpagesDb, jsonFiles));
@@ -623,7 +640,7 @@ public SfaPage()
         return Path.Combine(sfaReports, AppConstants.ManpagesDbFileName);
     }
 
-    private async void OnHtmlFinished(HtmlGenResult result)
+    private async Task OnHtmlFinishedAsync(HtmlGenResult result)
     {
         _htmlInProgress = false;
         SfaStartButton.IsEnabled = true;

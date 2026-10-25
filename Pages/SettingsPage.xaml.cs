@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Text;
 using IDABatchToolWinUI.Services;
 using IDABatchToolWinUI.Workers;
@@ -24,19 +25,19 @@ public sealed partial class SettingsPage : Page
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        BrowseIdaButton.Click += async (_, _) => await UiDialogs.PickFileAsync(IdatPathTextBox, ".exe");
-        AutoIdaButton.Click += async (_, _) => await AutoDetectIdaAsync();
-        BrowseBindiffButton.Click += async (_, _) => await UiDialogs.PickFileAsync(BindiffPathTextBox, ".exe");
-        AutoBindiffButton.Click += async (_, _) => await AutoDetectBindiffAsync();
-        SaveSettingsButton.Click += async (_, _) => await SaveSettingsAsync(showMessage: true);
-        CheckUtilsButton.Click += async (_, _) => await CheckUtilitiesAsync();
+        BrowseIdaButton.Click += (_, _) => UiDialogs.PickFileAsync(IdatPathTextBox, ".exe").SafeFireAndForget("Settings.BrowseIda");
+        AutoIdaButton.Click += (_, _) => RunSafe(AutoDetectIdaAsync());
+        BrowseBindiffButton.Click += (_, _) => UiDialogs.PickFileAsync(BindiffPathTextBox, ".exe").SafeFireAndForget("Settings.BrowseBindiff");
+        AutoBindiffButton.Click += (_, _) => RunSafe(AutoDetectBindiffAsync());
+        SaveSettingsButton.Click += (_, _) => RunSafe(SaveSettingsAsync(showMessage: true));
+        CheckUtilsButton.Click += (_, _) => RunSafe(CheckUtilitiesAsync());
 
         ThemeLightButton.Click += (_, _) => SwitchTheme("light");
         ThemeDarkButton.Click += (_, _) => SwitchTheme("dark");
 
-        BrowseManPagesButton.Click += async (_, _) => await UiDialogs.PickFolderAsync(ManPagesPathTextBox);
-        CheckManPagesButton.Click += async (_, _) => await CheckManPagesAsync(showPopup: true);
-        SyncManPagesButton.Click += async (_, _) => await SyncManPagesAsync();
+        BrowseManPagesButton.Click += (_, _) => UiDialogs.PickFolderAsync(ManPagesPathTextBox).SafeFireAndForget("Settings.BrowseManPages");
+        CheckManPagesButton.Click += (_, _) => RunSafe(CheckManPagesAsync(showPopup: true));
+        SyncManPagesButton.Click += (_, _) => RunSafe(SyncManPagesAsync());
 
         LoadToUi();
     }
@@ -51,7 +52,7 @@ public sealed partial class SettingsPage : Page
         ManPagesPathTextBox.Text = _cfg.ManPagesDbPath;
 
         if (!string.IsNullOrWhiteSpace(ManPagesPathTextBox.Text))
-            _ = CheckManPagesAsync();
+            CheckManPagesAsync().SafeFireAndForget("Settings.CheckManPages");
     }
 
     private void SwitchTheme(string theme)
@@ -382,27 +383,38 @@ public sealed partial class SettingsPage : Page
             ManPagesStatusText.Text = $"Статус: {msg} ({pct}%)");
         _manWorker.ErrorOccurred += msg => RunOnUi(() =>
             ManPagesStatusText.Text = $"Статус: ошибка — {msg}");
-        _manWorker.Finished += (success, message) => RunOnUi(async () =>
-        {
-            SyncManPagesButton.IsEnabled = true;
-            CheckManPagesButton.IsEnabled = true;
-            if (success)
-            {
-                _cfg.ManPagesDbPath = Path.GetDirectoryName(dbPath) ?? "";
-                ConfigService.Save(_cfg);
-                await UiDialogs.InfoAsync("Готово", $"Документация man-pages импортирована:\n{message}");
-                await CheckManPagesAsync();
-            }
-            else
-            {
-                await UiDialogs.WarnAsync("Ошибка", $"Не удалось импортировать man-pages:\n{message}");
-            }
-            _manWorker = null;
-        });
+        _manWorker.Finished += (success, message) =>
+            RunOnUi(() => OnManPagesFinishedAsync(success, dbPath, message));
         _manWorker.Start();
     }
 
+    private async Task OnManPagesFinishedAsync(bool success, string dbPath, string message)
+    {
+        SyncManPagesButton.IsEnabled = true;
+        CheckManPagesButton.IsEnabled = true;
+        if (success)
+        {
+            _cfg.ManPagesDbPath = Path.GetDirectoryName(dbPath) ?? "";
+            ConfigService.Save(_cfg);
+            await UiDialogs.InfoAsync("Готово", $"Документация man-pages импортирована:\n{message}");
+            await CheckManPagesAsync();
+        }
+        else
+        {
+            await UiDialogs.WarnAsync("Ошибка", $"Не удалось импортировать man-pages:\n{message}");
+        }
+        _manWorker = null;
+    }
+
+    /// <summary>Запуск задачи страницы: исключение пишется в AppLog, а не роняет
+    /// процесс (см. TaskExtensions.SafeFireAndForget).</summary>
+    private void RunSafe(Task task, [CallerMemberName] string? context = null)
+        => task.SafeFireAndForget(context ?? "Settings");
+
     private void RunOnUi(Action a) => DispatcherQueue.TryEnqueue(() => a());
+
+    private void RunOnUi(Func<Task> a) => DispatcherQueue.TryEnqueue(
+        () => a().SafeFireAndForget("Settings.RunOnUi"));
 }
 
 /// <summary>Применение темы оформления (платформенной) к окну.</summary>

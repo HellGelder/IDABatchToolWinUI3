@@ -80,24 +80,34 @@ public sealed partial class MainWindow : Window
         args.Cancel = true;
         if (_closePromptOpen) return;
         _closePromptOpen = true;
-        bool confirmed = false;
-        try { confirmed = await ShowCloseConfirmAsync(); }
-        catch { confirmed = false; }
-        finally { _closePromptOpen = false; }
-        if (!confirmed) return;
+        try
+        {
+            bool confirmed = false;
+            try { confirmed = await ShowCloseConfirmAsync(); }
+            catch { confirmed = false; }
+            finally { _closePromptOpen = false; }
+            if (!confirmed) return;
 
-        _analysisPage?.CancelAll();
-        _diffPage?.CancelAll();
-        _sfaPage?.CancelAll();
+            _analysisPage?.CancelAll();
+            _diffPage?.CancelAll();
+            _sfaPage?.CancelAll();
 
-        // Ожидание завершения при закрытии (не таймаут фазы): даём процессам
-        // корректно завершиться, затем добиваем оставшиеся.
-        await ProcessRegistry.WaitForExitAsync(TimeSpan.FromSeconds(10));
-        ProcessRegistry.KillAll();
-        JobObject.Current?.Terminate();
+            // Ожидание завершения при закрытии (не таймаут фазы): даём процессам
+            // корректно завершиться, затем добиваем оставшиеся.
+            await ProcessRegistry.WaitForExitAsync(TimeSpan.FromSeconds(10));
+            ProcessRegistry.KillAll();
+            JobObject.Current?.Terminate();
 
-        _allowClose = true;
-        Close();
+            _allowClose = true;
+            Close();
+        }
+        catch (Exception ex)
+        {
+            // Ошибка процедуры закрытия не должна оставлять окно незакрываемым.
+            AppLog.Error("Ошибка при закрытии окна", ex);
+            _allowClose = true;
+            Close();
+        }
     }
 
     private async Task<bool> ShowCloseConfirmAsync()
@@ -127,7 +137,7 @@ public sealed partial class MainWindow : Window
         if (_envCheckStarted) return;
         _envCheckStarted = true;
         Activated -= OnFirstActivated;
-        _ = PythonEnvironment.EnsureEnvironmentAsync();
+        PythonEnvironment.EnsureEnvironmentAsync().SafeFireAndForget("Startup.PythonEnv");
     }
 
     private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -139,15 +149,15 @@ public sealed partial class MainWindow : Window
         // Блокировка навигации во время работы (аналог main_window.py)
         if (_analysisPage?.IsAnalysisRunning() == true)
         {
-            if (tag != "analysis") { _ = RestoreSelection("analysis"); return; }
+            if (tag != "analysis") { RestoreSelection("analysis").SafeFireAndForget("Nav.RestoreSelection"); return; }
         }
         else if (_diffPage?.IsDiffRunning() == true)
         {
-            if (tag != "diff") { _ = RestoreSelection("diff"); return; }
+            if (tag != "diff") { RestoreSelection("diff").SafeFireAndForget("Nav.RestoreSelection"); return; }
         }
         else if (_sfaPage?.IsAnalysisRunning() == true)
         {
-            if (tag != "sfa") { _ = RestoreSelection("sfa"); return; }
+            if (tag != "sfa") { RestoreSelection("sfa").SafeFireAndForget("Nav.RestoreSelection"); return; }
         }
 
         switch (tag)

@@ -144,7 +144,7 @@ public static class PythonEnvironment
             installLabel.Text = "Установка...";
             installButton.IsEnabled = false;
             continueButton.IsEnabled = false;
-            _ = RunInstallAsync();
+            RunInstallAsync().SafeFireAndForget("PythonEnv.Install");
         };
         continueButton.Click += (_, _) =>
         {
@@ -298,11 +298,14 @@ public static class PythonEnvironment
         if (dq == null) return action();
 
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var queued = dq.TryEnqueue(() => _ = Run());
+        var queued = dq.TryEnqueue(() => Run().SafeFireAndForget("PythonEnv.RunOnUi"));
+        // Исключение действия передаётся ожидающему через tcs, а не теряется:
+        // вызывающий (EnsureEnvironmentAsync) запускается через SafeFireAndForget
+        // и запишет его в журнал.
         async Task Run()
         {
-            try { await action(); }
-            finally { tcs.SetResult(); }
+            try { await action(); tcs.TrySetResult(); }
+            catch (Exception ex) { tcs.TrySetException(ex); }
         }
         return queued ? tcs.Task : action();
     }
