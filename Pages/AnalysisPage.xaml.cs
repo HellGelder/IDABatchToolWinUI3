@@ -295,7 +295,7 @@ public sealed partial class AnalysisPage : Page
         ErrorLogTextBox.Text = "";
 
         // Очередь файлов в мини-диспетчере задач
-        AnalysisMonitor.BeginSession(files.Select(f => f.Name), (int)MaxIdaSlider.Value);
+        AnalysisMonitor.BeginSession(files.Select(f => f.Path), (int)MaxIdaSlider.Value);
 
         _worker = new AnalysisWorker(
             files.Select(f => f.Path).ToList(),
@@ -320,13 +320,13 @@ public sealed partial class AnalysisPage : Page
         });
         w.ProcessStarted += (name, pid, tid) => RunOnUi(() =>
         {
-            AnalysisMonitor.SetProcessInfo(AnalysisMonitor.NormalizeName(name), pid, tid);
+            AnalysisMonitor.SetProcessInfo(name, pid, tid);
             AppendLog($"Запущен процесс: {name} (PID {pid})");
         });
         w.PulseUpdated += (name, text) => RunOnUi(() =>
         {
             // Пульс: жив/работает/затих — в строку статуса и в диспетчер задач.
-            AnalysisMonitor.SetPulse(AnalysisMonitor.NormalizeName(name), text);
+            AnalysisMonitor.SetPulse(name, text);
             ProcessStatusText.Text = text;
         });
         w.AnalysisProgress += (name, cur, total) => RunOnUi(() =>
@@ -336,18 +336,18 @@ public sealed partial class AnalysisPage : Page
         w.AnalysisFileStarted += name => RunOnUi(() =>
         {
             SetFileStatusByName(name, AnalysisStatus.InProgress);
-            AnalysisMonitor.MarkRunning(AnalysisMonitor.NormalizeName(name), "analysis");
+            AnalysisMonitor.MarkRunning(name, "analysis");
             AppendLog($"[Анализ] Начало: {name}");
         });
         w.AnalysisFileCompleted += (name, ok) => RunOnUi(() =>
         {
             SetFileStatusByName(name, ok ? AnalysisStatus.Success : AnalysisStatus.Error);
-            AnalysisMonitor.MarkCompleted(AnalysisMonitor.NormalizeName(name), ok);
+            AnalysisMonitor.MarkCompleted(name, ok);
             AppendLog($"[Анализ] {name} — {(ok ? "успешно" : "ошибка")}");
         });
         w.ExportFileStarted += name => RunOnUi(() =>
         {
-            AnalysisMonitor.MarkRunning(AnalysisMonitor.NormalizeName(name), "export");
+            AnalysisMonitor.MarkRunning(name, "export");
             AppendLog($"[Экспорт] Начало: {name}");
         });
         w.ExportProgress += (name, cur, total) => RunOnUi(() =>
@@ -360,7 +360,7 @@ public sealed partial class AnalysisPage : Page
             SetFileStatusByName(name, ok ? AnalysisStatus.Success : AnalysisStatus.Error);
             if (!ok) AppendError($"Ошибка экспорта для {name}");
             else AppendLog($"[Экспорт] {name} — успешно");
-            AnalysisMonitor.MarkCompleted(AnalysisMonitor.NormalizeName(name), ok);
+            AnalysisMonitor.MarkCompleted(name, ok);
         });
         w.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
         w.Finished += (ok, total) => RunOnUi(() => OnAnalysisFinished(ok, total));
@@ -425,7 +425,7 @@ public sealed partial class AnalysisPage : Page
         ProcessProgress.Value = 0;
         DetailsButton.IsEnabled = true;
         // Новая сессия в мини-диспетчере: имена баз без суффикса .i64
-        AnalysisMonitor.BeginSession(idbFiles.Select(p => AnalysisMonitor.NormalizeName(p)), (int)MaxIdaSlider.Value);
+        AnalysisMonitor.BeginSession(idbFiles, (int)MaxIdaSlider.Value);
         var worker = new AnalysisWorker(idbFiles, idatPath, (int)MaxIdaSlider.Value, null,
             false, false, PseudocodeCheck.IsChecked == true, false, true);
         HookWorker(worker);

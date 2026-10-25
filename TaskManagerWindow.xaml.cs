@@ -70,29 +70,48 @@ public sealed partial class TaskManagerWindow : Window
         _ => 2,
     };
 
+    // Текстовые подписи статусов/фаз — UI-слой: сервис знает только enum.
+    private static string StatusText(MonitorFileStatus s) => s switch
+    {
+        MonitorFileStatus.Pending => "В ожидании",
+        MonitorFileStatus.Running => "Анализируется",
+        MonitorFileStatus.Done => "Завершён",
+        MonitorFileStatus.Failed => "Завершён (ошибка)",
+        MonitorFileStatus.Cancelled => "Отменён",
+        _ => "—",
+    };
+
+    private static string PhaseText(string phase) => phase switch
+    {
+        "analysis" => "Анализ",
+        "export" => "Экспорт",
+        _ => "—",
+    };
+
     private void Refresh()
     {
         var entries = AnalysisMonitor.Snapshot();
 
-        // Обновляем снимки живых процессов активных файлов
+        // Снимки живых процессов активных файлов пишет сам монитор (по PID):
+        // Snapshot() отдаёт копии, мутировать их бессмысленно.
         foreach (var e in entries)
         {
             if (e.Status != MonitorFileStatus.Running || e.Pid <= 0) continue;
             try
             {
                 using var p = Process.GetProcessById(e.Pid);
-                e.CpuTime = p.TotalProcessorTime.ToString(@"hh\:mm\:ss");
-                e.MemoryMb = $"{p.WorkingSet64 / 1024.0 / 1024.0:F1} МБ";
-                e.OsThreads = p.Threads.Count.ToString();
+                AnalysisMonitor.UpdateRuntimeStats(e.Pid,
+                    p.TotalProcessorTime.ToString(@"hh\:mm\:ss"),
+                    $"{p.WorkingSet64 / 1024.0 / 1024.0:F1} МБ",
+                    p.Threads.Count.ToString());
             }
             catch
             {
                 // процесс уже завершился или недоступен — снимок обнуляем
-                e.CpuTime = "—";
-                e.MemoryMb = "—";
-                e.OsThreads = "—";
+                AnalysisMonitor.ClearRuntimeStats(e.Pid);
             }
         }
+        entries = AnalysisMonitor.Snapshot(); // со свежими снимками процессов
 
         // Анализируемые файлы — вверху, завершённые опускаются в конец
         // (внутри групп исходный порядок очереди сохраняется).
@@ -106,8 +125,8 @@ public sealed partial class TaskManagerWindow : Window
         RowsList.ItemsSource = ordered.Select(e => new TaskRow(
             e.FileName,
             e.Pid > 0 ? e.Pid.ToString() : "—",
-            e.Status.ToText(),
-            e.PhaseText,
+            StatusText(e.Status),
+            PhaseText(e.Phase),
             e.CpuTime,
             e.MemoryMb,
             e.OsThreads,

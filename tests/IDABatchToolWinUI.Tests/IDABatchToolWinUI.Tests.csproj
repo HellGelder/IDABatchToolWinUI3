@@ -37,6 +37,7 @@
     <Compile Include="..\..\Services\AppConstants.cs" Link="Linked\AppConstants.cs" />
     <Compile Include="..\..\Services\ConfigService.cs" Link="Linked\ConfigService.cs" />
     <Compile Include="..\..\Services\ConfigStore.cs" Link="Linked\ConfigStore.cs" />
+    <Compile Include="..\..\Services\AnalysisMonitor.cs" Link="Linked\AnalysisMonitor.cs" />
     <Compile Include="..\..\Diff\BinDiffParser.cs" Link="Linked\BinDiffParser.cs" />
     <Compile Include="..\..\Diff\DiaphoraParser.cs" Link="Linked\DiaphoraParser.cs" />
     <Compile Include="..\..\Diff\DiffJsonEnricher.cs" Link="Linked\DiffJsonEnricher.cs" />

@@ -1,8 +1,7 @@
-using System.Collections.Concurrent;
-
 namespace IDABatchToolWinUI.Services;
 
-/// <summary>Статус файла в мини-диспетчере задач анализа.</summary>
+/// <summary>Статус файла в мини-диспетчере задач анализа.
+/// Текстовые подписи — в UI-слое (TaskManagerWindow).</summary>
 public enum MonitorFileStatus
 {
     Pending,
@@ -12,25 +11,15 @@ public enum MonitorFileStatus
     Cancelled,
 }
 
-public static class MonitorFileStatusExtensions
-{
-    public static string ToText(this MonitorFileStatus s) => s switch
-    {
-        MonitorFileStatus.Pending => "В ожидании",
-        MonitorFileStatus.Running => "Анализируется",
-        MonitorFileStatus.Done => "Завершён",
-        MonitorFileStatus.Failed => "Завершён (ошибка)",
-        MonitorFileStatus.Cancelled => "Отменён",
-        _ => "—",
-    };
-}
-
 /// <summary>
 /// Строка мини-диспетчера: анализируемый файл + сведения о процессе/потоке.
-/// Снимки CPU/памяти заполняет окно диспетчера при опросе системы.
+/// Ключ записи — полный путь (уникален); FileName — отображаемое имя.
+/// Снимки CPU/памяти заполняет монитор по запросу окна диспетчера
+/// (UpdateRuntimeStats), наружу отдаются только копии (Snapshot).
 /// </summary>
 public sealed class MonitorEntry
 {
+    public required string Key { get; init; }
     public required string FileName { get; init; }
     public MonitorFileStatus Status { get; set; } = MonitorFileStatus.Pending;
     /// <summary>"analysis" | "export" — текущая фаза обработки файла.</summary>
@@ -48,18 +37,30 @@ public sealed class MonitorEntry
     /// <summary>Текст пульса: время, CPU, артефакты, последняя активность.</summary>
     public string Pulse { get; set; } = "";
 
-    public string PhaseText => Phase switch
+    public MonitorEntry Clone() => new()
     {
-        "analysis" => "Анализ",
-        "export" => "Экспорт",
-        _ => "—",
+        Key = Key,
+        FileName = FileName,
+        Status = Status,
+        Phase = Phase,
+        Pid = Pid,
+        ThreadId = ThreadId,
+        StartedAt = StartedAt,
+        EndedAt = EndedAt,
+        CpuTime = CpuTime,
+        MemoryMb = MemoryMb,
+        OsThreads = OsThreads,
+        Pulse = Pulse,
     };
 }
 
 /// <summary>
 /// Общее состояние очереди анализа для окна «мини-диспетчер задач».
-/// Заполняется страницей анализа из событий воркера (все методы вызываются на UI-потоке),
-/// окно диспетчера только читает Snapshot() и опрашивает систему по PID.
+/// Заполняется страницей анализа из событий воркера (все методы вызываются на
+/// UI-потоке); все мутации — под общим локом, Snapshot() возвращает независимые
+/// копии, поэтому окно диспетчера не может изменить состояние монитора.
+/// Идентификация записи: точное совпадение ключа (путь), иначе — по
+/// нормализованному имени (события воркера передают только имя файла).
 /// </summary>
 public static class AnalysisMonitor
 {
@@ -75,58 +76,99 @@ public static class AnalysisMonitor
         get { lock (_entries) return _maxWorkers; }
     }
 
-    /// <summary>Начать новую сессию: очередь всех файлов со статусом «В ожидании».</summary>
-    public static void BeginSession(IEnumerable<string> fileNames, int maxWorkers)
+    /// <summary>Начать новую сессию: очередь всех файлов со статусом «В ожидании».
+    /// Ключи — полные пути файлов; для отображения имя нормализуется.</summary>
+    public static void BeginSession(IEnumerable<string> keys, int maxWorkers)
     {
         lock (_entries)
         {
             _entries.Clear();
-            foreach (var name in fileNames)
-                _entries.Add(new MonitorEntry { FileName = name });
+            foreach (var key in keys)
+                _entries.Add(new MonitorEntry { Key = key, FileName = NormalizeName(key) });
             _maxWorkers = Math.Max(1, maxWorkers);
             _sessionActive = true;
         }
     }
 
     /// <summary>Файл начал обрабатываться (колбэк FileStart).</summary>
-    public static void MarkRunning(string fileName, string phase)
+    public static void MarkRunning(string id, string phase)
     {
-        // Имена в очереди могут повторяться (файлы в подпапках/архивах):
-        // обновляем все записи с этим именем, иначе «вторые» копии навсегда
-        // остаются «В ожидании» и в конце сессии помечаются отменёнными.
-        foreach (var e in FindAll(fileName))
+        lock (_entries)
         {
-            e.Status = MonitorFileStatus.Running;
-            e.Phase = phase;
-            e.StartedAt ??= DateTime.Now;
+            foreach (var e in FindAllLocked(id))
+            {
+                e.Status = MonitorFileStatus.Running;
+                e.Phase = phase;
+                e.StartedAt ??= DateTime.Now;
+            }
         }
     }
 
     /// <summary>Процесс IDA запущен: запоминаем PID и тред воркера.</summary>
-    public static void SetProcessInfo(string fileName, int pid, int threadId)
+    public static void SetProcessInfo(string id, int pid, int threadId)
     {
-        foreach (var e in FindAll(fileName))
+        lock (_entries)
         {
-            e.Pid = pid;
-            e.ThreadId = threadId;
+            foreach (var e in FindAllLocked(id))
+            {
+                e.Pid = pid;
+                e.ThreadId = threadId;
+            }
         }
     }
 
     /// <summary>Пульс процесса: время, CPU, артефакты, давность активности.</summary>
-    public static void SetPulse(string fileName, string text)
+    public static void SetPulse(string id, string text)
     {
-        foreach (var e in FindAll(fileName))
-            e.Pulse = text;
+        lock (_entries)
+        {
+            foreach (var e in FindAllLocked(id))
+                e.Pulse = text;
+        }
     }
 
     /// <summary>Файл обработан (успешно или с ошибкой).</summary>
-    public static void MarkCompleted(string fileName, bool ok)
+    public static void MarkCompleted(string id, bool ok)
     {
-        foreach (var e in FindAll(fileName))
+        lock (_entries)
         {
-            e.Status = ok ? MonitorFileStatus.Done : MonitorFileStatus.Failed;
-            e.EndedAt = DateTime.Now;
-            e.Pulse = "";
+            foreach (var e in FindAllLocked(id))
+            {
+                e.Status = ok ? MonitorFileStatus.Done : MonitorFileStatus.Failed;
+                e.EndedAt = DateTime.Now;
+                e.Pulse = "";
+            }
+        }
+    }
+
+    /// <summary>Снимок состояния живого процесса: пишет окно диспетчера при
+    /// опросе системы; запись находится по PID (уникален в пределах сессии).</summary>
+    public static void UpdateRuntimeStats(int pid, string cpu, string memoryMb, string osThreads)
+    {
+        lock (_entries)
+        {
+            foreach (var e in _entries)
+            {
+                if (e.Pid != pid) continue;
+                e.CpuTime = cpu;
+                e.MemoryMb = memoryMb;
+                e.OsThreads = osThreads;
+            }
+        }
+    }
+
+    /// <summary>Процесс недоступен (завершился) — снимок обнуляется.</summary>
+    public static void ClearRuntimeStats(int pid)
+    {
+        lock (_entries)
+        {
+            foreach (var e in _entries)
+            {
+                if (e.Pid != pid) continue;
+                e.CpuTime = "—";
+                e.MemoryMb = "—";
+                e.OsThreads = "—";
+            }
         }
     }
 
@@ -147,11 +189,11 @@ public static class AnalysisMonitor
         }
     }
 
-    /// <summary>Копия текущих строк для отображения.</summary>
+    /// <summary>Независимые копии текущих строк для отображения.</summary>
     public static IReadOnlyList<MonitorEntry> Snapshot()
     {
         lock (_entries)
-            return _entries.ToList();
+            return _entries.Select(e => e.Clone()).ToList();
     }
 
     /// <summary>«file.exe.i64» → «file.exe» (и .idb); полный путь → только имя.</summary>
@@ -169,10 +211,14 @@ public static class AnalysisMonitor
         return name;
     }
 
-    private static List<MonitorEntry> FindAll(string fileName)
+    /// <summary>Точное совпадение ключа, иначе — совпадение по нормализованному
+    /// имени (события воркера несут только имя; одноимённые файлы обновляются все).
+    /// Вызывается под локом.</summary>
+    private static List<MonitorEntry> FindAllLocked(string id)
     {
-        var key = NormalizeName(fileName);
-        lock (_entries)
-            return _entries.Where(e => e.FileName == key).ToList();
+        var exact = _entries.Where(e => e.Key == id).ToList();
+        if (exact.Count > 0) return exact;
+        var key = NormalizeName(id);
+        return _entries.Where(e => e.FileName == key).ToList();
     }
 }
