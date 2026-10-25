@@ -10,6 +10,10 @@ public partial class App : Application
 {
     private Window? _window;
 
+    /// <summary>Единое хранилище конфигурации (composition root): создаётся
+    /// один раз здесь и передаётся вниз через конструкторы окна и страниц.</summary>
+    public static IConfigStore ConfigStore { get; private set; } = null!;
+
     /// <summary>
     /// Initializes the singleton application object.  This is the first line of authored code
     /// executed, and as such is the logical equivalent of main() or WinMain().
@@ -18,8 +22,10 @@ public partial class App : Application
     {
         InitializeComponent();
 
+        ConfigStore = new ConfigStore();
+
         // Постоянный журнал: рядом с exe и в %LOCALAPPDATA% одновременно.
-        AppLog.Initialize(ConfigService.Load().LogLevel);
+        AppLog.Initialize(ConfigStore.Current.LogLevel);
         AppLog.Info($"Запуск приложения: {AppContext.BaseDirectory}");
 
         // Журнал необработанных исключений XAML (stowed 0xc000027b выглядит в
@@ -56,7 +62,7 @@ public partial class App : Application
         // аварийное) ОС сама убивает дочерние idat/python/bindiff/7z.
         JobObject.Current = JobObject.Create();
 
-        _window = new MainWindow();
+        _window = new MainWindow(ConfigStore);
         _window.Activate();
     }
 }

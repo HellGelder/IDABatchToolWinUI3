@@ -13,7 +13,7 @@ namespace IDABatchToolWinUI.Pages;
 /// </summary>
 public sealed partial class DiffPage : Page
 {
-    private readonly AppConfig _cfg;
+    private readonly IConfigStore _store;
     private bool _diffInProgress;
     private bool _gitDiffInProgress;
     private CancellationTokenSource? _gitDiffCts;
@@ -39,10 +39,10 @@ public sealed partial class DiffPage : Page
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _analyzeTimer;
     private int _analyzeGeneration;
 
-public DiffPage()
+    public DiffPage(IConfigStore store)
     {
         InitializeComponent();
-        _cfg = ConfigService.Load();
+        _store = store;
 
         // Подсказка BinDiff: TeachingTip — не FrameworkElement, x:Bind к Target
         // ненадёжен — Target назначаем из кода. Клик подключён атрибутом Click
@@ -314,7 +314,7 @@ public DiffPage()
             Directory.CreateDirectory(addOutputPath);
         }
 
-        var idatPath = ToolLocator.GetIdaExecutable(_cfg);
+        var idatPath = ToolLocator.GetIdaExecutable(_store.Current);
         if (!File.Exists(idatPath))
         {
             await UiDialogs.WarnAsync("IDA не найдена",
@@ -322,7 +322,7 @@ public DiffPage()
             return;
         }
 
-        var bindiffPath = ToolLocator.GetBindiffExecutable(_cfg);
+        var bindiffPath = ToolLocator.GetBindiffExecutable(_store.Current);
         if (engine is "bindiff" or "both" && !File.Exists(bindiffPath))
         {
             await UiDialogs.WarnAsync("Утилита BinDiff не найдена",
@@ -382,7 +382,7 @@ public DiffPage()
 
         _worker = new DiffWorker(rows, idatPath, bindiffPath, outputPath, engine,
             left, right, addOutputPath,
-            maxWorkers: _cfg.MaxIda > 0 ? _cfg.MaxIda : 4);
+            maxWorkers: _store.Current.MaxIda > 0 ? _store.Current.MaxIda : 4);
         HookWorker(_worker);
         _worker.Start();
     }

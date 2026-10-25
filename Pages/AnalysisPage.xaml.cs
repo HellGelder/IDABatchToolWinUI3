@@ -12,7 +12,7 @@ namespace IDABatchToolWinUI.Pages;
 /// </summary>
 public sealed partial class AnalysisPage : Page
 {
-    private readonly AppConfig _cfg;
+    private readonly IConfigStore _store;
     private bool _analysisInProgress;
     private bool _htmlInProgress;
     private AnalysisWorker? _worker;
@@ -23,12 +23,12 @@ public sealed partial class AnalysisPage : Page
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _refreshTimer;
     private int _refreshGeneration;
 
-    public AnalysisPage()
+    public AnalysisPage(IConfigStore store)
     {
         InitializeComponent();
-        _cfg = ConfigService.Load();
+        _store = store;
         // max_ida: 0 = дефолт 4; значение ограничено разумным максимумом.
-        var configuredThreads = _cfg.MaxIda > 0 ? _cfg.MaxIda : 4;
+        var configuredThreads = _store.Current.MaxIda > 0 ? _store.Current.MaxIda : 4;
         MaxIdaSlider.Maximum = Math.Max(8, Environment.ProcessorCount);
         MaxIdaSlider.Value = Math.Clamp(configuredThreads, 1, (int)MaxIdaSlider.Maximum);
         // Предупреждение о повышенной нагрузке при потоках по максимуму железа
@@ -219,7 +219,7 @@ public sealed partial class AnalysisPage : Page
     {
         if (_analysisInProgress) return;
 
-        var idatPath = ToolLocator.GetIdaExecutable(_cfg);
+        var idatPath = ToolLocator.GetIdaExecutable(_store.Current);
         if (!File.Exists(idatPath))
         {
             await UiDialogs.WarnAsync("Утилита IDA не найдена",
@@ -228,7 +228,7 @@ public sealed partial class AnalysisPage : Page
         }
 
         var inputDir = InputDirTextBox.Text.Trim();
-        if (string.IsNullOrEmpty(inputDir)) inputDir = _cfg.DefaultInputDir;
+        if (string.IsNullOrEmpty(inputDir)) inputDir = _store.Current.DefaultInputDir;
 
         if (!Directory.Exists(inputDir))
         {
@@ -414,7 +414,7 @@ public sealed partial class AnalysisPage : Page
 
     private Task StartExportOnlyAsync(List<string> idbFiles)
     {
-        var idatPath = ToolLocator.GetIdaExecutable(_cfg);
+        var idatPath = ToolLocator.GetIdaExecutable(_store.Current);
         var script = Path.Combine(AppConstants.ScriptsDir, "export_data.py");
         if (!File.Exists(script))
         {

@@ -12,7 +12,7 @@ namespace IDABatchToolWinUI.Pages;
 /// </summary>
 public sealed partial class SfaPage : Page
 {
-    private readonly AppConfig _cfg;
+    private readonly IConfigStore _store;
     private bool _analysisInProgress;
     private bool _analysisCancelled;
     private bool _htmlInProgress;
@@ -27,12 +27,12 @@ public sealed partial class SfaPage : Page
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _refreshTimer;
     private int _refreshGeneration;
 
-public SfaPage()
+public SfaPage(IConfigStore store)
     {
         InitializeComponent();
-        _cfg = ConfigService.Load();
+        _store = store;
         // max_ida: 0 = дефолт 4; значение ограничено разумным максимумом.
-        var configuredThreads = _cfg.MaxIda > 0 ? _cfg.MaxIda : 4;
+        var configuredThreads = _store.Current.MaxIda > 0 ? _store.Current.MaxIda : 4;
         SfaMaxIdaSlider.Maximum = Math.Max(8, Environment.ProcessorCount);
         SfaMaxIdaSlider.Value = Math.Clamp(configuredThreads, 1, (int)SfaMaxIdaSlider.Maximum);
         // Предупреждение о повышенной нагрузке при потоках по максимуму железа
@@ -200,7 +200,7 @@ public SfaPage()
     {
         if (_analysisInProgress) return;
 
-        var idatPath = ToolLocator.GetIdaExecutable(_cfg);
+        var idatPath = ToolLocator.GetIdaExecutable(_store.Current);
         if (!File.Exists(idatPath))
         {
             await UiDialogs.WarnAsync("IDA не найдена", $"{idatPath} не найден.\nПроверьте конфигурацию.");
@@ -208,7 +208,7 @@ public SfaPage()
         }
 
         var inputDir = SfaInputDirTextBox.Text.Trim();
-        if (string.IsNullOrEmpty(inputDir)) inputDir = _cfg.DefaultInputDir;
+        if (string.IsNullOrEmpty(inputDir)) inputDir = _store.Current.DefaultInputDir;
         if (!Directory.Exists(inputDir))
         {
             await UiDialogs.WarnAsync("Ошибка", $"Директория не существует: {inputDir}");
@@ -461,7 +461,7 @@ public SfaPage()
 
     private Task StartExportOnlyAsync(List<string> idbFiles)
     {
-        var idatPath = ToolLocator.GetIdaExecutable(_cfg);
+        var idatPath = ToolLocator.GetIdaExecutable(_store.Current);
         var script = Path.Combine(AppConstants.ScriptsDir, "export_data.py");
         if (!File.Exists(script)) { AppendError($"Скрипт экспорта не найден: {script}"); return Task.CompletedTask; }
         SfaProcessStatusText.Text = "Фаза: экспорт в JSON...";
@@ -627,10 +627,10 @@ public SfaPage()
 
     private string ResolveManpagesDb(string sfaReports)
     {
-        // Страница кэшируется, её _cfg — снимок из конструктора: путь, заданный
-        // в настройках после создания страницы (например, сразу после скачивания
-        // man-pages), сюда бы не попал. Читаем свежий конфиг с диска.
-        var cfgPath = ConfigService.Load().ManPagesDbPath;
+        // Путь читаем из store на момент вызова: значение, заданное в настройках
+        // после создания страницы (например, сразу после скачивания man-pages),
+        // попадает сюда без перезапуска приложения.
+        var cfgPath = _store.Current.ManPagesDbPath;
         if (!string.IsNullOrWhiteSpace(cfgPath))
         {
             var p = Path.GetFullPath(cfgPath);

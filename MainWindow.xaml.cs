@@ -8,7 +8,7 @@ namespace IDABatchToolWinUI;
 
 public sealed partial class MainWindow : Window
 {
-    private readonly AppConfig _cfg;
+    private readonly IConfigStore _store;
     private readonly Dictionary<string, Type> _pages = new()
     {
         ["analysis"] = typeof(AnalysisPage),
@@ -27,9 +27,11 @@ public sealed partial class MainWindow : Window
     private bool _allowClose;
     private bool _closePromptOpen;
 
-    public MainWindow()
+    public MainWindow(IConfigStore store)
     {
         InitializeComponent();
+
+        _store = store;
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
@@ -40,14 +42,16 @@ public sealed partial class MainWindow : Window
         var initial = AppWindow.Size;
         AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(initial.Width * 0.7), initial.Height));
 
-        _cfg = ConfigService.Load();
-        ThemeHelper.Apply(this, _cfg.Theme);
+        ThemeHelper.Apply(this, _store.Current.Theme);
+        // Тема применяется сразу при сохранении конфига (SettingsPage пишет
+        // через тот же store) — подписка живёт столько же, сколько окно.
+        _store.Changed += cfg => ThemeHelper.Apply(this, cfg.Theme);
 
         UiDialogs.MainWindow = this;
 
         NavView.SelectedItem = NavAnalysis;
-        NavFrame.Navigate(typeof(AnalysisPage));
-        _analysisPage = NavFrame.Content as AnalysisPage;
+        _analysisPage = new AnalysisPage(_store);
+        NavFrame.Content = _analysisPage;
 
         // Проверка Python-окружения — после показа окна; диалог только при нехватке.
         Activated += OnFirstActivated;
@@ -163,47 +167,25 @@ public sealed partial class MainWindow : Window
         switch (tag)
         {
             case "analysis":
-                if (_analysisPage == null)
-                {
-                    NavFrame.Navigate(typeof(AnalysisPage));
-                    _analysisPage = NavFrame.Content as AnalysisPage;
-                }
-                else if (!ReferenceEquals(NavFrame.Content, _analysisPage))
-                {
+                _analysisPage ??= new AnalysisPage(_store);
+                if (!ReferenceEquals(NavFrame.Content, _analysisPage))
                     NavFrame.Content = _analysisPage;
-                }
                 break;
             case "diff":
-                if (_diffPage == null)
-                {
-                    NavFrame.Navigate(typeof(DiffPage));
-                    _diffPage = NavFrame.Content as DiffPage;
-                }
-                else if (!ReferenceEquals(NavFrame.Content, _diffPage))
-                {
+                _diffPage ??= new DiffPage(_store);
+                if (!ReferenceEquals(NavFrame.Content, _diffPage))
                     NavFrame.Content = _diffPage;
-                }
                 break;
             case "sfa":
-                if (_sfaPage == null)
-                {
-                    NavFrame.Navigate(typeof(SfaPage));
-                    _sfaPage = NavFrame.Content as SfaPage;
-                }
-                else if (!ReferenceEquals(NavFrame.Content, _sfaPage))
-                {
+                _sfaPage ??= new SfaPage(_store);
+                if (!ReferenceEquals(NavFrame.Content, _sfaPage))
                     NavFrame.Content = _sfaPage;
-                }
                 break;
             case "settings":
+                // SettingsPage не кэшируется (как и раньше: Navigate создавал
+                // новый экземпляр на каждый показ) — читает актуальный конфиг.
                 if (NavFrame.Content is not SettingsPage)
-                {
-                    NavFrame.Navigate(typeof(SettingsPage));
-                    // Подписка — на фактический контент Frame, а не на временный
-                    // экземпляр: иначе событие изменения конфигурации не доходило.
-                    if (NavFrame.Content is SettingsPage sp)
-                        sp.ConfigChanged += cfg => ThemeHelper.Apply(this, cfg.Theme);
-                }
+                    NavFrame.Content = new SettingsPage(_store);
                 break;
         }
     }

@@ -13,13 +13,15 @@ namespace IDABatchToolWinUI.Pages;
 /// </summary>
 public sealed partial class SettingsPage : Page
 {
+    private readonly IConfigStore _store;
     private AppConfig _cfg;
     private ManPagesSyncWorker? _manWorker;
 
-    public SettingsPage()
+    public SettingsPage(IConfigStore store)
     {
         InitializeComponent();
-        _cfg = ConfigService.Load();
+        _store = store;
+        _cfg = _store.Current;
         Loaded += OnLoaded;
     }
 
@@ -60,13 +62,10 @@ public sealed partial class SettingsPage : Page
         _cfg.Theme = theme;
         ThemeLightButton.IsChecked = theme == "light";
         ThemeDarkButton.IsChecked = theme == "dark";
-        ConfigService.Save(_cfg);
+        // Store.Changed доходит до MainWindow — тема применится без перезапуска.
+        _store.Save(_cfg);
         ThemeHelper.Apply(UiDialogs.MainWindow, theme);
-        ConfigChanged?.Invoke(_cfg);
     }
-
-    /// <summary>Событие изменения конфигурации (для MainWindow — переприменение темы).</summary>
-    public event Action<AppConfig>? ConfigChanged;
 
     private async Task SaveSettingsAsync(bool showMessage)
     {
@@ -75,8 +74,7 @@ public sealed partial class SettingsPage : Page
         _cfg.ManPagesDbPath = ManPagesPathTextBox.Text.Trim();
         try
         {
-            ConfigService.Save(_cfg);
-            ConfigChanged?.Invoke(_cfg);
+            _store.Save(_cfg);
             if (showMessage) await UiDialogs.InfoAsync("Успех", "Настройки сохранены.");
         }
         catch (Exception ex)
@@ -371,7 +369,7 @@ public sealed partial class SettingsPage : Page
         {
             ManPagesPathTextBox.Text = Path.GetDirectoryName(dbPath) ?? "";
             _cfg.ManPagesDbPath = ManPagesPathTextBox.Text;
-            ConfigService.Save(_cfg);
+            _store.Save(_cfg);
         }
 
         SyncManPagesButton.IsEnabled = false;
@@ -392,10 +390,10 @@ public sealed partial class SettingsPage : Page
     {
         SyncManPagesButton.IsEnabled = true;
         CheckManPagesButton.IsEnabled = true;
-        if (success)
-        {
-            _cfg.ManPagesDbPath = Path.GetDirectoryName(dbPath) ?? "";
-            ConfigService.Save(_cfg);
+            if (success)
+            {
+                _cfg.ManPagesDbPath = Path.GetDirectoryName(dbPath) ?? "";
+                _store.Save(_cfg);
             await UiDialogs.InfoAsync("Готово", $"Документация man-pages импортирована:\n{message}");
             await CheckManPagesAsync();
         }

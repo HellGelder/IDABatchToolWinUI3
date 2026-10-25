@@ -68,7 +68,7 @@ public static class ConfigService
         File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
     }
 
-    private static string QuoteIfNeeded(string v)
+    public static string QuoteIfNeeded(string v)
         => v.Any(c => c == ' ' || c == ':' || c == '#') ? $"\"{v}\"" : v;
 
     private static string YamlGet(Dictionary<string, object> map, string key, string def)
