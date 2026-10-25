@@ -700,31 +700,23 @@ public SfaPage()
         };
     }
 
-    private static Task<(string Action, object? Tag)> AskSfaCacheAsync(double sizeKb)
+    private static async Task<(string Action, object? Tag)> AskSfaCacheAsync(double sizeKb)
     {
-        var tcs = new TaskCompletionSource<(string, object?)>();
-        var dlg = new ContentDialog
+        // Прежний вариант (TCS + ContinueWith поверх ShowAsync) зависал навсегда,
+        // если ShowAsync падал; AskButtonsAsync завершает задачу «отменой»/исключением.
+        var idx = await UiDialogs.AskButtonsAsync(
+            "Найден кэш документации MS Learn",
+            $"Обнаружен ранее собранный кэш документации ({sizeKb:F1} КБ).\n\n" +
+            "«Перегенерировать HTML из кэша» — отчёты строятся из сохранённой " +
+            "документации без повторного анализа IDA; недостающие функции доищутся автоматически.\n\n" +
+            "«Выполнить полный анализ» — обычный цикл IDA + экспорт; документация " +
+            "будет искаться после анализа.",
+            new[] { "Выполнить полный анализ", "Перегенерировать HTML из кэша", "Отмена" });
+        return idx switch
         {
-            Title = "Найден кэш документации MS Learn",
-            Content = $"Обнаружен ранее собранный кэш документации ({sizeKb:F1} КБ).\n\n" +
-                      "«Перегенерировать HTML из кэша» — отчёты строятся из сохранённой " +
-                      "документации без повторного анализа IDA; недостающие функции доищутся автоматически.\n\n" +
-                      "«Выполнить полный анализ» — обычный цикл IDA + экспорт; документация " +
-                      "будет искаться после анализа.",
-            PrimaryButtonText = "Выполнить полный анализ",
-            SecondaryButtonText = "Перегенерировать HTML из кэша",
-            CloseButtonText = "Отмена",
+            0 => ("full", (object?)null),
+            1 => ("reuse", (object?)null),
+            _ => ("cancel", (object?)null),
         };
-        if (UiDialogs.XamlRoot != null) dlg.XamlRoot = UiDialogs.XamlRoot;
-        _ = dlg.ShowAsync().AsTask().ContinueWith(t =>
-        {
-            tcs.TrySetResult(t.Result switch
-            {
-                ContentDialogResult.Primary => ("full", null),
-                ContentDialogResult.Secondary => ("reuse", null),
-                _ => ("cancel", null),
-            });
-        }, TaskScheduler.FromCurrentSynchronizationContext());
-        return tcs.Task;
     }
 }

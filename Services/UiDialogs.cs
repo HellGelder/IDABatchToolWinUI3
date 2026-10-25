@@ -14,6 +14,27 @@ public static class UiDialogs
 
     public static XamlRoot? XamlRoot => MainWindow?.Content?.XamlRoot;
 
+    // Одновременно может быть показан только один модальный ContentDialog:
+    // второй ShowAsync в WinUI бросает исключение. Вместо исключения второй
+    // вызов сразу получает «отмену» (и пишется в журнал).
+    private static readonly object DialogGate = new();
+    private static bool _dialogOpen;
+
+    private static bool TryBeginDialog()
+    {
+        lock (DialogGate)
+        {
+            if (_dialogOpen) return false;
+            _dialogOpen = true;
+            return true;
+        }
+    }
+
+    private static void EndDialog()
+    {
+        lock (DialogGate) _dialogOpen = false;
+    }
+
     private static ContentDialog MakeDialog(string title, string content)
     {
         var dialog = new ContentDialog
@@ -29,14 +50,32 @@ public static class UiDialogs
 
     public static async Task InfoAsync(string title, string message)
     {
-        var dlg = MakeDialog(title, message);
-        try { await dlg.ShowAsync(); } catch { /* окно могло закрыться */ }
+        if (!TryBeginDialog())
+        {
+            AppLog.Warn($"Диалог «{title}» не показан: уже открыт другой диалог.");
+            return;
+        }
+        try
+        {
+            var dlg = MakeDialog(title, message);
+            try { await dlg.ShowAsync(); } catch { /* окно могло закрыться */ }
+        }
+        finally { EndDialog(); }
     }
 
     public static async Task WarnAsync(string title, string message)
     {
-        var dlg = MakeDialog(title, message);
-        try { await dlg.ShowAsync(); } catch { }
+        if (!TryBeginDialog())
+        {
+            AppLog.Warn($"Диалог «{title}» не показан: уже открыт другой диалог.");
+            return;
+        }
+        try
+        {
+            var dlg = MakeDialog(title, message);
+            try { await dlg.ShowAsync(); } catch { /* окно могло закрыться */ }
+        }
+        finally { EndDialog(); }
     }
 
     /// <summary>
@@ -119,38 +158,52 @@ public static class UiDialogs
 
     /// <summary>
     /// Кастомный диалог с произвольным набором кнопок (аналог QMessageBox.addButton).
-    /// Возвращает Index выбранной кнопки (-1 = закрыто).
+    /// Возвращает Index выбранной кнопки (-1 = закрыто/отменено).
+    /// Если ShowAsync падает (например, окно закрыто) — задача завершается
+    /// исключением, а не висит вечно, как прежний fire-and-forget вариант.
     /// </summary>
     public static async Task<int> AskButtonsAsync(string title, string message,
         IReadOnlyList<string> buttons, int defaultIndex = 0)
     {
-        var stack = new StackPanel { Spacing = 8 };
-        stack.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap });
-
-        var tcs = new TaskCompletionSource<int>();
-        var dialog = new ContentDialog { Title = title, Content = stack, DefaultButton = ContentDialogButton.Primary };
-        if (XamlRoot != null) dialog.XamlRoot = XamlRoot;
-
-        for (int i = 0; i < buttons.Count; i++)
+        if (!TryBeginDialog())
         {
-            var idx = i;
-            var btn = new Button
-            {
-                Content = buttons[i],
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                HorizontalContentAlignment = HorizontalAlignment.Center,
-            };
-            btn.Click += (_, _) => tcs.TrySetResult(idx);
-            stack.Children.Add(btn);
+            AppLog.Warn($"Диалог «{title}» не показан: уже открыт другой диалог; возвращена отмена.");
+            return -1;
         }
+        try
+        {
+            var stack = new StackPanel { Spacing = 8 };
+            stack.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap });
 
-        // Если пользователь закрыл диалог крестиком — вернуть -1
-        dialog.Closing += (_, _) => tcs.TrySetResult(-1);
+            var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var dialog = new ContentDialog { Title = title, Content = stack, DefaultButton = ContentDialogButton.Primary };
+            if (XamlRoot != null) dialog.XamlRoot = XamlRoot;
 
-        // Показываем асинхронно, ждём выбора кнопки
-        _ = dialog.ShowAsync();
-        var result = await tcs.Task;
-        try { dialog.Hide(); } catch { }
-        return result;
+            for (int i = 0; i < buttons.Count; i++)
+            {
+                var idx = i;
+                var btn = new Button
+                {
+                    Content = buttons[i],
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                };
+                btn.Click += (_, _) => tcs.TrySetResult(idx);
+                stack.Children.Add(btn);
+            }
+
+            // Если пользователь закрыл диалог крестиком — вернуть -1
+            dialog.Closing += (_, _) => tcs.TrySetResult(-1);
+
+            // Ожидаем ShowAsync: при ошибке исключение уйдёт вызывающему через tcs,
+            // а не оставит его ждать вечно.
+            try { await dialog.ShowAsync(); }
+            catch (Exception ex) { tcs.TrySetException(ex); }
+
+            var result = await tcs.Task;
+            try { dialog.Hide(); } catch { /* уже закрыт */ }
+            return result;
+        }
+        finally { EndDialog(); }
     }
 }

@@ -491,6 +491,11 @@ public DiffPage()
 
         AnalyzeDirectories();
 
+        // Диспоузим воркер до диалога: диалог может провисеть надолго, а воркер
+        // уже не нужен (Dispose отменяет его CTS — прогон завершён).
+        _worker?.Dispose();
+        _worker = null;
+
         var reportsDir = Path.Combine(_outputDir ?? ".", "Reports");
         var indexHtml = Path.Combine(reportsDir, "index.html");
         var addReportsDir = Path.Combine(Path.GetDirectoryName(_outputDir) ?? ".", "AddDiffResults", "Reports");
@@ -518,9 +523,6 @@ public DiffPage()
             var anyJson = Directory.GetFiles(_outputDir, "*.diff.json").Length > 0;
             GenerateReportButton.IsEnabled = anyJson;
         }
-
-        _worker?.Dispose();
-        _worker = null;
     }
 
     private void CancelComparison()
@@ -1067,44 +1069,28 @@ public DiffPage()
         => task.SafeFireAndForget(context ?? "Diff",
             ex => RunOnUi(() => AppendError($"{context}: {ex.Message}")));
 
-    private static Task<string> AskExistingResultsAsync(int count)
+    private static async Task<string> AskExistingResultsAsync(int count)
     {
-        var tcs = new TaskCompletionSource<string>();
-        var dlg = new ContentDialog
+        // Прежний вариант (TCS + ContinueWith поверх ShowAsync) зависал навсегда,
+        // если ShowAsync падал; AskButtonsAsync завершает задачу «отменой»/исключением.
+        var idx = await UiDialogs.AskButtonsAsync(
+            "Обнаружены существующие результаты",
+            $"В выходной папке уже найдены результаты сравнения для {count} пар.",
+            new[] { "Досравнять только новые", "Полное сравнение заново", "Отмена" });
+        return idx switch
         {
-            Title = "Обнаружены существующие результаты",
-            Content = $"В выходной папке уже найдены результаты сравнения для {count} пар.",
-            PrimaryButtonText = "Досравнять только новые",
-            SecondaryButtonText = "Полное сравнение заново",
-            CloseButtonText = "Отмена",
+            0 => "yes",
+            1 => "no",
+            _ => "cancel",
         };
-        if (UiDialogs.XamlRoot != null) dlg.XamlRoot = UiDialogs.XamlRoot;
-        _ = dlg.ShowAsync().AsTask().ContinueWith(t =>
-        {
-            tcs.TrySetResult(t.Result switch
-            {
-                ContentDialogResult.Primary => "yes",
-                ContentDialogResult.Secondary => "no",
-                _ => "cancel",
-            });
-        }, TaskScheduler.FromCurrentSynchronizationContext());
-        return tcs.Task;
     }
 
-    private static Task<bool> AskOpenReportAsync(IReadOnlyList<string> lines)
+    private static async Task<bool> AskOpenReportAsync(IReadOnlyList<string> lines)
     {
-        var tcs = new TaskCompletionSource<bool>();
-        var dlg = new ContentDialog
-        {
-            Title = "Сравнение завершено",
-            Content = "Все этапы завершены.\n" + string.Join("\n", lines),
-            PrimaryButtonText = "Открыть основной сводный отчёт",
-            CloseButtonText = "Нет",
-        };
-        if (UiDialogs.XamlRoot != null) dlg.XamlRoot = UiDialogs.XamlRoot;
-        _ = dlg.ShowAsync().AsTask().ContinueWith(t =>
-            tcs.TrySetResult(t.Result == ContentDialogResult.Primary),
-            TaskScheduler.FromCurrentSynchronizationContext());
-        return tcs.Task;
+        var idx = await UiDialogs.AskButtonsAsync(
+            "Сравнение завершено",
+            "Все этапы завершены.\n" + string.Join("\n", lines),
+            new[] { "Открыть основной сводный отчёт", "Нет" });
+        return idx == 0;
     }
 }
