@@ -36,7 +36,7 @@ _SP = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 if os.path.isdir(_SP) and _SP not in sys.path:
     sys.path.insert(0, _SP)
 
-# Протокол обмена с GUI (PROGRESS/ERROR/RESULT) — строго UTF-8: без этого
+# Протокол обмена с GUI (PROGRESS/ERROR/RESULT) - строго UTF-8: без этого
 # pythonw пишет в канал в системной кодировке (cp1251), и русские сообщения
 # в GUI превращаются в нечитаемые символы.
 for _stream in (sys.stdout, sys.stderr):
@@ -47,7 +47,7 @@ for _stream in (sys.stdout, sys.stderr):
             pass
 
 # ─────────────────────────────────────────────────────────────────
-#  Рендер шаблонов — готовый Jinja2 (внешняя зависимость, НЕ исполнение 1)
+#  Рендер шаблонов - готовый Jinja2 (внешняя зависимость, НЕ исполнение 1)
 # ─────────────────────────────────────────────────────────────────
 
 def inline_vendor(name, _cache={}):
@@ -95,9 +95,9 @@ def format_percent(value, digits=1, guard=None):
     """Доля [0..1] в проценты с адаптивной точностью.
 
     Обычно 1 знак после запятой; если округление до него даёт 100.0 (или 0.0),
-    а значение не равно 1 (0) — знаков больше, пока «100.0%» не станет честным
+    а значение не равно 1 (0) - знаков больше, пока «100.0%» не станет честным
     (99.98%). Ровно 100.0% показываем только при полном совпадении.
-    guard — порог в процентах, который округлением вверх нельзя «пройти»:
+    guard - порог в процентах, который округлением вверх нельзя «пройти»:
     если округление даёт ровно guard, а значение меньше него (98.97 → «99.0»),
     знаков больше, пока порог не будет виден честно (98.97%).
     """
@@ -154,7 +154,7 @@ def fail(message):
 
     GUI различает «мост отработал с частичными ошибками» (exit 0 и failed_count
     в RESULT) и «мост не смог ничего сделать» (exit 1). Раньше оба случая
-    выглядели одинаково — процесс возвращал 0 и результат терялся.
+    выглядели одинаково - процесс возвращал 0 и результат терялся.
     """
     emit_error(message)
     sys.exit(1)
@@ -170,7 +170,7 @@ def emit_result(obj):
 def _stat_size_safe(path):
     """Размер файла в байтах; 0, если файл исчез или недоступен.
 
-    exists() + stat() в одном выражении — гонка: файл может пропасть
+    exists() + stat() в одном выражении - гонка: файл может пропасть
     между проверкой и stat(), и OSError при сортировке валил весь прогон.
     """
     try:
@@ -185,7 +185,7 @@ def normalize_display_name(module_name):
     Как в исполнении 1 (reporting/utils.py): убирает путь, специфичные
     суффиксы платформ (.dylib, .framework), префикс ``@rpath/``. Имя
     сохраняет расширение и версии (``libcrypto.so.1.1`` остаётся
-    ``libcrypto.so.1.1``) — на такие ключи завязаны словари
+    ``libcrypto.so.1.1``) - на такие ключи завязаны словари
     классификатора и определение внутренних модулей.
     """
     if not module_name:
@@ -206,7 +206,7 @@ def normalize_display_name(module_name):
 
 
 # ─────────────────────────────────────────────────────────────────
-#  Классификатор модулей — единый источник истины, как в исполнении 1
+#  Классификатор модулей - единый источник истины, как в исполнении 1
 # ─────────────────────────────────────────────────────────────────
 
 from classifier.platform_classifier import classify_module as _classifier_describe
@@ -220,10 +220,10 @@ _UNKNOWN_DESC = "Неопознанный модуль"
 
 
 def _classify_module(mod_name):
-    """Категория и описание модуля — семантика исполнения 1
+    """Категория и описание модуля - семантика исполнения 1
     (generator.generate_index): композитный классификатор по всем
     платформенным словарям + словари категорий. Без эвристических
-    категорий: модуль вне словарей — «Неопознанные модули»."""
+    категорий: модуль вне словарей - «Неопознанные модули»."""
     try:
         desc = _classifier_describe(mod_name)
         cat, cat_desc = get_module_category_and_description(mod_name)
@@ -250,7 +250,7 @@ def _api_to_release(api):
 def _file_info_entries(data):
     """Карточка «Информация о файле» (аналог ELFReportGenerator._build_file_info
     исполнения 1). Для ELF: идентификация → хеши → ELF-заголовок → динамическая
-    компоновка → notes. Пустые строки пропускаются. Для PE — прежний вариант."""
+    компоновка → notes. Пустые строки пропускаются. Для PE - прежний вариант."""
     if data.get("is_elf"):
         hashes = data.get("hashes") or {}
         header = data.get("elf_header") or {}
@@ -322,7 +322,7 @@ def _build_internal_set(input_dir):
     return internal
 
 
-# Метки и цвета категорий зависимостей в индивидуальных отчётах —
+# Метки и цвета категорий зависимостей в индивидуальных отчётах -
 # как в исполнении 1 (BaseReportGenerator.CATEGORY_LABELS / CATEGORY_COLORS).
 _CATEGORY_LABELS = {
     "Системные библиотеки ОС": "System",
@@ -383,12 +383,12 @@ def generate_analysis_report(json_path, output_html, internal_set, reports_dir=N
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    # Заголовок отчёта — полный исходный путь (как в исполнении 1).
+    # Заголовок отчёта - полный исходный путь (как в исполнении 1).
     file_name = data.get("file_name") or os.path.basename(str(json_path))
     imports = data.get("imports", [])
     exports = data.get("exports", [])
 
-    # Ссылка «Назад к сводному отчёту» — детерминированно от reports_dir
+    # Ссылка «Назад к сводному отчёту» - детерминированно от reports_dir
     # (аналог compute_back_link исполнения 1): IDAReports/bin/x.html ->
     # ../index.html, IDAReports/x.html -> index.html. Поиск готового
     # index.html в родителях здесь неприменим: индекс пишется ПОСЛЕ
@@ -472,7 +472,7 @@ def _elf_sections(data):
     secs = []
     for s in data.get("elf_sections", []) or []:
         name = s.get("name", "")
-        display_name = name if name and not _is_placeholder_section(name) else "—"
+        display_name = name if name and not _is_placeholder_section(name) else "-"
         secs.append({"name": display_name, "type": s.get("type", ""),
                      "flags": s.get("flags", ""),
                      "description": describe_section(name, s.get("type", ""))})
@@ -496,7 +496,7 @@ def _category_description(cat):
 
 
 def _sorted_category_groups(categories):
-    """Порядок категорий сводного индекса — как в исполнении 1: внутренние первыми,
+    """Порядок категорий сводного индекса - как в исполнении 1: внутренние первыми,
     затем по алфавиту, «Неопознанные модули» в конце; модули внутри категории по алфавиту."""
     grouped = []
     internal = categories.pop("Внутренние модули проекта", None)
@@ -609,8 +609,8 @@ def _normalize_func_name(func_name):
 def _sanitize_for_shell(func_name):
     """Экранирует имя функции для передачи npx через cmd.exe.
 
-    npx.cmd — это cmd.exe-скрипт, поэтому ``<< >> | & ;`` ломают парсинг.
-    Удаляем их полностью — для поиска это несущественно.
+    npx.cmd - это cmd.exe-скрипт, поэтому ``<< >> | & ;`` ломают парсинг.
+    Удаляем их полностью - для поиска это несущественно.
     """
     result = (func_name or "").replace("<<", "").replace(">>", "")
     result = result.replace("<", "").replace(">", "")
@@ -657,7 +657,7 @@ def _kill_process_tree(proc):
 
 
 def _parse_npx_results(stdout):
-    """Разбирает вывод ``learn-cli search`` — только первый результат
+    """Разбирает вывод ``learn-cli search`` - только первый результат
     (как в SfaReportGenerator._search_function исполнения 1)."""
     results = []
     lines = stdout.splitlines()
@@ -716,9 +716,9 @@ def _mcp_session_cache_path():
 def _mcp_load_cached_session():
     """sessionId и имя docsSearch-тула из кэша learn-cli (TTL 24 ч там же).
 
-    learn-cli пишет туда session и mapping тулов при любом npx-вызове —
+    learn-cli пишет туда session и mapping тулов при любом npx-вызове -
     переиспользуем, чтобы не делать handshake (initialize/tools). Если кэша
-    нет — выполняем handshake сами и записываем в тот же файл.
+    нет - выполняем handshake сами и записываем в тот же файл.
     """
     path = _mcp_session_cache_path()
     try:
@@ -728,7 +728,7 @@ def _mcp_load_cached_session():
             if entry:
                 exp = entry.get("expiresAt")
                 # learn-cli пишет UTC с суффиксом «Z»; naive now сравнивать с
-                # aware нельзя — приводим к UTC.
+                # aware нельзя - приводим к UTC.
                 exp_dt = datetime.fromisoformat(exp.replace("Z", "+00:00")) if exp else None
                 if exp_dt is not None and exp_dt.tzinfo is None:
                     exp_dt = exp_dt.replace(tzinfo=timezone.utc)
@@ -742,7 +742,7 @@ def _mcp_load_cached_session():
                             search_tool = tname
                             break
                     if not search_tool and tools:
-                        # тулов в кэше нет (запись от нашего сохранения) —
+                        # тулов в кэше нет (запись от нашего сохранения) -
                         # берём дефолтное имя Microsoft Learn MCP
                         search_tool = "microsoft_docs_search"
                     return entry.get("sessionId") or "", search_tool
@@ -778,12 +778,12 @@ def _mcp_save_cached_session(session_id, tool_name):
 class McpDocClient:
     """Клиент Microsoft Learn MCP: постоянное соединение, запрос на функцию.
 
-    Замена запуска npx на каждый поиск: learn-cli под капотом — это HTTP-клиент
+    Замена запуска npx на каждый поиск: learn-cli под капотом - это HTTP-клиент
     к learn.microsoft.com/api/mcp (Streamable HTTP, JSON-RPC). Мы вызываем тот
     же тул ``microsoft_docs_search`` тем же протоколом, результат идентичен
-    (title/url/markdown), но без 4–5 с на разрешение пакета и boot node.
+    (title/url/markdown), но без 4-5 с на разрешение пакета и boot node.
     Сессия (mcp-session-id) берётся из кэша learn-cli или создаётся handshake'ом
-    и сохраняется обратно — последующие прогоны переиспользуют её.
+    и сохраняется обратно - последующие прогоны переиспользуют её.
     """
 
     def __init__(self):
@@ -819,7 +819,7 @@ class McpDocClient:
                 try:
                     data = json.loads(line[5:].strip())
                 except json.JSONDecodeError:
-                    continue  # битая SSE-строка — не валим поиск в npx-фолбэк
+                    continue  # битая SSE-строка - не валим поиск в npx-фолбэк
                 if "error" in data:
                     raise RuntimeError(data["error"].get("message", "MCP error"))
                 result = data.get("result") or {}
@@ -829,7 +829,7 @@ class McpDocClient:
         return ""
 
     def search(self, query):
-        """Поиск документации; возвращает список {title, url, markdown} —
+        """Поиск документации; возвращает список {title, url, markdown} -
         тот же формат, что _parse_npx_results (и исполнение 1)."""
         with self._lock:
             if not self._session_id or not self._tool:
@@ -844,7 +844,7 @@ class McpDocClient:
         try:
             _, sid, body = self._post(payload)
         except urllib.error.HTTPError as e:
-            # сессия умерла — полный handshake и повтор
+            # сессия умерла - полный handshake и повтор
             if e.code in (400, 404):
                 return self._reconnect_search(query)
             raise
@@ -919,7 +919,7 @@ def _get_mcp_client():
 
 
 def _mcp_ping():
-    """Доступность Learn MCP (любой HTTP-ответ считается успехом —
+    """Доступность Learn MCP (любой HTTP-ответ считается успехом -
     GET возвращает 405, но это значит, что endpoint жив; как в probeEndpoint
     learn-cli)."""
     try:
@@ -927,7 +927,7 @@ def _mcp_ping():
         with urllib.request.urlopen(req, timeout=10):
             return True
     except urllib.error.HTTPError:
-        return True  # 405 и т.п. — сервер отвечает
+        return True  # 405 и т.п. - сервер отвечает
     except Exception:
         return False
 
@@ -936,7 +936,7 @@ class DocSearchManager:
     """Менеджер параллельного поиска документации MS Learn.
 
     - Пул потоков (по умолчанию 4): несколько функций ищутся одновременно.
-    - «Тихие» вызовы: npx запускается с CREATE_NO_WINDOW — консольные окна
+    - «Тихие» вызовы: npx запускается с CREATE_NO_WINDOW - консольные окна
       не появляются (pythonw без консоли, а cmd.exe/npx.cmd иначе открывают
       своё окно на каждый вызов).
     - Отмена: cancel() убивает все запущенные процессы npx/node (дерево,
@@ -986,10 +986,10 @@ class DocSearchManager:
     def _search(self, func_name, timeout):
         """Рабочая функция пула: поиск документации для одной функции.
 
-        Основной путь — прямой MCP-вызов (learn.microsoft.com/api/mcp) из
+        Основной путь - прямой MCP-вызов (learn.microsoft.com/api/mcp) из
         общего клиента: 4 потока пула постоянные, процессы не пересоздаются,
-        ~1 с на функцию. Фолбэк — npx @microsoft/learn-cli (старое поведение,
-        4–5 с только на запуск), если MCP-вызов не удался.
+        ~1 с на функцию. Фолбэк - npx @microsoft/learn-cli (старое поведение,
+        4-5 с только на запуск), если MCP-вызов не удался.
         """
         global _NPX_MISSING_LOGGED
         if self._cancelled.is_set():
@@ -1017,7 +1017,7 @@ class DocSearchManager:
         except Exception as e:
             if self._cancelled.is_set():
                 return []
-            self._log(f"[WARN] MCP search failed for {func_name}: {e} — fallback to npx")
+            self._log(f"[WARN] MCP search failed for {func_name}: {e} - fallback to npx")
 
         # 2) Фолбэк: npx (прежний путь)
         npx = _find_npx()
@@ -1039,7 +1039,7 @@ class DocSearchManager:
 
         with self._lock:
             if self._cancelled.is_set():
-                # Отмена пришла между запуском и регистрацией — гасим сразу.
+                # Отмена пришла между запуском и регистрацией - гасим сразу.
                 _kill_process_tree(proc)
                 try:
                     proc.communicate(timeout=2)
@@ -1072,7 +1072,7 @@ class DocSearchManager:
         stderr = _decode_bytes(err_b)
         if proc.returncode not in (0, None):
             # Даже при ошибке пытаемся распарсить stdout (npx может выдать
-            # результат на stdout, а предупреждения — на stderr)
+            # результат на stdout, а предупреждения - на stderr)
             self._log(f"[WARN] npx search returned {proc.returncode}: {stderr[:200]}")
             if not stdout.strip():
                 return []
@@ -1096,7 +1096,7 @@ def _cancel_requested(doc_manager):
 
 
 def _watch_cancel_stdin():
-    """Наблюдатель stdin: строка CANCEL — остановить поиск документации
+    """Наблюдатель stdin: строка CANCEL - остановить поиск документации
     (убить процессы npx) и завершить генерацию."""
     try:
         if sys.stdin is None:
@@ -1117,7 +1117,7 @@ class _DocCache:
 
     Схема совместима с исполнением 1 (таблицы ``functions``/``results`` из
     sfa_doc_cache.py): кэш, сформированный любым из исполнений, читается
-    другим. Генерация в мосте однопоточная — блокировки не нужны.
+    другим. Генерация в мосте однопоточная - блокировки не нужны.
     """
 
     def __init__(self, db_path):
@@ -1206,7 +1206,7 @@ class _DocCache:
 
 def _manpages_candidates(func_name):
     """Варианты имени для поиска man-pages: без версии символа (@GLIBC_...)
-    и без ведущих подчёркиваний — как ManPagesDatabase._candidates исполнения 1."""
+    и без ведущих подчёркиваний - как ManPagesDatabase._candidates исполнения 1."""
     if not func_name:
         return ()
     name = func_name.strip().split("@", 1)[0]
@@ -1267,7 +1267,7 @@ def _manpages_get_page(conn, func_name):
         if row:
             page_name, section, title, markdown = row
             url = f"https://man7.org/linux/man-pages/man{section}/{page_name}.{section}.html"
-            header = f"**{title}** — man {section}" if title else f"man {section}"
+            header = f"**{title}** - man {section}" if title else f"man {section}"
             body = f"{header}\n\n{markdown}" if markdown else header
             return {"title": f"{page_name}({section})", "url": url,
                     "markdown": body, "markdown_html": ""}
@@ -1301,7 +1301,7 @@ def _sfa_index_is_known(conn, func_name):
 
 
 def _sfa_index_totals(conn):
-    """(модулей, функций) из индекса — фолбэк для счётчиков сводного отчёта."""
+    """(модулей, функций) из индекса - фолбэк для счётчиков сводного отчёта."""
     if conn is None:
         return 0, 0
     try:
@@ -1313,8 +1313,8 @@ def _sfa_index_totals(conn):
 
 
 class _SfaLog:
-    """Журнал генерации СФ (sfa_debug.log рядом с отчётами) — аналог _log
-    SfaReportGenerator. Поиск документации идёт из пула потоков —
+    """Журнал генерации СФ (sfa_debug.log рядом с отчётами) - аналог _log
+    SfaReportGenerator. Поиск документации идёт из пула потоков -
     запись защищена блокировкой."""
 
     def __init__(self, reports_dir):
@@ -1358,7 +1358,7 @@ def _back_link(output_html, reports_dir):
 
 
 def _is_system_module(mod_name, platform):
-    """Определяет, системный ли модуль — по словарям классификатора
+    """Определяет, системный ли модуль - по словарям классификатора
     (classifier/system_modules.py; единая точка принятия решения,
     аналогичная исполнению 1: словари платформ + префиксы API Sets)."""
     return _classifier_is_system(mod_name or "", platform or "")
@@ -1367,7 +1367,7 @@ def _is_system_module(mod_name, platform):
 def _is_sfa_module(mod_name, platform):
     """Модуль входит в отчёты СФ: категория «Системные библиотеки ОС».
     Отчёты СФ формируются только по системным библиотекам Windows-класса
-    (kernel32, user32, …); криптография, сеть и runtime-словари — вне СФ."""
+    (kernel32, user32, …); криптография, сеть и runtime-словари - вне СФ."""
     return _classifier_is_sfa(mod_name or "", platform or "")
 
 
@@ -1376,15 +1376,15 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
                         doc_cache=None, manpages_conn=None, sfa_index_conn=None,
                         log=None, progress=None, doc_manager=None,
                         doc_progress=None):
-    """Индивидуальный HTML-отчёт «Анализ СФ» — перенос логики
+    """Индивидуальный HTML-отчёт «Анализ СФ» - перенос логики
     SfaReportGenerator.generate_report_from_json исполнения 1.
 
     Отбор функций ведётся по системным библиотекам платформы:
-      * Windows — только импорты из системных библиотек, плюс проверка по
-        индексу системных функций (sfa_function_index.db); документация —
+      * Windows - только импорты из системных библиотек, плюс проверка по
+        индексу системных функций (sfa_function_index.db); документация -
         Microsoft Learn (npx @microsoft/learn-cli) с кэшем mslearn_cache.db;
-      * Linux / Android — отчёт содержит полный перечень импортов;
-        документация — локальная БД man-pages (без сети); системность
+      * Linux / Android - отчёт содержит полный перечень импортов;
+        документация - локальная БД man-pages (без сети); системность
         функции псевдо-модуля (.dynsym) подтверждается наличием документации.
 
     Поиск документации (npx) идёт параллельно через DocSearchManager:
@@ -1394,14 +1394,14 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
     Args:
         data_override: данные (file_name, imports, needed_libs, ...) для
             reuse-режима, когда JSON уже удалён.
-        reuse_cache: True — не вызывать npx, только кэш.
+        reuse_cache: True - не вызывать npx, только кэш.
         doc_cache: открытый _DocCache (создаётся на весь прогон).
         manpages_conn: открытое соединение БД man-pages (для Linux/Android).
         sfa_index_conn: открытое соединение индекса системных функций.
         log: колбэк журнала (sfa_debug.log).
-        progress: колбэк (func_name, idx, total_in_file) — проход по импортам.
+        progress: колбэк (func_name, idx, total_in_file) - проход по импортам.
         doc_manager: DocSearchManager для параллельного поиска (Windows).
-        doc_progress: колбэк (func_name, done, total) — получение документации.
+        doc_progress: колбэк (func_name, done, total) - получение документации.
     Returns:
         dict статистики или None, если генерация отменена.
     """
@@ -1426,7 +1426,7 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
     log(f"[INFO] Processing {json_path}")
     log(f"[INFO] Found {total_imports} imports in {file_name}")
 
-    # ─── Фаза 1: фильтрация; кэш/man-pages сразу, npx — в пул менеджера ───
+    # ─── Фаза 1: фильтрация; кэш/man-pages сразу, npx - в пул менеджера ───
     rows = []       # строки после фильтров (в исходном порядке импортов)
     pending = {}    # func_name -> future поиска MS Learn (без дубликатов)
     skipped = 0
@@ -1438,16 +1438,16 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
             continue
         module = imp.get("module", "") or ""
 
-        # Псевдо-модуль ELF (.dynsym): библиотека неизвестна — системность
+        # Псевдо-модуль ELF (.dynsym): библиотека неизвестна - системность
         # определяется по наличию документации.
         is_pseudo_module = module.strip().lower() in (".dynsym", ".dynsec", "unknown", "")
         module_is_system = _is_sfa_module(module, platform)
 
         # Фильтр 1 (Windows): несистемные библиотеки пропускаются. Для
         # псевдо-модулей проверка откладывается до поиска документации.
-        # Linux/Android фильтр не применяется — список импортов выводится целиком.
+        # Linux/Android фильтр не применяется - список импортов выводится целиком.
         if not list_all_imports and not module_is_system and not is_pseudo_module:
-            log(f"[DEBUG] {func_name} ({module}) — не системная библиотека ({platform})")
+            log(f"[DEBUG] {func_name} ({module}) - не системная библиотека ({platform})")
             skipped += 1
             continue
 
@@ -1455,7 +1455,7 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
         if (not list_all_imports and sfa_index_conn is not None
                 and not is_pseudo_module
                 and not _sfa_index_is_known(sfa_index_conn, func_name)):
-            log(f"[DEBUG] {func_name} — нет в индексе системных функций")
+            log(f"[DEBUG] {func_name} - нет в индексе системных функций")
             skipped_not_in_index += 1
             skipped += 1
             continue
@@ -1463,9 +1463,9 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
         if progress is not None:
             progress(func_name, idx, total_imports)
 
-        dll_name = module or "—"
+        dll_name = module or "-"
         if dll_name.strip().lower() in (".dynsym", ".dynsec", "unknown"):
-            dll_name = "—"
+            dll_name = "-"
 
         results = None
         found = False
@@ -1490,7 +1490,7 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
                 log(f"[INFO] {func_name}: БД man-pages недоступна")
         elif reuse_cache and doc_manager is not None:
             # Reuse-режим с добором: кэш неполон (записи от прошлых прогонов,
-            # поиск мог быть прерван) — недостающую документацию ищем в npx,
+            # поиск мог быть прерван) - недостающую документацию ищем в npx,
             # как в исполнении 1. Функция уходит в пул вместе с остальными.
             if func_name not in pending:
                 fut = doc_manager.submit(func_name)
@@ -1502,13 +1502,13 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
         elif reuse_cache:
             # Reuse-режим без менеджера поиска (npx недоступен): функция
             # остаётся not-found.
-            log(f"[INFO] {func_name} не в кэше (reuse_cache=True) — пропуск")
+            log(f"[INFO] {func_name} не в кэше (reuse_cache=True) - пропуск")
         elif not docs_available:
             log(f"[INFO] {func_name}: поиск документации недоступен для {platform}")
         elif doc_manager is not None:
-            # Документации нет в кэше — поиск уйдёт в пул параллельно.
+            # Документации нет в кэше - поиск уйдёт в пул параллельно.
             # (На этой ветке results/found гарантированно не установлены,
-            # так что needs_doc всегда True — как в reuse-ветке выше.)
+            # так что needs_doc всегда True - как в reuse-ветке выше.)
             if func_name not in pending:
                 fut = doc_manager.submit(func_name)
                 if fut is None:
@@ -1606,7 +1606,7 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
         f"skipped {skipped} as non-system, {skipped_not_in_index} not in index)")
 
     # Счётчики для индексного отчёта ведутся по системным функциям (для
-    # Linux/Android в частном отчёте перечислены все импорты — без этого
+    # Linux/Android в частном отчёте перечислены все импорты - без этого
     # «документация не найдена» смешивало бы системные функции с чужими).
     system_entries = [e for e in entries if e["is_system"]]
     system_found = [e for e in system_entries if e["found"]]
@@ -1614,14 +1614,14 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
     notfound_count = len(system_entries) - found_count
     notfound_names = {e["name"] for e in entries if not e["found"]}
     system_notfound_names = {e["name"] for e in system_entries if not e["found"]}
-    # Системные библиотеки модуля: для ELF источник — зависимости (DT_NEEDED);
+    # Системные библиотеки модуля: для ELF источник - зависимости (DT_NEEDED);
     # в list_all-режиме дополняем библиотеками подтверждённых системных строк.
-    # Критерий — СФ-библиотеки («Системные библиотеки ОС»), тот же, что у индекса.
+    # Критерий - СФ-библиотеки («Системные библиотеки ОС»), тот же, что у индекса.
     system_libs = {lib for lib in needed_libs if _is_sfa_module(lib, platform)}
     if list_all_imports:
         for e in system_entries:
             dll = e["dll"]
-            if dll and dll != "—" and _is_sfa_module(dll, platform):
+            if dll and dll != "-" and _is_sfa_module(dll, platform):
                 system_libs.add(dll)
 
     ctx = {
@@ -1693,7 +1693,7 @@ def generate_diff_report(json_path, output_html, reports_dir):
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     if not isinstance(data, dict):
-        # diff.json может оказаться списком (доанализ/ошибка) — не падаем, рисуем пустой отчёт
+        # diff.json может оказаться списком (доанализ/ошибка) - не падаем, рисуем пустой отчёт
         data = {}
 
     primary = data.get("real_primary") or data.get("primary", "")
@@ -1705,10 +1705,8 @@ def generate_diff_report(json_path, output_html, reports_dir):
         "real_primary": data.get("real_primary", ""),
         "real_secondary": data.get("real_secondary", ""),
         "back_link": _back_link(output_html, reports_dir),
-        "error": data.get("error"),
         "identical": data.get("identical", False),
-        "add_analysis_note": data.get("add_analysis_note"),
-        # `or {}` — ключ может присутствовать со значением null (generate_diff_index
+        # `or {}` - ключ может присутствовать со значением null (generate_diff_index
         # защищается от того же случая isinstance-проверкой).
         "file1": data.get("file1") or {},
         "file2": data.get("file2") or {},
@@ -1741,9 +1739,9 @@ def generate_diff_index(reports_dir, json_files, left_dir, right_dir,
                         generation_time, ida_version=""):
     """Сводный отчёт сравнения (перенос доработок исполнения 1: d35a4f2/ee9d761).
 
-    Показатель совпадения: hexdump 100% — hexdump-схожесть; два движка с
-    уникальными парами Diaphora — доля найденных функций; иначе sim BinDiff.
-    Имя пары — реальный исполняемый файл (без .i64), среднее — по display_sim.
+    Показатель совпадения: hexdump 100% - hexdump-схожесть; два движка с
+    уникальными парами Diaphora - доля найденных функций; иначе sim BinDiff.
+    Имя пары - реальный исполняемый файл (без .i64), среднее - по display_sim.
     """
     pairs = []
     total_similarity = 0.0
@@ -1788,9 +1786,9 @@ def generate_diff_index(reports_dir, json_files, left_dir, right_dir,
         if "diaphora" in eng:
             has_diaphora = True
 
-        # Если hexdump 100% — hexdump-схожесть. Если оба движка и Diaphora
-        # добавила уникальные пары — доля функций, найденных в сумме. Иначе
-        # (BinDiff-only или Diaphora не добавила нового) — sim BinDiff.
+        # Если hexdump 100% - hexdump-схожесть. Если оба движка и Diaphora
+        # добавила уникальные пары - доля функций, найденных в сумме. Иначе
+        # (BinDiff-only или Diaphora не добавила нового) - sim BinDiff.
         if hd_sim >= 1.0 or total1 == 0:
             display_sim = hd_sim
         elif eng == "bindiff+diaphora" and diaphora_only > 0:
@@ -1808,6 +1806,7 @@ def generate_diff_index(reports_dir, json_files, left_dir, right_dir,
             "total_funcs1": total1,
             "hash1": data.get("file1", {}).get("hash", "") if isinstance(data.get("file1"), dict) else "",
             "hash2": data.get("file2", {}).get("hash", "") if isinstance(data.get("file2"), dict) else "",
+            "identical": data.get("identical", False) is True,
             "engine": eng,
             "diaphora_matched_count": diaphora_only,
             "diaphora_confirmed_count": diaphora_confirmed,
@@ -1865,7 +1864,7 @@ def _collect_export_jsons(json_dir, json_paths):
 
 
 # ─────────────────────────────────────────────────────────────────
-#  Индекс системных функций (sfa_function_index.db) — для reuse-режима
+#  Индекс системных функций (sfa_function_index.db) - для reuse-режима
 # ─────────────────────────────────────────────────────────────────
 
 _SFA_INDEX_SCHEMA = """
@@ -1904,7 +1903,7 @@ CREATE TABLE IF NOT EXISTS meta (
 
 
 def _normalize_module_key(module):
-    """Канонический ключ модуля — как в исполнении 1
+    """Канонический ключ модуля - как в исполнении 1
     (classifier.naming.normalize_module_name): путь, одно платформенное
     расширение, нижний регистр; версии сохраняются (libc.so.6 → libc.so.6)."""
     from classifier.naming import normalize_module_name
@@ -1967,7 +1966,7 @@ def build_sfa_index(index_db, json_files, platform):
                     "(json_path, file_name, func_name, module_name, address, file_size) "
                     "VALUES (?, ?, ?, ?, ?, ?)",
                     (jp_str, file_name, func_name, module, address, file_size))
-                # В СФ-индекс — только СФ-библиотеки (категория «Системные
+                # В СФ-индекс - только СФ-библиотеки (категория «Системные
                 # библиотеки ОС»): криптография, сеть и runtime вне СФ.
                 if _is_sfa_module(module, platform):
                     conn.execute(
@@ -2038,7 +2037,7 @@ def run_generate(args):
         if not json_files:
             fail("Нет JSON-файлов экспорта. Сначала выполните анализ.")
         reports_dir.mkdir(parents=True, exist_ok=True)
-        # Внутренние модули проекта — все файлы исследуемой директории (как в исполнении 1).
+        # Внутренние модули проекта - все файлы исследуемой директории (как в исполнении 1).
         internal_set = _build_internal_set(input_dir)
         total = len(json_files)
         done = 0
@@ -2086,7 +2085,7 @@ def run_generate(args):
             out_rel = rel.with_suffix(rel.suffix + ".html")
             output_html = reports_dir / out_rel
             # Per-file guard (как в diff-ветке): один битый JSON/шаблон не должен
-            # валить весь прогон — остальные отчёты генерируются дальше.
+            # валить весь прогон - остальные отчёты генерируются дальше.
             try:
                 generate_analysis_report(str(jp), str(output_html), internal_set,
                                          reports_dir=str(reports_dir))
@@ -2191,16 +2190,16 @@ def run_generate(args):
 
         sfa_index_conn = _sfa_index_open(sfa_index_db)
 
-        # npx нужен только как фолбэк: основной путь — прямой MCP-вызов
+        # npx нужен только как фолбэк: основной путь - прямой MCP-вызов
         # (learn.microsoft.com/api/mcp), которому Node.js не требуется.
         npx_ready = _find_npx() is not None
         if platform == "Windows" and not npx_ready and not _mcp_ping():
-            emit_error("npx (Node.js) не найден и Microsoft Learn MCP недоступен — "
+            emit_error("npx (Node.js) не найден и Microsoft Learn MCP недоступен - "
                        "документация будет отсутствовать.")
 
         # Менеджер параллельного поиска документации (Windows): 4 постоянных
-        # потока, прямой MCP-вызов (фолбэк — npx), отмена с прерыванием
-        # запросов. Создаётся и в reuse-режиме — для добора отсутствующей
+        # потока, прямой MCP-вызов (фолбэк - npx), отмена с прерыванием
+        # запросов. Создаётся и в reuse-режиме - для добора отсутствующей
         # в кэше документации.
         doc_manager = None
         if platform == "Windows":
@@ -2227,7 +2226,7 @@ def run_generate(args):
                 break
             if not jp.exists() and not args.reuse_cache:
                 done += 1
-                emit_progress(done, total, f"{os.path.basename(str(jp))} — ошибка")
+                emit_progress(done, total, f"{os.path.basename(str(jp))} - ошибка")
                 continue
 
             if args.reuse_cache and not jp.exists():
@@ -2236,7 +2235,7 @@ def run_generate(args):
                 if not imports_data:
                     emit_error(f"Нет импортов в индексе для {os.path.basename(str(jp))}")
                     done += 1
-                    emit_progress(done, total, f"{os.path.basename(str(jp))} — ошибка")
+                    emit_progress(done, total, f"{os.path.basename(str(jp))} - ошибка")
                     continue
                 data = {
                     "file_name": local_file_name,
@@ -2253,7 +2252,7 @@ def run_generate(args):
                 except Exception as e:
                     emit_error(f"Ошибка чтения {os.path.basename(str(jp))}: {e}")
                     done += 1
-                    emit_progress(done, total, f"{os.path.basename(str(jp))} — ошибка")
+                    emit_progress(done, total, f"{os.path.basename(str(jp))} - ошибка")
                     continue
 
             original = os.path.basename(data.get("file_name", os.path.basename(str(jp))))
@@ -2278,7 +2277,7 @@ def run_generate(args):
                               f"{rel.as_posix()} → документация: {func_name} ({done_docs}/{total_docs})")
 
             # Per-file guard: один битый JSON/шаблон не валит весь прогон СФ
-            # (stats is None — отмена; исключение — продолжаем с другими файлами).
+            # (stats is None - отмена; исключение - продолжаем с другими файлами).
             try:
                 stats = generate_sfa_report(
                     str(jp), str(output_html), str(reports_dir), str(input_dir),
@@ -2302,7 +2301,7 @@ def run_generate(args):
             if not file_size and source_full.exists():
                 file_size = _stat_size_safe(source_full)
             if not file_size:
-                # для reuse — из index БД
+                # для reuse - из index БД
                 try:
                     conn = sqlite3.connect(str(sfa_index_db))
                     try:
@@ -2335,7 +2334,7 @@ def run_generate(args):
                 except OSError:
                     pass
             done += 1
-            emit_progress(done, total, f"{os.path.basename(str(jp))} — готов")
+            emit_progress(done, total, f"{os.path.basename(str(jp))} - готов")
 
         # Отмена во время генерации: гасим поиск и выходим без результата
         if _cancel_requested(doc_manager):
@@ -2351,7 +2350,7 @@ def run_generate(args):
             emit_error("Генерация отчётов СФ отменена пользователем.")
             return
 
-        # Счётчики сводного отчёта — по уникальным множествам; пустые
+        # Счётчики сводного отчёта - по уникальным множествам; пустые
         # дополняются из индекса (аналог фолбэка исполнения 1).
         total_system_modules = len(gsl)
         total_system_functions = len(gsf)
@@ -2392,10 +2391,10 @@ def run_generate(args):
         })
 
     elif args.kind == "sfa-docs":
-        """Предварительный поиск документации MS Learn — выполняется по кнопке
+        """Предварительный поиск документации MS Learn - выполняется по кнопке
         «Запустить анализ СФ» (после анализа и экспорта), чтобы генерация
         отчётов СФ шла только по кэшу, без вызовов npx и консольных окон.
-        Прогресс — по функциям; отмена — через stdin (CANCEL)."""
+        Прогресс - по функциям; отмена - через stdin (CANCEL)."""
         sfa_index_db = reports_dir / "sfa_function_index.db"
         platform = _normalize_platform(args.platform)
         if args.json_paths_file:
@@ -2411,7 +2410,7 @@ def run_generate(args):
 
         if platform != "Windows":
             # Linux/Android: документация локальная (man-pages), ищется
-            # непосредственно при генерации отчёта — предварительный поиск не нужен.
+            # непосредственно при генерации отчёта - предварительный поиск не нужен.
             log.close()
             emit_result({"searched": 0, "found": 0, "cached_total": 0,
                          "total_funcs": 0, "platform": platform})
@@ -2431,9 +2430,9 @@ def run_generate(args):
         except Exception as e:
             log.log(f"[WARN] Failed to open cache DB: {e}")
 
-        # npx — только фолбэк: основной путь поиска — прямой MCP-вызов
+        # npx - только фолбэк: основной путь поиска - прямой MCP-вызов
         if _find_npx() is None and not _mcp_ping():
-            emit_error("npx (Node.js) не найден и Microsoft Learn MCP недоступен — "
+            emit_error("npx (Node.js) не найден и Microsoft Learn MCP недоступен - "
                        "функции будут отмечены как «без документации».")
 
         # Уникальные функции, требующие документации: из системных модулей и

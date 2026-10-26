@@ -8,7 +8,7 @@ namespace IDABatchToolWinUI.Diff;
 /// Потоки обработки одной пары по фазам: BinDiff (экспорт+диф+разбор),
 /// Diaphora (экспорт+диф+слияние), пост-анализ (export.json + enrich +
 /// hexdump + правда экспорта). Перенос Process*PairAsync из DiffWorker
-/// при декомпозиции (пачка D) — поведение не менялось.
+/// при декомпозиции (пачка D) - поведение не менялось.
 /// </summary>
 public sealed class DiffPairProcessor
 {
@@ -62,6 +62,16 @@ public sealed class DiffPairProcessor
         var dbPri = Path.Combine(_outputDir, $"{stem}_primary.diaphora.sqlite");
         var dbSec = Path.Combine(_outputDir, $"{stem}_secondary.diaphora.sqlite");
         var result = Path.Combine(_outputDir, $"{stem}_diaphora_result.sqlite");
+
+        // Модули без функций (BinDiff насчитал 0) фаза Diaphora пропускает:
+        // сравнение пустых БД падает в Diaphora (ZeroDivisionError, код 1).
+        // Ориентир для такой пары - сравнение hexdump; в сводном индексе
+        // показателем остаётся hexdump-схожесть.
+        var bindiffJson = ReadJson(jsonOutput);
+        if (bindiffJson != null && bindiffJson.TryGetValue("total_functions1", out var totalFuncs)
+            && totalFuncs != null
+            && Convert.ToInt64(totalFuncs, System.Globalization.CultureInfo.InvariantCulture) == 0)
+            return true;
 
         if (!File.Exists(_diaphoraScriptPath))
         {
@@ -160,7 +170,7 @@ public sealed class DiffPairProcessor
             catch { /* не критично */ }
         }
 
-        // Экспорт IDA — источник истины: согласуем matched/unmatched и тоталы
+        // Экспорт IDA - источник истины: согласуем matched/unmatched и тоталы
         // с реальным перечнем функций (доработка исполнения 1: 190fff3, ee9d761).
         DiffJsonEnricher.ApplyIdaExportTruth(jsonOutput, exported.Primary, exported.Secondary, _onError);
 

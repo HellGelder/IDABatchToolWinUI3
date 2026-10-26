@@ -7,11 +7,6 @@
     {% include "_design_tokens.html" %}
     {% include "_datatables.html" %}
     <style>
-        .danger-block {
-            background: var(--danger-tint); color: var(--danger);
-            border-radius: var(--radius-sm); padding: 10px 14px;
-            font-weight: 500; font-size: 14px; margin: 8px 0;
-        }
         .note-block {
             background: var(--warning-tint); color: var(--warning);
             border-radius: var(--radius-sm); padding: 10px 14px;
@@ -106,14 +101,8 @@
                 <span class="grouped-row-value" style="font-family:ui-monospace,'SF Mono','Consolas',monospace;">{{ real_secondary if real_secondary else secondary }}</span>
             </li>
         </ul>
-        {% if error %}
-        <div class="danger-block">⚠️ {{ error }}</div>
-        {% endif %}
         {% if identical %}
-        <div class="note-block" style="background:var(--success-tint); color:var(--success);">✓ Модули идентичны — сравнение анализаторами не проводилось (файлы совпадают побайтно).</div>
-        {% endif %}
-        {% if add_analysis_note %}
-        <div class="note-block">ℹ️ {{ add_analysis_note }}</div>
+        <div class="note-block" style="background:var(--success-tint); color:var(--success);">✓ Модули идентичны - сравнение анализаторами не проводилось (файлы совпадают побайтно).</div>
         {% endif %}
     </div>
 
@@ -156,7 +145,7 @@
             {% set hd_sim = hd.hexdump_similarity if hd.hexdump_similarity is defined else 0.0 %}
             {% if hd.hexdump_skipped is defined and hd.hexdump_skipped %}
             <p class="meta-text" style="margin-bottom:4px;">
-                Схожесть hex-дампов: <strong>не рассчитана</strong> — {{ hd.hexdump_skip_reason if hd.hexdump_skip_reason is defined else 'файлы слишком большие' }}.
+                Схожесть hex-дампов: <strong>не рассчитана</strong> - {{ hd.hexdump_skip_reason if hd.hexdump_skip_reason is defined else 'файлы слишком большие' }}.
             </p>
             <p class="meta-text" style="margin-bottom:8px;">
                 Эталонный файл: <code>{{ hd.name1 }}</code><br>
@@ -181,8 +170,8 @@
     {% set dp_only = ms.get('diaphora_only', 0) %}
     {% set both_cnt = ms.get('both', 0) %}
     {% set total_found = bd_only + dp_only + both_cnt %}
-    {# Несопоставлено — фактический список из экспорта IDA (перезаписывается
-       в пост-анализе); для старых JSON без списков — разность тоталов. #}
+    {# Несопоставлено - фактический список из экспорта IDA (перезаписывается
+       в пост-анализе); для старых JSON без списков - разность тоталов. #}
     {% set un1_len = unmatched_functions1|length if unmatched_functions1 is defined else 0 %}
     {% if unmatched_source is defined and unmatched_source == 'ida_export' or un1_len > 0 %}
         {% set unmatched_display = un1_len %}
@@ -220,7 +209,7 @@
                 <div class="stat-label">Общие</div>
             </div>
             <div class="stat-tile">
-                <div class="stat-value" style="font-size:20px; color:var(--danger);">{{ unmatched_display if unmatched_display is not none else "—" }}</div>
+                <div class="stat-value" style="font-size:20px; color:var(--danger);">{{ unmatched_display if unmatched_display is not none else "-" }}</div>
                 <div class="stat-label">Не сопоставлено</div>
             </div>
         </div>
@@ -252,7 +241,7 @@
         <div class="flex-row">
             <div>
                 {% if display_sim < 0 %}
-                <div class="stat-value">—</div>
+                <div class="stat-value">-</div>
                 <div class="stat-label" style="margin-bottom:4px;">
                     Схожесть не рассчитана
                     {% if total_functions1 == 0 %}
@@ -351,8 +340,8 @@
                             <td data-order="{{ f.similarity }}">{{ f.similarity | pct }}%</td>
                             <td data-order="{{ f.confidence }}">{{ f.confidence | pct }}%</td>
                             <td class="dt-name" style="font-size:11px; color:var(--text-secondary);" title="{{ f.algorithm_name }}">{{ f.algorithm_name }}</td>
-                            <td data-order="{{ f.basicblocks if f.basicblocks is defined else f.nodes1 if f.nodes1 is defined else -1 }}">{{ f.basicblocks if f.basicblocks is defined else f.nodes1 if f.nodes1 is defined else '—' }}</td>
-                            <td data-order="{{ f.instructions if f.instructions is defined else -1 }}">{{ f.instructions if f.instructions is defined else '—' }}</td>
+                            <td data-order="{{ f.basicblocks if f.basicblocks is defined else f.nodes1 if f.nodes1 is defined else -1 }}">{{ f.basicblocks if f.basicblocks is defined else f.nodes1 if f.nodes1 is defined else '-' }}</td>
+                            <td data-order="{{ f.instructions if f.instructions is defined else -1 }}">{{ f.instructions if f.instructions is defined else '-' }}</td>
                             {% if engine == "bindiff+diaphora" %}
                             {% set src_rank = 1 if f.source == "bindiff" else 2 if f.source == "both" else 3 %}
                             <td data-order="{{ src_rank }}">
@@ -391,23 +380,13 @@
         {% set has_un2 = unmatched_functions2 is defined and unmatched_functions2|length > 0 %}
         {% set total_un = total_unmatched is defined and total_unmatched > 0 %}
         {% if has_un1 or has_un2 %}
-        <p class="meta-text" style="margin:0 0 6px 0; font-size:12px;">
-            «Несопоставленной» считается функция, для которой анализаторы не нашли пару с достаточным совпадением.
-            Имена вида <code>unknown_libname</code>, <code>sub_…</code>, числовые (например, <code>1800224E0</code>)
-            и <code>&lt;unnamed&gt;</code> означают, что у функции нет собственного имени: в бинарнике нет отладочной
-            информации, и имя назначено автоматически. Как правило, это служебные и вспомогательные функции. Без имён
-            и сведений о них сопоставление опирается только на сравнение кода, и короткие однотипные функции нередко
-            не набирают достаточного совпадения — поэтому остаются в этом списке.
-        </p>
-        <p class="meta-text" style="margin:0 0 6px 0; font-size:12px;">
-            Одна и та же функция может оказаться в обоих списках — и в эталонном, и в сравниваемом, нередко по одному
-            и тому же адресу. Противоречия в этом нет: «несопоставлена» означает «не сопоставлена ни с чем», в том числе
-            с такой же функцией другого файла. Само по себе присутствие функции в обоих файлах по одному адресу
-            признаком различия не является.
-        </p>
-        <p class="meta-text" style="margin:0 0 10px 0; font-size:12px;">
-            Несопоставленные функции не участвуют в расчёте показателя схожести и сами по себе не означают, что файлы
-            различаются. Если функцию нужно проверить — откройте её по адресу в IDA и сравните вручную.
+        <p class="meta-text" style="margin:0 0 8px 0; font-size:12px;">
+            Несопоставленная - функция, для которой анализаторы не нашли пару с достаточным совпадением.
+            Функции без имён (<code>unknown_libname</code>, <code>sub_…</code>, числовые адреса) остаются в списке
+            из-за отсутствия отладочной информации: сопоставление опирается только на сравнение кода, и короткие
+            однотипные функции не набирают достаточного совпадения. Одна и та же функция может оказаться в обоих
+            списках (нередко по одному адресу) - это означает «не сопоставлена ни с чем», а не различие.
+            На показатель схожести такие функции не влияют.
         </p>
         <div class="flex-row">
             {% if has_un1 %}

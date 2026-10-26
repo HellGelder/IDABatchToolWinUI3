@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
@@ -29,10 +29,10 @@
       Версия файла в свойствах exe/dll. При каждой новой сборке поднимать здесь и
       добавлять запись в version.txt (лончер берёт версию из FileVersion автоматически).
     -->
-    <Version>1.0.0.19</Version>
-    <FileVersion>1.0.0.19</FileVersion>
-    <AssemblyVersion>1.0.0.19</AssemblyVersion>
-    <InformationalVersion>1.0.0.19</InformationalVersion>
+    <Version>1.0.0.20</Version>
+    <FileVersion>1.0.0.20</FileVersion>
+    <AssemblyVersion>1.0.0.20</AssemblyVersion>
+    <InformationalVersion>1.0.0.20</InformationalVersion>
     <AssemblyTitle>IDA Batch Tool</AssemblyTitle>
     <Product>IDA Batch Tool</Product>
     <Company>СФБ ЛАБ</Company>

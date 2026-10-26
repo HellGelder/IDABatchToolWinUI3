@@ -8,7 +8,7 @@ namespace IDABatchToolWinUI.Diff;
 /// Доанализ Diaphora (engine=bindiff): пары с similarity &lt; 99% прогоняются
 /// через Diaphora повторно в отдельной папке AddDiffResults, итог помечается
 /// маркером add_analysis_done (с нейтральной заметкой при отсутствии новых пар).
-/// Перенос из DiffWorker при декомпозиции (пачка D) — поведение не менялось.
+/// Перенос из DiffWorker при декомпозиции (пачка D) - поведение не менялось.
 /// </summary>
 public sealed class AddAnalysisRunner
 {
@@ -40,7 +40,7 @@ public sealed class AddAnalysisRunner
     }
 
     /// <summary>Доанализ уже успешно завершён: в add-JSON стоит маркер add_analysis_done.
-    /// Факт существования файла маркером не является — там может лежать
+    /// Факт существования файла маркером не является - там может лежать
     /// необработанная копия исходного diff.json.</summary>
     public bool IsAddAnalysisDone(string stem)
     {
@@ -49,6 +49,15 @@ public sealed class AddAnalysisRunner
         if (!File.Exists(path)) return false;
         var d = ReadJson(path);
         return d != null && d.TryGetValue("add_analysis_done", out var v) && v is true;
+    }
+
+    /// <summary>Модуль без функций (BinDiff насчитал 0): Diaphora на такой паре
+    /// падает (ZeroDivisionError), доанализ ей не нужен - ориентир hexdump.</summary>
+    private static bool IsFunctionless(string diffJsonPath)
+    {
+        var data = ReadJson(diffJsonPath);
+        return data != null && data.TryGetValue("total_functions1", out var v) && v != null
+            && Convert.ToInt64(v, System.Globalization.CultureInfo.InvariantCulture) == 0;
     }
 
     public int CountLowSimilarityPairs(List<DiffPair> pairs)
@@ -60,6 +69,7 @@ public sealed class AddAnalysisRunner
             if (!File.Exists(d)) continue;
             if (IsAddAnalysisDone(p.Stem)) continue;
             if (IdenticalPairsService.IsIdenticalOrFullHexdump(d)) continue;
+            if (IsFunctionless(d)) continue;
             try
             {
                 var data = ReadJson(d);
@@ -76,7 +86,7 @@ public sealed class AddAnalysisRunner
     {
         if (!File.Exists(_diaphoraPath))
         {
-            _onError("Diaphora не найден — доанализ для пар <99% пропущен");
+            _onError("Diaphora не найден - доанализ для пар <99% пропущен");
             return;
         }
 
@@ -87,6 +97,7 @@ public sealed class AddAnalysisRunner
             if (!File.Exists(d)) return false;
             if (IsAddAnalysisDone(stem)) return false;
             if (IdenticalPairsService.IsIdenticalOrFullHexdump(d)) return false;
+            if (IsFunctionless(d)) return false;
             try
             {
                 var data = ReadJson(d);
@@ -133,8 +144,8 @@ public sealed class AddAnalysisRunner
         var dbSec = Path.Combine(_addOutputDir!, $"{stem}_secondary.diaphora.sqlite");
         var result = Path.Combine(_addOutputDir!, $"{stem}_diaphora_result.sqlite");
 
-        // Причина провала — в отчёт доанализа (add_analysis_note): модуль не удалось
-        // проанализировать (экспорт/сравнение не состоялись — например, БД не росла).
+        // Причина провала - в отчёт доанализа (add_analysis_note): модуль не удалось
+        // проанализировать (экспорт/сравнение не состоялись - например, БД не росла).
         string? note = null;
         var (priOk, priReason) = await _diaphora.ExportAsync(p.Primary, dbPri, p.RelKey, ct);
         if (!priOk)
@@ -161,25 +172,25 @@ public sealed class AddAnalysisRunner
             {
                 DiaphoraParser.MergeIntoJson(jsonOutput, result);
                 merged = true;
-                // Diaphora отработала штатно, но ни одной новой пары не добавила —
+                // Diaphora отработала штатно, но ни одной новой пары не добавила -
                 // так и пишем в отчёт (нейтрально, без «ошибки»).
                 var newPairs = 0;
                 if (ReadJson(jsonOutput) is { } mergedData &&
                     mergedData.TryGetValue("matched_diaphora_only", out var md) && md is List<object?> ml)
                     newPairs = ml.Count;
-                if (newPairs == 0) note = "Доанализ Diaphora дополнительных пар не дал — все совпадения уже найдены BinDiff.";
+                if (newPairs == 0) note = "Доанализ Diaphora дополнительных пар не дал - все совпадения уже найдены BinDiff.";
             }
             else note = diffReason;
         }
         if (!merged && note == null)
             note = "сравнение БД не дало результата (файл результата не создан)";
-        // Маркер успешного доанализа — по нему пара исключается из следующих прогонов
+        // Маркер успешного доанализа - по нему пара исключается из следующих прогонов
         MarkAddAnalysisDone(jsonOutput, merged, note);
         Cleanup(dbPri, dbSec, result);
         return merged;
     }
 
-    /// <summary>Ставит (или снимает) маркер add_analysis_done в add-JSON пары, note —
+    /// <summary>Ставит (или снимает) маркер add_analysis_done в add-JSON пары, note -
     /// причина провала либо нейтральный итог (рендерится баннером в HTML).</summary>
     private static void MarkAddAnalysisDone(string jsonPath, bool done, string? failureNote = null)
     {
@@ -240,7 +251,7 @@ public sealed class AddAnalysisRunner
             catch { /* не критично */ }
         }
 
-        // Экспорт IDA — источник истины (доработка исполнения 1: 190fff3, ee9d761).
+        // Экспорт IDA - источник истины (доработка исполнения 1: 190fff3, ee9d761).
         DiffJsonEnricher.ApplyIdaExportTruth(jsonOutput, exported.Primary, exported.Secondary, _onError);
 
         Cleanup(primJson, secJson);

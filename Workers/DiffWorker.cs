@@ -8,7 +8,7 @@ using IDABatchToolWinUI.Services;
 namespace IDABatchToolWinUI.Workers;
 
 /// <summary>
-/// Параллельное сравнение пар с помощью BinDiff + Diaphora — перенос
+/// Параллельное сравнение пар с помощью BinDiff + Diaphora - перенос
 /// diff_worker.py на C#: export BinExport и JSON, BinDiff CLI, Diaphora, пост-обработка
 /// (hexdump diff, enrich, unmatched), HTML-отчёты через Python-bridge.
 /// </summary>
@@ -102,7 +102,7 @@ public sealed class DiffWorker : IDisposable
 
     private async Task RunCore(CancellationToken ct)
     {
-        // Страховка: любое исключение из фаз не должно терять Finished —
+        // Страховка: любое исключение из фаз не должно терять Finished -
         // иначе страница навсегда остаётся в состоянии «выполняется».
         try
         {
@@ -133,7 +133,7 @@ public sealed class DiffWorker : IDisposable
         var useDiaphora = Engine is "diaphora" or "both";
 
         // Пары с идентичными бинарниками (равные SHA-256) не анализируем вовсе:
-        // их сходство полная и по определению — BinDiff/Diaphora там не нужны.
+        // их сходство полная и по определению - BinDiff/Diaphora там не нужны.
         var identical = new HashSet<string>();
         foreach (var p in all)
         {
@@ -143,13 +143,13 @@ public sealed class DiffWorker : IDisposable
             if (IdenticalPairsService.FilesEqual(orig1, orig2)) identical.Add(p.Stem);
         }
         if (identical.Count > 0)
-            ErrorOccurred?.Invoke($"Идентичных пар (побайтно): {identical.Count} — анализ не запускается, отчёт отмечен «Модули идентичны».");
+            ErrorOccurred?.Invoke($"Идентичных пар (побайтно): {identical.Count} - анализ не запускается, отчёт отмечен «Модули идентичны».");
 
         var work = all.Where(p => !identical.Contains(p.Stem)).ToList();
         _outcomes = new OutcomeTracker(all.Select(p => p.Stem));
         _pass.Outcomes = _outcomes;
 
-        // Этапы выполнения: счётчик «шагов» не ведём — GUI показывает этапы
+        // Этапы выполнения: счётчик «шагов» не ведём - GUI показывает этапы
         // и статусы обработки каждого файла.
         var phases = new List<(string stage, string statusText, List<DiffPair> pairs, Func<DiffPair, Task<bool>> process)>();
         if (useBindiff)
@@ -166,7 +166,7 @@ public sealed class DiffWorker : IDisposable
             StageChanged?.Invoke(stage, "done");
         }
 
-        // Идентичным парам — заглушка без запуска анализаторов.
+        // Идентичным парам - заглушка без запуска анализаторов.
         foreach (var p in all.Where(p => identical.Contains(p.Stem)))
         {
             IdenticalPairsService.WriteIdenticalJson(p, OutputDir);
@@ -187,7 +187,7 @@ public sealed class DiffWorker : IDisposable
         if (ct.IsCancellationRequested) { Abort(); return; }
         StageChanged?.Invoke("Генерация HTML", "done");
 
-        // Доанализ для engine=bindiff — только при наличии пар <99%, ещё не прошедших доанализ
+        // Доанализ для engine=bindiff - только при наличии пар <99%, ещё не прошедших доанализ
         if (Engine == "bindiff" && !string.IsNullOrEmpty(AddOutputDir))
         {
             if (_addAnalysis.CountLowSimilarityPairs(all) > 0)
@@ -199,7 +199,7 @@ public sealed class DiffWorker : IDisposable
             {
                 ErrorOccurred?.Invoke(
                     "Доанализ не запускался: нет пар, требующих доанализа " +
-                    "(similarity ≥ 99% или доанализ уже успешно завершён).");
+                    "(similarity ≥ 99%, доанализ уже успешно завершён или в модуле 0 функций).");
             }
         }
 

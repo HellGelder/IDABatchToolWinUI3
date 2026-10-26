@@ -4,7 +4,7 @@ namespace IDABatchToolWinUI.Diff;
 
 /// <summary>
 /// Фазы Diaphora: экспорт БД через idat (с пульсом) и сравнение БД через pythonw.
-/// Перенос из DiffWorker при декомпозиции (пачка D) — поведение не менялось.
+/// Перенос из DiffWorker при декомпозиции (пачка D) - поведение не менялось.
 /// </summary>
 public sealed class DiaphoraService
 {
@@ -28,14 +28,14 @@ public sealed class DiaphoraService
         env["DIAPHORA_AUTO"] = "1";
         env["DIAPHORA_EXPORT_FILE"] = outSqlite;
         // Облегчённый профиль экспорта (перенос из исполнения 1): псевдокод-эвристики
-        // работают, микрокод off — Hex-Rays вызывается один раз на функцию вместо двух.
+        // работают, микрокод off - Hex-Rays вызывается один раз на функцию вместо двух.
         // Работает только с патчем get_value_for (иначе '0' остаётся строкой и не
         // отключает флаг) и патчем ключа export_microcode в diaphora_ida.py.
         env["DIAPHORA_USE_DECOMPILER"] = "1";
         env["DIAPHORA_EXPORT_MICROCODE"] = "0";
         env["DIAPHORA_FUNCTION_SUMMARIES_ONLY"] = "0";
 
-        // Для крупных файлов — как в исполнении 1: увеличенная виртуальная память,
+        // Для крупных файлов - как в исполнении 1: увеличенная виртуальная память,
         // отключение undo, отдельный лог IDA.
         if (DiffProcessRunner.IsLarge(i64Path))
         {
@@ -46,7 +46,7 @@ public sealed class DiaphoraService
         }
 
         psi.ArgumentList.Add("-A");
-        // Важно: без кавычек внутри аргумента — ProcessStartInfo.ArgumentList сам
+        // Важно: без кавычек внутри аргумента - ProcessStartInfo.ArgumentList сам
         // экранирует путь; кавычки в значении ломали нахождение скрипта IDA.
         psi.ArgumentList.Add($"-S{_diaphoraPath}");
         psi.ArgumentList.Add(i64Path);
@@ -66,14 +66,14 @@ public sealed class DiaphoraService
             RedirectStandardError = true,
             CreateNoWindow = true,
         };
-        // Быстрый профиль дифа (перенос из исполнения 1): медленные и экспериментальные
-        // эвристики избыточны, таймаут эвристики снижен, чтобы одна тяжёлая эвристика
-        // не растягивала диф на часы. Нужен патч get_value_for в diaphora.py —
-        // без него env-строки не приводятся к bool/int и флаги не работают.
+        // Быстрый профиль дифа (перенос из исполнения 1): медленные, экспериментальные
+        // и ненадёжные эвристики отключены. Таймаут эвристик не задаём - контроль
+        // затяжных фаз ведёт пульс (ОЗУ процесса + размер БД, сталл 4 часа), как
+        // и на экспорте. Нужен патч get_value_for в diaphora.py - без него
+        // env-строки не приводятся к bool и флаги не работают.
         psi.Environment["DIAPHORA_SLOW_HEURISTICS"] = "0";
         psi.Environment["DIAPHORA_EXPERIMENTAL"] = "0";
         psi.Environment["DIAPHORA_UNRELIABLE"] = "0";
-        psi.Environment["DIAPHORA_SQL_TIMEOUT_LIMIT"] = "60";
 
         psi.ArgumentList.Add(_diaphoraPath);
         psi.ArgumentList.Add(db1);
