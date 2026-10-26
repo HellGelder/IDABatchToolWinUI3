@@ -6,6 +6,26 @@
 Package.appxmanifest и app.manifest синхронно; make-portable.ps1
 и тест VersionConsistencyTests ловят расхождение).
 
+1.0.0.21 / 2026-10-26
+  Изменено:
+  - единый источник версии сборки: Directory.Build.props (Version, FileVersion,
+    AssemblyVersion, InformationalVersion); в csproj версия больше не задаётся.
+    Package.appxmanifest и app.manifest синхронизированы с props - раньше в них
+    застревала 1.0.0.0 при каждом релизе. make-portable.ps1 берёт версию из
+    props: отсутствие файла или поля теперь ошибка, а не тихая 1.0.0.0;
+    расхождение манифестов или последней записи version.txt с props прерывает
+    сборку поставки. Архив именуется с RID: IDABatchToolWinUI-<версия>-<RID>.zip
+    (архивы прежних схем имён подчищаются)
+  - тесты (xUnit v3/MTP): включён `dotnet test` (TestingPlatformDotnetTest-
+    Support). В обычной консоли тесты теперь запускаются и через `dotnet test`,
+    и через `dotnet run` по тестовому проекту; в среде агента ZCode MTP-канал
+    до MSBuild-узла режется политикой доступа - там канонический запуск
+    `dotnet run` (см. AGENTS.md)
+  Добавлено:
+  - тест VersionConsistencyTests (5 проверок): props ↔ Package.appxmanifest ↔
+    app.manifest ↔ version.txt, плюс запрет возврата версии в csproj -
+    рассинхрон ловится каждой прогонкой тестов, а не только сборкой поставки
+
 1.0.0.20 / 2026-10-26
   Изменено:
   - «Бинарное сравнение»: убран таймаут эвристик Diaphora (переменная
