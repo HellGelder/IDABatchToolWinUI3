@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Git-сравнение — __SOURCE_NAME__</title>
+<title>Git-сравнение - __SOURCE_NAME__</title>
 <style>
 /*__VENDOR_CSS__*/
 
@@ -110,7 +110,7 @@ body { margin: 0; background: #f6f6f6; color: #1f1f1f;
             else if (ln.charAt(0) === '+') add++;
             else if (ln.charAt(0) === '-') del++;
         }
-        /* Бинарные чанки не содержат «---»/«+++» — имя берём из строки
+        /* Бинарные чанки не содержат «---»/«+++» - имя берём из строки
            «diff --git old/X new/Y» (как в диффах DirectoriesDiffService). */
         var name = null;
         var first = lines[0] || '';
@@ -190,7 +190,7 @@ body { margin: 0; background: #f6f6f6; color: #1f1f1f;
         summary.innerHTML = 'Файлов: <b>' + state.files.length + '</b> · ' +
             '<span class="gdr-add">+' + totAdd + '</span> · ' +
             '<span class="gdr-del">−' + totDel + '</span>' +
-            ' — нажмите на файл, чтобы развернуть';
+            ' - нажмите на файл, чтобы развернуть';
 
         for (var i = 0; i < state.files.length; i++) {
             var f = state.files[i];
@@ -198,7 +198,7 @@ body { margin: 0; background: #f6f6f6; color: #1f1f1f;
             var head = document.createElement('div'); head.className = 'gdr-file-head';
             var caret = document.createElement('span'); caret.className = 'gdr-caret'; caret.textContent = '▸';
             var st = document.createElement('span');
-            // Для двоичных файлов чип статуса не рисуется — тема двоичных из
+            // Для двоичных файлов чип статуса не рисуется - тема двоичных из
             // отчёта исключена (см. v1.0.0.15); содержимое блока «Binary files …
             // differ» показывает сам diff2html при разворачивании
             if (f.status !== 'binary') {

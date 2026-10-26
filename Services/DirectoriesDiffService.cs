@@ -4,8 +4,8 @@ using System.Text;
 
 namespace IDABatchToolWinUI.Services;
 
-/// <summary>Модуль модульного сравнения: подпапка OLD/NEW (одна из сторон может отсутствовать —
-/// тогда модуль «удалён целиком» / «новый»). SizeBytes — оценка объёма работы (байты файлов).</summary>
+/// <summary>Модуль модульного сравнения: подпапка OLD/NEW (одна из сторон может отсутствовать -
+/// тогда модуль «удалён целиком» / «новый»). SizeBytes - оценка объёма работы (байты файлов).</summary>
 public sealed record ModuleInfo(string Name, string? OldPath, string? NewPath, long SizeBytes);
 
 /// <summary>Итог сравнения одного модуля. Kind: modified | added | deleted | unchanged | error.
@@ -25,13 +25,13 @@ public sealed record DirsDiffStats(
 }
 
 /// <summary>
-/// Текстовый дифф двух папок с исходниками — нативный порт diff_gui.py
+/// Текстовый дифф двух папок с исходниками - нативный порт diff_gui.py
 /// (исполнение 1): рекурсивный обход с glob-исключениями, sniff бинарности
 /// по нулевому байту, нормализация EOL и единый unified diff в стиле
 /// «git diff --no-index --no-prefix» в один файл + журнал &lt;файл&gt;.log.
-/// Внутренний алгоритм — Myers O(ND): расстояние редактирования выше
+/// Внутренний алгоритм - Myers O(ND): расстояние редактирования выше
 /// MaxEditDistance (почти полностью переписанный огромный файл) отдаётся
-/// одним блоком замены — вывод остаётся корректным unified diff.
+/// одним блоком замены - вывод остаётся корректным unified diff.
 /// </summary>
 public static class DirectoriesDiffService
 {
@@ -42,7 +42,7 @@ public static class DirectoriesDiffService
     public const int DefaultContext = 3;
 
     /// <summary>
-    /// «Полный дифф»: контекст, заведомо накрывающий файл целиком — в дифф
+    /// «Полный дифф»: контекст, заведомо накрывающий файл целиком - в дифф
     /// пишутся все строки. Верхний предел подобран так, чтобы 2*n в AppendHunks
     /// не переполнялся; реальных файлов длиннее не бывает.
     /// </summary>
@@ -63,9 +63,9 @@ public static class DirectoriesDiffService
     /// <summary>
     /// Сравнивает две директории и пишет единый дифф. Бросает
     /// OperationCanceledException при отмене. Лог-колбэк получает готовые
-    /// строки (они же пишутся в &lt;outPath&gt;.log), прогресс — (cur, total, rel).
+    /// строки (они же пишутся в &lt;outPath&gt;.log), прогресс - (cur, total, rel).
     /// При skipBinary файлы, распознанные как двоичные, не попадают в дифф
-    /// (учитываются только в статистике и журнале) — остаются текстовые файлы.
+    /// (учитываются только в статистике и журнале) - остаются текстовые файлы.
     /// </summary>
     public static DirsDiffStats Run(
         string oldDir, string newDir, string outPath, int context,
@@ -93,11 +93,11 @@ public static class DirectoriesDiffService
         L("INFO", IsFullContext(context) ? "Полный дифф (все строки файлов)" : $"Строк контекста: {context}");
 
         // Предварительная проверка: если папки совпадают побайтово, пофайловое
-        // сравнение не запускается — все файлы сразу помечаются без изменений
+        // сравнение не запускается - все файлы сразу помечаются без изменений
         L("INFO", "Проверка контрольных сумм OLD/NEW...");
         var identical = FoldersIdentical(oldDir, newDir, patterns, L, ct);
         if (identical)
-            L("INFO", "Контрольные суммы совпали — содержимое идентично, пофайловое сравнение пропущено");
+            L("INFO", "Контрольные суммы совпали - содержимое идентично, пофайловое сравнение пропущено");
 
         L("INFO", $"Обход папки OLD: {oldDir}");
         var (oldFiles, oldExcluded) = Collect(oldDir, patterns, L, ct);
@@ -151,11 +151,11 @@ public static class DirectoriesDiffService
                     // в дифф они не пишутся (информация остаётся в статистике и журнале)
                     var omitted = kind == "binary" && skipBinary;
                     if (chunk != null && !omitted) chunks.Add(chunk);
-                    L("INFO", $"{prefix} {rel} — {KindLabel(kind)}{(omitted ? " (пропущен: только исходные коды)" : "")}");
+                    L("INFO", $"{prefix} {rel} - {KindLabel(kind)}{(omitted ? " (пропущен: только исходные коды)" : "")}");
                 }
                 catch (Exception exc)
                 {
-                    L("ERROR", $"{prefix} {rel} — ОШИБКА ОБРАБОТКИ: {exc.Message}");
+                    L("ERROR", $"{prefix} {rel} - ОШИБКА ОБРАБОТКИ: {exc.Message}");
                     errors.Add($"{rel}: {exc.Message}");
                 }
                 progress?.Invoke(idx + 1, total, rel);
@@ -191,7 +191,7 @@ public static class DirectoriesDiffService
         };
         if (s.ErrorDetails.Count > 0)
         {
-            lines.Add("Ошибки (подробности — в журнале):");
+            lines.Add("Ошибки (подробности - в журнале):");
             lines.AddRange(s.ErrorDetails.Take(10).Select(e => "  - " + e));
         }
         return lines.ToArray();
@@ -255,9 +255,9 @@ public static class DirectoriesDiffService
     /// <summary>
     /// Предварительная проверка «папки идентичны»: сопоставляются наборы
     /// относительных путей (с учётом исключений), затем размеры и содержимое
-    /// файлов. Совпадение гарантирует пустой результат диффа — пофайловое
-    /// сравнение можно пропустить; расхождение — обычный путь. Папка, отсутствующая
-    /// с обеих сторон, считается совпадением (сравнивать нечего); только с одной —
+    /// файлов. Совпадение гарантирует пустой результат диффа - пофайловое
+    /// сравнение можно пропустить; расхождение - обычный путь. Папка, отсутствующая
+    /// с обеих сторон, считается совпадением (сравнивать нечего); только с одной -
     /// расхождением (без лишних предупреждений от Collect о недоступных путях).
     /// </summary>
     private static bool FoldersIdentical(
@@ -450,7 +450,7 @@ public static class DirectoriesDiffService
             var middle = MyersDiff(ia, ib, MaxEditDistance);
             if (middle != null)
             {
-                // Для eq значимы оба индекса; у del не читается B, у insert — A.
+                // Для eq значимы оба индекса; у del не читается B, у insert - A.
                 foreach (var (kind, ai, bi) in middle)
                     ops.Add((kind, p + ai, p + bi));
             }
@@ -526,7 +526,7 @@ public static class DirectoriesDiffService
         return ops;
     }
 
-    /// <summary>Задан ли полный дифф (контекст накрывает файл целиком — все строки).</summary>
+    /// <summary>Задан ли полный дифф (контекст накрывает файл целиком - все строки).</summary>
     private static bool IsFullContext(int context) => context >= FullContext;
 
     /// <summary>Группировка операций в ханки с контекстом n (семантика unified diff).</summary>
@@ -604,8 +604,8 @@ public static class DirectoriesDiffService
 
     /// <summary>
     /// Модули = подпапки первого уровня OLD/NEW, пары по имени. Модуль, существующий
-    /// только с одной стороны, — полноценный участник («удалён целиком»/«новый»).
-    /// Размер для балансировки — суммарный объём файлов (макс. из двух сторон).
+    /// только с одной стороны, - полноценный участник («удалён целиком»/«новый»).
+    /// Размер для балансировки - суммарный объём файлов (макс. из двух сторон).
     /// </summary>
     public static List<ModuleInfo> DiscoverModules(string oldDir, string newDir)
     {
@@ -670,7 +670,7 @@ public static class DirectoriesDiffService
 
     /// <summary>
     /// Аккуратное разбиение модулей на пулы: модули по убыванию размера жадно
-    /// кладутся в наименее загруженный пул — внутри пула порядок тоже «крупные вперёд».
+    /// кладутся в наименее загруженный пул - внутри пула порядок тоже «крупные вперёд».
     /// </summary>
     public static List<Queue<ModuleInfo>> BuildPools(IReadOnlyList<ModuleInfo> modules, int workerCount)
     {
@@ -690,14 +690,14 @@ public static class DirectoriesDiffService
     /// <summary>
     /// Модульное сравнение: min(4, модулей) воркеров, у каждого свой пул (см. BuildPools).
     /// Воркер обрабатывает только свой пул; когда пул опустел, под замком атомарно
-    /// забирает следующий непроизведённый модуль из любого пула — освободившиеся
+    /// забирает следующий непроизведённый модуль из любого пула - освободившиеся
     /// потоки делят остаток, модуль не обрабатывается дважды. Модуль, изменившийся
     /// только двоичными файлами при skipBinary, считается «без изменений».
     /// </summary>
     /// <param name="log">Готовая строка для журнала страницы (префиксы [T№][модуль] ставятся здесь).</param>
-    /// <param name="progress">(поток, модуль, cur, total) — прогресс по файлам для карточки потока.</param>
-    /// <param name="threadModule">(поток, модуль | null) — карточка: текущий модуль / поток свободен.</param>
-    /// <param name="moduleDone">(готово, всего) — счётчик завершённых модулей.</param>
+    /// <param name="progress">(поток, модуль, cur, total) - прогресс по файлам для карточки потока.</param>
+    /// <param name="threadModule">(поток, модуль | null) - карточка: текущий модуль / поток свободен.</param>
+    /// <param name="moduleDone">(готово, всего) - счётчик завершённых модулей.</param>
     public static async Task<ModuleRunResult> RunModulesAsync(
         IReadOnlyList<ModuleInfo> modules, string oldDir, string newDir, string outDir,
         int context, IReadOnlyList<string> patterns, bool skipBinary,
@@ -716,11 +716,11 @@ public static class DirectoriesDiffService
 
         var rootFiles = SafeFileCount(oldDir) + SafeFileCount(newDir);
         if (rootFiles > 0)
-            log($"Файлов в корне OLD/NEW (вне подпапок-модулей): {rootFiles} — не сравниваются");
+            log($"Файлов в корне OLD/NEW (вне подпапок-модулей): {rootFiles} - не сравниваются");
 
         var pools = BuildPools(modules, workers);
         log($"Потоков: {workers}; распределение: " +
-            string.Join(", ", pools.Select((p, i) => $"T{i + 1} — {p.Count} мод. / {SizeText(p.Sum(m => m.SizeBytes))}")));
+            string.Join(", ", pools.Select((p, i) => $"T{i + 1} - {p.Count} мод. / {SizeText(p.Sum(m => m.SizeBytes))}")));
 
         var queues = pools.Select(p => new ConcurrentQueue<ModuleInfo>(p)).ToArray();
         var outcomes = new ConcurrentBag<ModuleOutcome>();
@@ -737,7 +737,7 @@ public static class DirectoriesDiffService
                 if (!queues[t].TryDequeue(out mod))
                 {
                     // Свой пул пуст: под замком забираем первый непроизведённый
-                    // модуль из любого пула — атомарно, без дублей
+                    // модуль из любого пула - атомарно, без дублей
                     lock (gate)
                     {
                         foreach (var q in queues)
@@ -758,7 +758,7 @@ public static class DirectoriesDiffService
                         mod.OldPath ?? Path.Combine(oldDir, mod.Name),
                         mod.NewPath ?? Path.Combine(newDir, mod.Name),
                         diffPath, context, patterns,
-                        // В UI-журнал — только предупреждения и ошибки: полный журнал
+                        // В UI-журнал - только предупреждения и ошибки: полный журнал
                         // по модулю Run пишет сам в changes.diff.log, а пофайловый INFO
                         // в UI тоннами строк вешает интерфейс (см. FlushGitUiUpdates)
                         line =>
@@ -770,7 +770,7 @@ public static class DirectoriesDiffService
                         ct, skipBinary);
 
                     // Текстовые изменения определяют «есть ли что показать»:
-                    // модуль, изменившийся только пропущенными двоичными, — без изменений
+                    // модуль, изменившийся только пропущенными двоичными, - без изменений
                     var textChanges = stats.Modified + stats.Added + stats.Deleted;
                     string kind = mod.OldPath == null ? "added"
                         : mod.NewPath == null ? "deleted"

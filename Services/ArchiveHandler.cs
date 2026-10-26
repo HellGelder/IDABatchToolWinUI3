@@ -4,7 +4,7 @@ using System.IO.Compression;
 namespace IDABatchToolWinUI.Services;
 
 /// <summary>
-/// Обработка архивов APK/IPA/DMG — аналог ida_batch_tool/archive_handler.py.
+/// Обработка архивов APK/IPA/DMG - аналог ida_batch_tool/archive_handler.py.
 /// APK/IPA распаковываются через System.IO.Compression, DMG через 7z.
 /// </summary>
 public static class ArchiveHandler
@@ -14,7 +14,7 @@ public static class ArchiveHandler
 
     public static string? Find7z()
     {
-        // 1) 7-Zip, положенный рядом с приложением (Tools\7-Zip) — для
+        // 1) 7-Zip, положенный рядом с приложением (Tools\7-Zip) - для
         //    переносимой поставки без установленного 7-Zip в системе.
         var toolsDir = Path.Combine(AppConstants.WinUiDir, "Tools", "7-Zip");
         foreach (var name in new[] { "7z.exe", "7za.exe" })
@@ -57,7 +57,7 @@ public static class ArchiveHandler
         outputDir ??= Path.Combine(Path.GetDirectoryName(archive) ?? ".", Path.GetFileNameWithoutExtension(archive));
         outputDir = Path.GetFullPath(outputDir);
 
-        // Если папка уже существует и не пуста — считаем архив распакованным
+        // Если папка уже существует и не пуста - считаем архив распакованным
         if (Directory.Exists(outputDir) && Directory.EnumerateFileSystemEntries(outputDir).Any())
             return outputDir;
 
@@ -66,7 +66,7 @@ public static class ArchiveHandler
         {
             if (suffix is ".apk" or ".ipa")
             {
-                // ZipFile — синхронный API: распаковка уже вне UI-потока (скан папки).
+                // ZipFile - синхронный API: распаковка уже вне UI-потока (скан папки).
                 await Task.Run(() => ZipFile.ExtractToDirectory(archive, outputDir));
                 return outputDir;
             }
@@ -92,7 +92,7 @@ public static class ArchiveHandler
                 psi.ArgumentList.Add($"-o{outputDir}");
                 psi.ArgumentList.Add("-y");
 
-                // Ждём полного завершения 7z; прерывание — только по отмене.
+                // Ждём полного завершения 7z; прерывание - только по отмене.
                 var result = await ProcessRunner.RunAsync(psi, CancellationToken.None);
                 if (!result.Started || result.ExitCode != 0)
                 {

@@ -5,7 +5,7 @@ namespace IDABatchToolWinUI.Diff;
 /// <summary>
 /// Разбор результатов Diaphora (result-SQLite) и слияние их в .diff.json:
 /// matched/unmatched, распределение алгоритмов, дедупликация против BinDiff.
-/// Перенос из DiffWorker при декомпозиции (пачка D) — поведение не менялось.
+/// Перенос из DiffWorker при декомпозиции (пачка D) - поведение не менялось.
 /// </summary>
 public static class DiaphoraParser
 {
@@ -31,7 +31,7 @@ public static class DiaphoraParser
                     {
                         var type = Convert.ToString(rd["type"]) ?? "partial";
                         // Diaphora хранит ratio строкой '1.0000000' (с точкой):
-                        // парсим строго инвариантно — Convert.ToDouble с текущей
+                        // парсим строго инвариантно - Convert.ToDouble с текущей
                         // культурой на локалях с запятой даёт FormatException
                         // и весь разбор молча терялся
                         double.TryParse(Convert.ToString(rd["ratio"]), System.Globalization.NumberStyles.Float,
@@ -63,8 +63,8 @@ public static class DiaphoraParser
                     {
                         var a = "0x" + (long.TryParse(Convert.ToString(rd["address"]), System.Globalization.NumberStyles.HexNumber, null, out var av) ? av.ToString("X") : "0");
                         var entry = (Address: a, Name: Convert.ToString(rd["name"]) ?? "");
-                        // В новых версиях Diaphora type — строка 'primary'/'secondary',
-                        // в старых — число 1/2
+                        // В новых версиях Diaphora type - строка 'primary'/'secondary',
+                        // в старых - число 1/2
                         var ut = (Convert.ToString(rd["type"]) ?? "").Trim();
                         if (ut == "1" || ut.Equals("primary", StringComparison.OrdinalIgnoreCase)) res.Unmatched1.Add(entry);
                         else res.Unmatched2.Add(entry);

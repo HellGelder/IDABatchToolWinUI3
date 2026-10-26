@@ -5,7 +5,7 @@ using IDABatchToolWinUI.Services;
 namespace IDABatchToolWinUI.Workers;
 
 /// <summary>
-/// Синхронизация документации man-pages (Linux) — аналог ManPagesSyncWorker из исполнения 1.
+/// Синхронизация документации man-pages (Linux) - аналог ManPagesSyncWorker из исполнения 1.
 /// Скачивает официальный архив man-pages и импортирует его в SQLite через Python-модули
 /// (man_pages_db / man_pages_sync). Процесс идёт в фоне с прогрессом и отменой.
 /// </summary>
@@ -68,7 +68,7 @@ public sealed class ManPagesSyncWorker : IDisposable
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
-        // Протокол моста — UTF-8 (иначе pythonw пишет в cp1251 и русские
+        // Протокол моста - UTF-8 (иначе pythonw пишет в cp1251 и русские
         // сообщения прогресса в GUI нечитаемы).
         psi.Environment["PYTHONUTF8"] = "1";
         psi.Environment["PYTHONIOENCODING"] = "utf-8";
@@ -96,7 +96,7 @@ public sealed class ManPagesSyncWorker : IDisposable
 
         try { await proc.WaitForExitAsync(); } catch { /* процесс убит при отмене */ }
 
-        // Успех — только при явном DONE/OK от моста: при ошибке мост печатает
+        // Успех - только при явном DONE/OK от моста: при ошибке мост печатает
         // ERROR и завершается с кодом 0, поэтому одного кода выхода мало.
         var ok = proc.ExitCode == 0 && !string.IsNullOrEmpty(_doneMessage);
         if (ok)
@@ -138,7 +138,7 @@ public sealed class ManPagesSyncWorker : IDisposable
                     _doneMessage = line.Substring(3);
             }
         }
-        catch { /* процесс завершён/убит — канал закрыт */ }
+        catch { /* процесс завершён/убит - канал закрыт */ }
     }
 
     private void Finish(bool ok, string message)

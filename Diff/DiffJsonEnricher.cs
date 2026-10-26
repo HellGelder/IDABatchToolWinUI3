@@ -4,9 +4,9 @@ namespace IDABatchToolWinUI.Diff;
 
 /// <summary>
 /// Обогащение .diff.json данными экспорта IDA: импорты, псевдокод-diff,
-/// insn-типы, callees, а также «правда экспорта» (ApplyIdaExportTruth) —
+/// insn-типы, callees, а также «правда экспорта» (ApplyIdaExportTruth) -
 /// отбрасывание псевдофункций BinExport и пересборка matched/unmatched.
-/// Перенос из DiffWorker при декомпозиции (пачка D) — поведение не менялось.
+/// Перенос из DiffWorker при декомпозиции (пачка D) - поведение не менялось.
 /// </summary>
 public static class DiffJsonEnricher
 {
@@ -136,7 +136,7 @@ public static class DiffJsonEnricher
     private static void AddTo(Dictionary<string, long> d, string key, long value)
         => d[key] = (d.TryGetValue(key, out var v) ? v : 0) + value;
 
-    /// <summary>Индекс функций по имени (первая встретившаяся — как при линейном поиске).</summary>
+    /// <summary>Индекс функций по имени (первая встретившаяся - как при линейном поиске).</summary>
     private static Dictionary<string, Dictionary<string, object?>> BuildNameIndex(
         Dictionary<string, Dictionary<string, object?>> funcs)
     {
@@ -155,7 +155,7 @@ public static class DiffJsonEnricher
         return idx;
     }
 
-    /// <summary>Функция по адресу, при промахе — по имени (напрямую и без префикса sub_).</summary>
+    /// <summary>Функция по адресу, при промахе - по имени (напрямую и без префикса sub_).</summary>
     private static Dictionary<string, object?>? LookupFunc(
         Dictionary<string, Dictionary<string, object?>> funcs,
         Dictionary<string, Dictionary<string, object?>> nameIndex,
@@ -210,7 +210,7 @@ public static class DiffJsonEnricher
             {
                 int s = i, sj = j;
                 while (i < a.Count && j < b.Count && a[i] == b[j]) { i++; j++; }
-                // J1 — начало равного участка в b: у обоих файлов участок одной длины.
+                // J1 - начало равного участка в b: у обоих файлов участок одной длины.
                 ops.Add(("equal", s, i, sj, j));
             }
             else if (i < a.Count && j < b.Count)
@@ -234,12 +234,12 @@ public static class DiffJsonEnricher
     }
 
     /// <summary>
-    /// Экспорт IDA — источник истины (доработка исполнения 1, коммиты 190fff3/ee9d761):
+    /// Экспорт IDA - источник истины (доработка исполнения 1, коммиты 190fff3/ee9d761):
     /// отбрасывает сопоставления с адресами вне перечня функций IDA (псевдофункции
     /// BinExport, из-за которых показатель превышал 100%), пересобирает
     /// matched_summary/total_matched, перезаписывает unmatched_functions1/2 и
     /// total_functions1/2 фактическими данными экспорта, ставит
-    /// unmatched_source=ida_export. Для старых JSON без экспорта — разность тоталов.
+    /// unmatched_source=ida_export. Для старых JSON без экспорта - разность тоталов.
     /// </summary>
     public static void ApplyIdaExportTruth(string jsonOutput, string? primaryExport, string? secondaryExport,
         Action<string>? onError = null)
@@ -252,7 +252,7 @@ public static class DiffJsonEnricher
         var exportSet2 = ReadExportAddrs(secondaryExport);
 
         // BinExport содержит псевдофункции (jump-thunk'и), которых нет в
-        // перечне IDA — из-за них сопоставленных бывает больше, чем функций
+        // перечне IDA - из-за них сопоставленных бывает больше, чем функций
         // в файле (показатель > 100%). Оставляем только пары, чьи стороны
         // есть в перечне.
         var matches = data.TryGetValue("matched_functions", out var mf) && mf is List<object?> ml
@@ -339,7 +339,7 @@ public static class DiffJsonEnricher
                     seen.Add(norm);
             }
         }
-        catch { /* повреждённый JSON — пропускаем */ }
+        catch { /* повреждённый JSON - пропускаем */ }
         return seen;
     }
 
@@ -366,7 +366,7 @@ public static class DiffJsonEnricher
                 });
             }
         }
-        catch { /* повреждённый JSON — пропускаем */ }
+        catch { /* повреждённый JSON - пропускаем */ }
         return funcs;
     }
 

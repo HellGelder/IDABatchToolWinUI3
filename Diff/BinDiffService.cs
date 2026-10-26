@@ -5,7 +5,7 @@ namespace IDABatchToolWinUI.Diff;
 
 /// <summary>
 /// Фазы BinDiff для одной пары: экспорт BinExport через idat, запуск bindiff.exe.
-/// Перенос из DiffWorker при декомпозиции (пачка D) — поведение не менялось.
+/// Перенос из DiffWorker при декомпозиции (пачка D) - поведение не менялось.
 /// </summary>
 public sealed class BinDiffService
 {

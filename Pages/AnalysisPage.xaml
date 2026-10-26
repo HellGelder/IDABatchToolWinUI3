@@ -25,7 +25,7 @@
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
         </Style>
 
-        <!-- Общая тень для всех блоков (паттерн ThemeShadow). Receiver — ShadowCastGrid ниже блоков. -->
+        <!-- Общая тень для всех блоков (паттерн ThemeShadow). Receiver - ShadowCastGrid ниже блоков. -->
         <ThemeShadow x:Key="SharedShadow" />
 
         <Style x:Key="SubBlockStyle" TargetType="Border">
@@ -72,7 +72,7 @@
                          Severity="Informational"
                          Shadow="{StaticResource SharedShadow}" Loaded="ShadowRect_Loaded" />
 
-                <!-- Параметры (во всю ширину): чекбоксы 2+2, ниже — потоки IDA -->
+                <!-- Параметры (во всю ширину): чекбоксы 2+2, ниже - потоки IDA -->
                 <Border Style="{StaticResource GroupBoxStyle}" Shadow="{StaticResource SharedShadow}"
                         Loaded="ShadowRect_Loaded">
                     <StackPanel Spacing="6">
@@ -92,7 +92,7 @@
                                 <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                                     <CheckBox x:Name="PseudocodeCheck" Content="Включить псевдокод в JSON-экспорт"
                                               IsChecked="True" />
-                                    <!-- «i» в кружочке: наведение — ToolTip, нажатие — TeachingTip -->
+                                    <!-- «i» в кружочке: наведение - ToolTip, нажатие - TeachingTip -->
                                     <Button x:Name="PseudocodeInfoButton" Padding="4" MinWidth="24" MinHeight="24"
                                             VerticalAlignment="Center" Click="PseudocodeInfoButton_Click"
                                             ToolTipService.ToolTip="Псевдокод Hex-Rays попадёт в JSON и HTML-отчёты. Нажмите для подробностей.">
@@ -112,7 +112,7 @@
                             <TextBlock Grid.Column="0" Text="Потоков IDA:" VerticalAlignment="Center" FontSize="12" />
                             <Slider x:Name="MaxIdaSlider" Grid.Column="1" Minimum="1" Maximum="32" Value="4"
                                     StepFrequency="1" TickFrequency="4"
-                                    ToolTipService.ToolTip="Максимальное количество одновременно работающих экземпляров IDA. По умолчанию — число логических процессоров." />
+                                    ToolTipService.ToolTip="Максимальное количество одновременно работающих экземпляров IDA. По умолчанию - число логических процессоров." />
                             <TextBlock Grid.Column="2" Text="{Binding ElementName=MaxIdaSlider, Path=Value}"
                                        VerticalAlignment="Center" MinWidth="24" TextAlignment="Center"
                                        FontSize="12" FontWeight="SemiBold" />

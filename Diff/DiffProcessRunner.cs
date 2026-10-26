@@ -10,14 +10,14 @@ public sealed record DiffProcResult(int ExitCode, string Stdout, string Stderr);
 /// <summary>
 /// Единая точка запуска внешних процессов diff-конвейера (idat, pythonw, bindiff):
 /// реестр PID, Job Object, чтение stdout/stderr без дедлока, ожидание без таймаутов
-/// (большие модули считаются часами; отмена — только через ct), пульс Diaphora
+/// (большие модули считаются часами; отмена - только через ct), пульс Diaphora
 /// (ОЗУ + БД + прогресс из stdout) с 4-часовым stall-killer'ом по решению владельца.
-/// Перенос из DiffWorker при декомпозиции (пачка D) — поведение не менялось.
+/// Перенос из DiffWorker при декомпозиции (пачка D) - поведение не менялось.
 /// </summary>
 public sealed class DiffProcessRunner
 {
     private static readonly TimeSpan PulseInterval = TimeSpan.FromSeconds(30);
-    /// <summary>Ни ОЗУ, ни БД диафоры не менялись дольше этого срока — процесс завис, убиваем.</summary>
+    /// <summary>Ни ОЗУ, ни БД диафоры не менялись дольше этого срока - процесс завис, убиваем.</summary>
     private static readonly TimeSpan StallTimeout = TimeSpan.FromHours(4);
 
     private static readonly System.Text.RegularExpressions.Regex ExportedRe = new(
@@ -102,12 +102,12 @@ public sealed class DiffProcessRunner
 
     /// <summary>
     /// Ожидание процесса Diaphora с двумя уровнями контроля.
-    /// 1) Живость: выход процесса или отмена завершают ожидание; kill — при отмене
+    /// 1) Живость: выход процесса или отмена завершают ожидание; kill - при отмене
     ///    или зависании (ни ОЗУ, ни БД не менялись дольше StallTimeout).
-    /// 2) Пульс (раз в PulseInterval): ОЗУ процесса (WorkingSet64), при watchDbPath —
-    ///    ещё и суммарный размер БД (*.sqlite + *-wal + *-shm — диафора пишет в WAL,
+    /// 2) Пульс (раз в PulseInterval): ОЗУ процесса (WorkingSet64), при watchDbPath -
+    ///    ещё и суммарный размер БД (*.sqlite + *-wal + *-shm - диафора пишет в WAL,
     ///    и рост уходит в -wal), плюс прогресс экспорта из stdout Diaphora.
-    /// Живой процесс может сколько угодно не менять ОЗУ (или БД) — зависанием
+    /// Живой процесс может сколько угодно не менять ОЗУ (или БД) - зависанием
     /// считается только одновременное затишье обоих сигналов.
     /// </summary>
     public async Task<DiffProcResult> RunWithPulseAsync(ProcessStartInfo psi, string relKey, string phaseLabel,
@@ -159,7 +159,7 @@ public sealed class DiffProcessRunner
                 {
                     ErrorOccurred?.Invoke(
                         $"Diaphora {relKey}: ни ОЗУ, ни БД {Path.GetFileName(watchDbPath)} " +
-                        $"не менялись уже {StallTimeout.TotalHours:0} ч — процесс завис, убиваю (PID={proc.Id}).");
+                        $"не менялись уже {StallTimeout.TotalHours:0} ч - процесс завис, убиваю (PID={proc.Id}).");
                     try { proc.Kill(entireProcessTree: true); } catch { }
                     await Task.WhenAll(so, se);
                     return new DiffProcResult(-1, await so, await se);
@@ -189,7 +189,7 @@ public sealed class DiffProcessRunner
         return new DiffProcResult(proc.ExitCode, await so, await se);
     }
 
-    /// <summary>Рабочее множество процесса в байтах; 0 — процесс уже завершился.</summary>
+    /// <summary>Рабочее множество процесса в байтах; 0 - процесс уже завершился.</summary>
     private static long ProcWorkingSet(Process proc)
     {
         try { proc.Refresh(); return proc.WorkingSet64; }
@@ -210,7 +210,7 @@ public sealed class DiffProcessRunner
             {
                 sb.Append(buffer, 0, n);
                 ParseExportProgress(sb.ToString(), progress);
-                // Держим хвост, достаточный для обеих regex-строк, — весь лог не копим.
+                // Держим хвост, достаточный для обеих regex-строк, - весь лог не копим.
                 if (sb.Length > 4096) sb.Remove(0, sb.Length - 1024);
             }
         }
@@ -243,7 +243,7 @@ public sealed class DiffProcessRunner
         long total = 0;
         foreach (var p in new[] { dbPath, dbPath + "-wal", dbPath + "-shm" })
             try { if (File.Exists(p)) total += new FileInfo(p).Length; }
-            catch { /* файл занят — берём что есть */ }
+            catch { /* файл занят - берём что есть */ }
         return total;
     }
 

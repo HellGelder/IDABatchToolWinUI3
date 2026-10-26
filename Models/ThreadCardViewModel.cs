@@ -14,7 +14,7 @@ public sealed class ThreadCardViewModel : INotifyPropertyChanged
 
     public string Title { get; }
 
-    private string _module = "—";
+    private string _module = "-";
     public string ModuleText { get => _module; private set { _module = value; Raise(); } }
 
     private string _state = "ожидание";
@@ -34,10 +34,10 @@ public sealed class ThreadCardViewModel : INotifyPropertyChanged
     /// <summary>Прогресс по файлам внутри модуля.</summary>
     public void SetProgress(int current, int total) => ProgressText = $"файл {current}/{total}";
 
-    /// <summary>Пул потока опустел — поток добирает чужие модули или закончил работу.</summary>
+    /// <summary>Пул потока опустел - поток добирает чужие модули или закончил работу.</summary>
     public void SetIdle()
     {
-        ModuleText = "—";
+        ModuleText = "-";
         StateText = "свободен";
         ProgressText = "";
     }

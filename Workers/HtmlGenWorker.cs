@@ -27,7 +27,7 @@ public sealed class HtmlGenResult
 /// <summary>
 /// Запускает Python-bridge (_python/report_bridge.py) в фоновом режиме для генерации
 /// HTML-отчётов (Общий анализ / СФ / Сравнение). Читает PROGRESS/ERROR/RESULT строки
-/// и даёт прогресс на UI-поток. Отмена — завершение процесса.
+/// и даёт прогресс на UI-поток. Отмена - завершение процесса.
 /// </summary>
 public sealed class HtmlGenWorker : IDisposable
 {
@@ -91,7 +91,7 @@ public sealed class HtmlGenWorker : IDisposable
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
-        // Протокол моста — UTF-8: без этого pythonw пишет в системной кодировке
+        // Протокол моста - UTF-8: без этого pythonw пишет в системной кодировке
         // (cp1251), и русские сообщения в GUI превращаются в нечитаемые символы.
         psi.Environment["PYTHONUTF8"] = "1";
         psi.Environment["PYTHONIOENCODING"] = "utf-8";
@@ -125,7 +125,7 @@ public sealed class HtmlGenWorker : IDisposable
             }
             catch
             {
-                // %TEMP% недоступен — прежний способ через командную строку
+                // %TEMP% недоступен - прежний способ через командную строку
                 // (ограничен по длине, но лучше, чем сорванная генерация).
                 pathsFile = null;
                 psi.ArgumentList.Add("--json-paths");
@@ -151,7 +151,7 @@ public sealed class HtmlGenWorker : IDisposable
             var stderrTask = _proc.StandardError.ReadToEndAsync();
 
             // Ждём полного завершения моста: большие наборы могут генерироваться
-            // долго. Прерывание — только по явной отмене (Cancel/Dispose).
+            // долго. Прерывание - только по явной отмене (Cancel/Dispose).
             await _proc.WaitForExitAsync();
             await Task.WhenAll(stdoutTask, stderrTask);
             ProcessRegistry.Unregister(_proc.Id);
@@ -216,7 +216,7 @@ public sealed class HtmlGenWorker : IDisposable
             if (root.TryGetProperty("cached_total", out var cd) && cd.ValueKind == JsonValueKind.Number)
                 r.CachedTotal = cd.GetInt32();
         }
-        catch { /* неудачный JSON — игнорируем */ }
+        catch { /* неудачный JSON - игнорируем */ }
     }
 
     public void Cancel()
@@ -227,7 +227,7 @@ public sealed class HtmlGenWorker : IDisposable
         try { _stdin?.WriteLine("CANCEL"); _stdin?.Flush(); }
         catch { /* процесс уже завершился */ }
 
-        // Страховка: если мост не завершился за 5 секунд — убиваем всё дерево.
+        // Страховка: если мост не завершился за 5 секунд - убиваем всё дерево.
         var proc = _proc;
         if (proc == null) return;
         _ = Task.Run(async () =>

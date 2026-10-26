@@ -3,7 +3,7 @@ using Microsoft.Win32;
 namespace IDABatchToolWinUI.Services;
 
 /// <summary>
-/// Поиск idat.exe / bindiff.exe — аналог функций поиска в config/loader.py.
+/// Поиск idat.exe / bindiff.exe - аналог функций поиска в config/loader.py.
 /// Порядок: значение из конфига → реестр Windows → C:\Program Files → PATH.
 /// </summary>
 public static class ToolLocator
@@ -38,7 +38,7 @@ public static class ToolLocator
         if (File.Exists(proj)) return proj;
 
         // 4. В корне переносимой поставки: лончер и bindiff.exe лежат в корне,
-        //    всё приложение — на уровень ниже (app\).
+        //    всё приложение - на уровень ниже (app\).
         var parent = Path.GetDirectoryName(AppConstants.WinUiDir.TrimEnd(Path.DirectorySeparatorChar));
         if (!string.IsNullOrEmpty(parent))
         {

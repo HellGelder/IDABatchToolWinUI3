@@ -8,7 +8,7 @@ public static class HexdumpDiffService
 {
     /// <summary>Максимальный размер одного файла для расчёта hexdump-схожести.
     /// Индекс 16-байтовых ключей второго файла занимает ~12 байт на позицию:
-    /// для сотен мегабайт это гигабайты ОЗУ, поэтому выше порога — честный пропуск.</summary>
+    /// для сотен мегабайт это гигабайты ОЗУ, поэтому выше порога - честный пропуск.</summary>
     public const long MaxFileBytes = 64L * 1024 * 1024;
 
     private const int MinMatch = 16;
@@ -17,12 +17,12 @@ public static class HexdumpDiffService
     /// Доля байт первого файла (округлённая до 6 знаков), для которых найдена
     /// совпадающая последовательность ≥16 байт во втором.
     /// Детальные строки (equal/inserted/deleted) раньше строились, но ни одним
-    /// потребителем не читались — считаем только число совпавших байт.
+    /// потребителем не читались - считаем только число совпавших байт.
     /// Индекс второго файла: 64-битный хэш 16-байтового окна в сортированном
-    /// массиве (12 байт на позицию вместо ~56 у словаря); коллизии безвредны —
+    /// массиве (12 байт на позицию вместо ~56 у словаря); коллизии безвредны -
     /// совпадение всегда проверяется сравнением байт.
     /// </summary>
-    /// <returns>Similarity — схожесть (при пропуске −1); Skipped/Reason — причина пропуска.</returns>
+    /// <returns>Similarity - схожесть (при пропуске −1); Skipped/Reason - причина пропуска.</returns>
     public static (double Similarity, bool Skipped, string Reason) ComputeSimilarity(
         string path1, string path2, long maxFileBytes = MaxFileBytes)
     {
@@ -37,7 +37,7 @@ public static class HexdumpDiffService
         if (indexCount <= 0) return (0.0, false, "");
 
         // Индекс 16-байтовых окон data2. Array.Sort неустойчив, но результат
-        // от порядка кандидатов не зависит — берётся максимум длины расширения.
+        // от порядка кандидатов не зависит - берётся максимум длины расширения.
         var keys = new ulong[indexCount];
         var positions = new int[indexCount];
         for (int pos = 0; pos < indexCount; pos++)

@@ -18,7 +18,7 @@ public static class TaskExtensions
             catch (Exception ex)
             {
                 try { AppLog.Error($"[{context}] {ex.GetType().Name}: {ex.Message}", ex); }
-                catch { /* журнал недоступен — не усугубляем */ }
+                catch { /* журнал недоступен - не усугубляем */ }
                 try { onError?.Invoke(ex); }
                 catch { /* колбэк не должен ронять процесс */ }
             }

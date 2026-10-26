@@ -9,7 +9,7 @@ using Microsoft.UI.Xaml.Controls;
 namespace IDABatchToolWinUI.Pages;
 
 /// <summary>
-/// Страница «Конфигурация» — аналог SettingsPage из исполнения 1 (Qt).
+/// Страница «Конфигурация» - аналог SettingsPage из исполнения 1 (Qt).
 /// </summary>
 public sealed partial class SettingsPage : Page
 {
@@ -62,7 +62,7 @@ public sealed partial class SettingsPage : Page
         _cfg.Theme = theme;
         ThemeLightButton.IsChecked = theme == "light";
         ThemeDarkButton.IsChecked = theme == "dark";
-        // Store.Changed доходит до MainWindow — тема применится без перезапуска.
+        // Store.Changed доходит до MainWindow - тема применится без перезапуска.
         _store.Save(_cfg);
         ThemeHelper.Apply(UiDialogs.MainWindow, theme);
     }
@@ -127,7 +127,7 @@ public sealed partial class SettingsPage : Page
     private static Task<(string, string)> Check7zAsync() => Task.Run(() =>
     {
         // Единая цепочка поиска с ArchiveHandler (включая портативный Tools\7-Zip),
-        // плюс where.exe — раньше настройка не видела портативную копию 7-Zip.
+        // плюс where.exe - раньше настройка не видела портативную копию 7-Zip.
         var candidates = new List<string>();
         var found = ArchiveHandler.Find7z();
         if (found != null) candidates.Add(found);
@@ -180,7 +180,7 @@ public sealed partial class SettingsPage : Page
         if (nodeVersion.Length == 0)
             return ("error", "Не найден. Установите Node.js и перезапустите программу.");
 
-        // npx ищем рядом с проверенным node и по известным путям — строго по полным путям,
+        // npx ищем рядом с проверенным node и по известным путям - строго по полным путям,
         // чтобы случайный npx.cmd из рабочего каталога не маскировал системный.
         var npxCandidates = new List<string>();
         if (nodeDir.Length > 0) npxCandidates.Add(Path.Combine(nodeDir, "npx.cmd"));
@@ -256,7 +256,7 @@ public sealed partial class SettingsPage : Page
                 foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                     if (File.Exists(line)) found.Add(line);
         }
-        catch { /* where недоступен — остались известные пути */ }
+        catch { /* where недоступен - остались известные пути */ }
         return found;
     }
 
@@ -303,7 +303,7 @@ public sealed partial class SettingsPage : Page
         {
             var (count, version, sizeMb) = await Task.Run(() => ReadManPagesInfo(dbPath));
             ManPagesStatusText.Text =
-                $"Статус: база найдена — {count} функций, man-pages {version}, {sizeMb:F1} МБ";
+                $"Статус: база найдена - {count} функций, man-pages {version}, {sizeMb:F1} МБ";
             if (showPopup) await ShowManPagesResultAsync(true, ManPagesStatusText.Text);
         }
         catch
@@ -315,7 +315,7 @@ public sealed partial class SettingsPage : Page
 
     /// <summary>Всплывающее окно результата проверки БД man-pages: пользователь
     /// жмёт «Проверить» и ждёт явного ответа, строка статуса мала и просматривается
-    /// не всегда. Автозакрытие — чтобы диалог не приходилось закрывать вручную.</summary>
+    /// не всегда. Автозакрытие - чтобы диалог не приходилось закрывать вручную.</summary>
     private async Task ShowManPagesResultAsync(bool ok, string message)
     {
         var dlg = new ContentDialog
@@ -377,7 +377,7 @@ public sealed partial class SettingsPage : Page
         _manWorker.Progress += (msg, pct) => RunOnUi(() =>
             ManPagesStatusText.Text = $"Статус: {msg} ({pct}%)");
         _manWorker.ErrorOccurred += msg => RunOnUi(() =>
-            ManPagesStatusText.Text = $"Статус: ошибка — {msg}");
+            ManPagesStatusText.Text = $"Статус: ошибка - {msg}");
         _manWorker.Finished += (success, message) =>
             RunOnUi(() => OnManPagesFinishedAsync(success, dbPath, message));
         _manWorker.Start();

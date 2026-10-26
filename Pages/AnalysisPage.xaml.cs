@@ -8,7 +8,7 @@ using Microsoft.UI.Xaml.Controls;
 namespace IDABatchToolWinUI.Pages;
 
 /// <summary>
-/// Страница «Общий анализ» — аналог AnalysisPage из исполнения 1 (Qt).
+/// Страница «Общий анализ» - аналог AnalysisPage из исполнения 1 (Qt).
 /// </summary>
 public sealed partial class AnalysisPage : Page
 {
@@ -35,12 +35,12 @@ public sealed partial class AnalysisPage : Page
         MaxIdaSlider.ValueChanged += (_, _) => UpdateThreadsWarning();
         UpdateThreadsWarning();
 
-        // Подписки — один раз в конструкторе, чтобы при повторном показе страницы
+        // Подписки - один раз в конструкторе, чтобы при повторном показе страницы
         // (кэш навигации) обработчики не дублировались.
         BrowseDirButton.Click += BrowseDir_Click;
         StartAnalysisButton.Click += StartAnalysis_Click;
         DetailsButton.Click += DetailsButton_Click;
-        // TeachingTip — не FrameworkElement: x:Bind к Target ненадёжен, задаём
+        // TeachingTip - не FrameworkElement: x:Bind к Target ненадёжен, задаём
         // из кода. Клик подключён атрибутом Click в XAML ровно один раз:
         // обработчик тоглит IsOpen, двойная подписка гасила бы тип.
         PseudocodeTip.Target = PseudocodeInfoButton;
@@ -142,7 +142,7 @@ public sealed partial class AnalysisPage : Page
             return;
         }
 
-        // Платформа — по фактическим файлам (расширения, при их отсутствии — сигнатуры)
+        // Платформа - по фактическим файлам (расширения, при их отсутствии - сигнатуры)
         UpdatePlatformBar(PlatformInfo.DetectPlatform(_cachedFiles.Select(f => f.Path)));
 
         Treemap.SetData(_cachedFiles);
@@ -268,13 +268,13 @@ public sealed partial class AnalysisPage : Page
         });
         w.PulseUpdated += (name, text) => RunOnUi(() =>
         {
-            // Пульс: жив/работает/затих — в строку статуса и в диспетчер задач.
+            // Пульс: жив/работает/затих - в строку статуса и в диспетчер задач.
             AnalysisMonitor.SetPulse(name, text);
             ProcessStatusText.Text = text;
         });
         w.AnalysisProgress += (name, cur, total) => RunOnUi(() =>
         {
-            ProcessStatusText.Text = $"Анализ: {cur}/{total} – {name}";
+            ProcessStatusText.Text = $"Анализ: {cur}/{total} - {name}";
         });
         w.AnalysisFileStarted += name => RunOnUi(() =>
         {
@@ -286,7 +286,7 @@ public sealed partial class AnalysisPage : Page
         {
             SetFileStatusByName(name, ok ? AnalysisStatus.Success : AnalysisStatus.Error);
             AnalysisMonitor.MarkCompleted(name, ok);
-            AppendLog($"[Анализ] {name} — {(ok ? "успешно" : "ошибка")}");
+            AppendLog($"[Анализ] {name} - {(ok ? "успешно" : "ошибка")}");
         });
         w.ExportFileStarted += name => RunOnUi(() =>
         {
@@ -295,14 +295,14 @@ public sealed partial class AnalysisPage : Page
         });
         w.ExportProgress += (name, cur, total) => RunOnUi(() =>
         {
-            ProcessStatusText.Text = $"Экспорт: {cur}/{total} – {name}";
+            ProcessStatusText.Text = $"Экспорт: {cur}/{total} - {name}";
         });
         w.ExportFileCompleted += (name, ok) => RunOnUi(() =>
         {
-            // Финальный статус файла — по результату экспорта, а не по созданию базы.
+            // Финальный статус файла - по результату экспорта, а не по созданию базы.
             SetFileStatusByName(name, ok ? AnalysisStatus.Success : AnalysisStatus.Error);
             if (!ok) AppendError($"Ошибка экспорта для {name}");
-            else AppendLog($"[Экспорт] {name} — успешно");
+            else AppendLog($"[Экспорт] {name} - успешно");
             AnalysisMonitor.MarkCompleted(name, ok);
         });
         w.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
@@ -509,7 +509,7 @@ public sealed partial class AnalysisPage : Page
 
     /// <summary>
     /// Удаляет временные файлы (.asm, .log, .id0, .id1, .nam, .til)
-    /// в зависимости от флагов — аналог clean_directory из исполнения 1.
+    /// в зависимости от флагов - аналог clean_directory из исполнения 1.
     /// </summary>
     private void CleanupAfterReport()
     {

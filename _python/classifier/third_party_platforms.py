@@ -7,8 +7,8 @@ THIRD_PARTY_WINDOWS = {
     "libeay32.dll": "OpenSSL Encryption Library (Windows)",
     "ssleay32.dll": "OpenSSL SSL/TLS Library (Windows)",
     "libsodium.dll": "Libsodium (Windows)",
-    "tmdrv32.dll": "СКЗИ «Аккорд» (ОКБ САПР) — драйвер доверенной загрузки и аппаратного ДСЧ, 32-бит (Windows)",
-    "tmdrv64.dll": "СКЗИ «Аккорд» (ОКБ САПР) — драйвер доверенной загрузки и аппаратного ДСЧ, 64-бит (Windows)",
+    "tmdrv32.dll": "СКЗИ «Аккорд» (ОКБ САПР) - драйвер доверенной загрузки и аппаратного ДСЧ, 32-бит (Windows)",
+    "tmdrv64.dll": "СКЗИ «Аккорд» (ОКБ САПР) - драйвер доверенной загрузки и аппаратного ДСЧ, 64-бит (Windows)",
     "libzip.dll": "Libzip (Windows)",
     "libmysql.dll": "MySQL Connector/C (Windows)",
     "libpq.dll": "Libpq (Windows)",
@@ -134,7 +134,7 @@ THIRD_PARTY_WINDOWS = {
     "libgpg-error.dll": "Libgpg-error (Windows)",
     "libgpgme-11.dll": "GPGME (Windows)",
     "libtasn1.dll": "Libtasn1 (Windows)",
-    # OpenSSL 1.1+ — современные имена DLL (ранее хранились в windows.py)
+    # OpenSSL 1.1+ - современные имена DLL (ранее хранились в windows.py)
     "libcrypto-1_1-x64.dll": "OpenSSL 1.1+ Encryption Library (64-bit)",
     "libssl-1_1-x64.dll": "OpenSSL 1.1+ SSL/TLS Library (64-bit)",
     "libcrypto-1_1.dll": "OpenSSL 1.1+ Encryption Library (32-bit)",
@@ -143,11 +143,11 @@ THIRD_PARTY_WINDOWS = {
     "libssl-3-x64.dll": "OpenSSL 3.x SSL/TLS Library (64-bit)",
     "libcrypto-3.dll": "OpenSSL 3.x Encryption Library (32-bit)",
     "libssl-3.dll": "OpenSSL 3.x SSL/TLS Library (32-bit)",
-    # ossl_register — псевдомодуль: имя, которое Diaphora/IDA показывает
+    # ossl_register - псевдомодуль: имя, которое Diaphora/IDA показывает
     # для объектов регистрации провайдеров/алгоритмов OpenSSL, вкомпилированных
     # в анализируемый бинарник (статическая линковка libcrypto), а не
     # для отдельной библиотеки.
-    "ossl_register": "OpenSSL (статически слинкованный) — внутренние объекты регистрации алгоритмов/провайдеров (ossl_register)",
+    "ossl_register": "OpenSSL (статически слинкованный) - внутренние объекты регистрации алгоритмов/провайдеров (ossl_register)",
 }
 
 THIRD_PARTY_LINUX = {

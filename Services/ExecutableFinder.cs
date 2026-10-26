@@ -2,7 +2,7 @@ namespace IDABatchToolWinUI.Services;
 
 /// <summary>
 /// Определение исполняемых файлов по сигнатурам (PE/ELF/Mach-O) и рекурсивный
-/// поиск — аналог ida_batch_tool/discovery/finder.py.
+/// поиск - аналог ida_batch_tool/discovery/finder.py.
 /// </summary>
 public static class ExecutableFinder
 {
@@ -67,7 +67,7 @@ public static class ExecutableFinder
         return result;
     }
 
-    /// <summary>Проверяет, что файл — исполняемый образ, а не объектный ELF (.o).</summary>
+    /// <summary>Проверяет, что файл - исполняемый образ, а не объектный ELF (.o).</summary>
     public static bool IsExecutableImage(string filePath)
     {
         if (!IsExecutable(filePath)) return false;
@@ -114,7 +114,7 @@ public static class ExecutableFinder
 
     /// <summary>
     /// Рекурсивный обход файлов, переживающий недоступные подкаталоги
-    /// (UnauthorizedAccessException и пр.) — пропускает их, а не падает.
+    /// (UnauthorizedAccessException и пр.) - пропускает их, а не падает.
     /// </summary>
     public static IEnumerable<string> SafeEnumerateFiles(string rootDir)
     {

@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.Media;
 
 namespace IDABatchToolWinUI;
 
-/// <summary>Строка таблицы диспетчера — пересобирается при каждом опросе.</summary>
+/// <summary>Строка таблицы диспетчера - пересобирается при каждом опросе.</summary>
 public sealed record TaskRow(
     string FileName,
     string Pid,
@@ -38,7 +38,7 @@ public sealed class TaskThreadCard
 }
 
 /// <summary>
-/// Окно «мини-диспетчер задач» анализа: по каждому файлу очереди — PID процесса idat.exe,
+/// Окно «мини-диспетчер задач» анализа: по каждому файлу очереди - PID процесса idat.exe,
 /// рабочий поток приложения и снимок состояния процесса (CPU, память, потоки ОС).
 /// Данные состояния берутся из AnalysisMonitor (заполняется страницей анализа),
 /// системные показатели опрашиваются таймером раз в секунду.
@@ -70,7 +70,7 @@ public sealed partial class TaskManagerWindow : Window
         _ => 2,
     };
 
-    // Текстовые подписи статусов/фаз — UI-слой: сервис знает только enum.
+    // Текстовые подписи статусов/фаз - UI-слой: сервис знает только enum.
     private static string StatusText(MonitorFileStatus s) => s switch
     {
         MonitorFileStatus.Pending => "В ожидании",
@@ -78,14 +78,14 @@ public sealed partial class TaskManagerWindow : Window
         MonitorFileStatus.Done => "Завершён",
         MonitorFileStatus.Failed => "Завершён (ошибка)",
         MonitorFileStatus.Cancelled => "Отменён",
-        _ => "—",
+        _ => "-",
     };
 
     private static string PhaseText(string phase) => phase switch
     {
         "analysis" => "Анализ",
         "export" => "Экспорт",
-        _ => "—",
+        _ => "-",
     };
 
     private void Refresh()
@@ -107,13 +107,13 @@ public sealed partial class TaskManagerWindow : Window
             }
             catch
             {
-                // процесс уже завершился или недоступен — снимок обнуляем
+                // процесс уже завершился или недоступен - снимок обнуляем
                 AnalysisMonitor.ClearRuntimeStats(e.Pid);
             }
         }
         entries = AnalysisMonitor.Snapshot(); // со свежими снимками процессов
 
-        // Анализируемые файлы — вверху, завершённые опускаются в конец
+        // Анализируемые файлы - вверху, завершённые опускаются в конец
         // (внутри групп исходный порядок очереди сохраняется).
         var ordered = entries
             .Select((e, idx) => (e, idx))
@@ -124,14 +124,14 @@ public sealed partial class TaskManagerWindow : Window
 
         RowsList.ItemsSource = ordered.Select(e => new TaskRow(
             e.FileName,
-            e.Pid > 0 ? e.Pid.ToString() : "—",
+            e.Pid > 0 ? e.Pid.ToString() : "-",
             StatusText(e.Status),
             PhaseText(e.Phase),
             e.CpuTime,
             e.MemoryMb,
             e.OsThreads,
-            e.StartedAt?.ToString("HH:mm:ss") ?? "—",
-            string.IsNullOrEmpty(e.Pulse) ? "—" : e.Pulse)).ToList();
+            e.StartedAt?.ToString("HH:mm:ss") ?? "-",
+            string.IsNullOrEmpty(e.Pulse) ? "-" : e.Pulse)).ToList();
 
         RefreshThreadCards(entries);
 

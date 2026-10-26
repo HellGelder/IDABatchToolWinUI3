@@ -10,7 +10,7 @@ using Windows.UI;
 namespace IDABatchToolWinUI.Controls;
 
 /// <summary>
-/// Горизонтальная полоса равномерных блоков по числу файлов — аналог TreemapWidget из Qt.
+/// Горизонтальная полоса равномерных блоков по числу файлов - аналог TreemapWidget из Qt.
 /// Цвет блока зависит от статуса анализа.
 /// </summary>
 public sealed class TreemapControl : Grid

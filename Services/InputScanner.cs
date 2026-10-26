@@ -5,9 +5,9 @@ namespace IDABatchToolWinUI.Services;
 /// <summary>
 /// Сканирование входной папки для страниц анализа: поиск исполняемых файлов по
 /// всем платформам, распаковка архивов рядом и сборка FileItem с первичной
-/// оценкой готовности. Общий для AnalysisPage и SfaPage (раньше — две копии,
+/// оценкой готовности. Общий для AnalysisPage и SfaPage (раньше - две копии,
 /// разошедшиеся обработкой ошибок). Ошибки распаковки архивов возвращаются
-/// списком: страница «Общий анализ» показывает их, «Анализ СФ» — исторически нет.
+/// списком: страница «Общий анализ» показывает их, «Анализ СФ» - исторически нет.
 /// </summary>
 public static class InputScanner
 {
@@ -60,14 +60,14 @@ public static class InputScanner
     {
         long size = 0;
         try { size = new FileInfo(path).Length; }
-        catch { /* файл исчез или недоступен — размер 0 */ }
+        catch { /* файл исчез или недоступен - размер 0 */ }
 
         return new FileItem
         {
             Name = Path.GetFileName(path),
             Path = Path.GetFullPath(path),
             Size = size,
-            // Готовность — по валидной базе и валидному export.json, а не по факту
+            // Готовность - по валидной базе и валидному export.json, а не по факту
             // существования .i64: иначе остатки прошлого запуска выглядят результатом.
             Status = ArtifactValidator.HasValidArtifacts(path)
                 ? AnalysisStatus.Success

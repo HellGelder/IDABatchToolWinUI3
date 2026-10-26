@@ -4,7 +4,7 @@ using Xunit;
 namespace IDABatchToolWinUI.Tests;
 
 /// <summary>
-/// InputScanner: общий сканер входной папки для AnalysisPage/SfaPage —
+/// InputScanner: общий сканер входной папки для AnalysisPage/SfaPage -
 /// поиск исполняемых файлов, сборка FileItem, ошибки распаковки архивов.
 /// </summary>
 public sealed class InputScannerTests : IDisposable
@@ -51,7 +51,7 @@ public sealed class InputScannerTests : IDisposable
     [Fact]
     public async Task Scan_BrokenDmg_ProducesArchiveError()
     {
-        // Мусорный .dmg: без 7z не распакуется, с 7z — тоже (не образ).
+        // Мусорный .dmg: без 7z не распакуется, с 7z - тоже (не образ).
         // В обоих случаях сканер обязан сообщить об ошибке, а не молчать.
         File.WriteAllBytes(Path.Combine(_dir, "broken.dmg"), new byte[] { 1, 2, 3, 4 });
 

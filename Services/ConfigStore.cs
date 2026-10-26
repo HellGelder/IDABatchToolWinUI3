@@ -50,7 +50,7 @@ public sealed class ConfigStore : IConfigStore
         }
         catch (Exception ex)
         {
-            // Без слияния файл перезаписывается известными ключами — хуже, чем
+            // Без слияния файл перезаписывается известными ключами - хуже, чем
             // отказ от сохранения: настройки всё равно можно перезадать в UI.
             AppLog.Warn($"Не удалось прочитать {_path} для слияния: {ex.Message}");
         }
@@ -62,7 +62,7 @@ public sealed class ConfigStore : IConfigStore
     }
 
     /// <summary>Замена известных ключей в существующем тексте конфига
-    /// (комментарии и неизвестные ключи сохраняются), недостающие — дописываются.</summary>
+    /// (комментарии и неизвестные ключи сохраняются), недостающие - дописываются.</summary>
     internal static string MergeIntoYaml(string? existing, AppConfig cfg)
     {
         var lines = existing == null

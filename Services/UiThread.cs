@@ -3,7 +3,7 @@ using Microsoft.UI.Dispatching;
 namespace IDABatchToolWinUI.Services;
 
 /// <summary>
-/// Маршалинг на UI-поток — единая точка вместо четырёх постраничных копий RunOnUi.
+/// Маршалинг на UI-поток - единая точка вместо четырёх постраничных копий RunOnUi.
 /// Ошибки в действии не теряются: задача-вариант идёт через SafeFireAndForget.
 /// </summary>
 public static class UiThread

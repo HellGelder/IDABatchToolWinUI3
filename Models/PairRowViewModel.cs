@@ -9,7 +9,7 @@ public sealed class PairRowViewModel : INotifyPropertyChanged
     private bool _isSelected = true;
     private string _bindiffStatus = "waiting";
     private string _diaphoraStatus = "waiting";
-    private string _pidText = "—";
+    private string _pidText = "-";
 
     public required DiffPair Pair { get; init; }
     public string RelKey => Pair.RelKey;

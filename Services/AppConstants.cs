@@ -2,7 +2,7 @@ using System.IO;
 
 namespace IDABatchToolWinUI.Services;
 
-/// <summary>Константы приложения и платформ — аналог ida_batch_tool/ui/constants.py.</summary>
+/// <summary>Константы приложения и платформ - аналог ida_batch_tool/ui/constants.py.</summary>
 public static class AppConstants
 {
     // Исполнение 2 полностью самодостаточно: свои config.yaml, scripts/, _python/.
@@ -22,7 +22,7 @@ public static class AppConstants
     public const string AddDiffResultsDirName = "AddDiffResults";
     public const string ReportsDirName = "Reports";
 
-    // Стандартные каталоги установки Windows — поиск IDA/BinDiff/7-Zip/Node.js.
+    // Стандартные каталоги установки Windows - поиск IDA/BinDiff/7-Zip/Node.js.
     public static readonly string[] ProgramFilesDirs =
         { @"C:\Program Files", @"C:\Program Files (x86)" };
 
@@ -36,7 +36,7 @@ public static class AppConstants
 
     /// <summary>
     /// Каталог приложения (исполнения 2), где лежат config.yaml, scripts/, _python/.
-    /// Ищется от каталога exe вверх до каталога с _python (после копирования в bin — на месте).
+    /// Ищется от каталога exe вверх до каталога с _python (после копирования в bin - на месте).
     /// </summary>
     private static string ResolveWinUiDir()
     {
@@ -75,12 +75,12 @@ public static class AnalysisStatusExtensions
     };
 }
 
-/// <summary>Поиск интерпретатора Python для запуска скриптов (pythonw предпочтительнее — без консоли).</summary>
+/// <summary>Поиск интерпретатора Python для запуска скриптов (pythonw предпочтительнее - без консоли).</summary>
 public static class PythonHelper
 {
     public static string ResolvePython()
     {
-        // 1) Python, положенный рядом с приложением (Tools\Python) — для
+        // 1) Python, положенный рядом с приложением (Tools\Python) - для
         //    переносимой поставки без установленного Python в системе.
         var portable = Path.Combine(AppConstants.WinUiDir, "Tools", "Python");
         foreach (var name in new[] { "pythonw.exe", "python.exe" })
@@ -132,12 +132,12 @@ public static class PlatformInfo
         ["Linux / Android"] = new("Linux / Android", new[] { ".elf", ".so", ".o", ".ko", ".dex" }),
         ["macOS / iOS"] = new("macOS / iOS", new[] { ".mach-o", ".dylib", ".bundle", ".app" }),
     };
-    // Для macOS оставим пустое расширение в списке — файлы без расширения проверяются по сигнатуре,
+    // Для macOS оставим пустое расширение в списке - файлы без расширения проверяются по сигнатуре,
     // как в оригинале (там в exts есть "").
 
     public static string[] Keys => Platforms.Keys.ToArray();
 
-    /// <summary>Все расширения всех платформ одним списком (без дубликатов) —
+    /// <summary>Все расширения всех платформ одним списком (без дубликатов) -
     /// для поиска файлов, когда платформа ещё не определена.</summary>
     public static string[] AllExtensions()
     {
@@ -154,7 +154,7 @@ public static class PlatformInfo
 
     /// <summary>
     /// Определяет платформу по фактическим файлам: по расширениям; файлы
-    /// без расширения — по сигнатуре (PE / ELF / Mach-O). При равных счётчиках
+    /// без расширения - по сигнатуре (PE / ELF / Mach-O). При равных счётчиках
     /// и при пустом результате возвращается Windows (как и раньше).
     /// </summary>
     public static string DetectPlatform(IEnumerable<string> paths)

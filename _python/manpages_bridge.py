@@ -26,7 +26,7 @@ from pathlib import Path
 
 # Переносимая поставка: если мост запущен от Tools\Python рядом с приложением,
 # подключаем соседний site-packages (requests), иначе он не виден.
-# Вставка пути — ДО import requests, иначе фолбэк никогда не срабатывает.
+# Вставка пути - ДО import requests, иначе фолбэк никогда не срабатывает.
 _SP = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                     "..", "..", "Tools", "Python", "site-packages"))
 if os.path.isdir(_SP) and _SP not in sys.path:
@@ -42,7 +42,7 @@ MANPAGES_ARCHIVE_URL = f"https://www.kernel.org/pub/linux/docs/man-pages/man-pag
 
 _SECTION_RE = re.compile(r"man/man([23])/(.+)\.([23][a-z]*)$")
 
-# Протокол обмена с GUI (PROGRESS/ERROR/DONE) — строго UTF-8: без этого
+# Протокол обмена с GUI (PROGRESS/ERROR/DONE) - строго UTF-8: без этого
 # pythonw пишет в канал в системной кодировке (cp1251), и русские сообщения
 # в GUI превращаются в нечитаемые символы.
 for _stream in (sys.stdout, sys.stderr):
@@ -108,7 +108,7 @@ def _parse_roff_text(text):
         if stripped.startswith(".TH"):
             continue  # TH обрабатывается отдельно
         if stripped.startswith(".SH"):
-            # заголовок секции — вставляем отдельной строкой для _extract_sections
+            # заголовок секции - вставляем отдельной строкой для _extract_sections
             m2 = re.match(r"^\.SH\s+(.+)$", stripped)
             if m2:
                 lines.append(m2.group(1).strip())
@@ -195,7 +195,7 @@ def import_archive(db_path, payload, progress_callback=None):
 
         inserts_pages = 0
         inserts_funcs = 0
-        # Архив целиком в памяти — без временного файла на диске
+        # Архив целиком в памяти - без временного файла на диске
         # (класс ошибок «забытый tmp-файл» исчезает).
         with tarfile.open(fileobj=io.BytesIO(payload), mode="r:xz") as tar:
             members = [m for m in tar.getmembers() if m.isfile()]

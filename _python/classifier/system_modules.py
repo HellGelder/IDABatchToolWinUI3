@@ -1,11 +1,11 @@
 """Определение системных библиотек по собственным словарям проекта.
 
 Единственная точка принятия решения «является ли библиотека системной».
-Источник истины — словари классификатора:
+Источник истины - словари классификатора:
 
-* Windows — ``WINDOWS_MODULES``;
-* Linux / Android — ``LINUX_MODULES`` + ``ANDROID_MODULES``;
-* macOS / iOS — ``MACOS_MODULES``.
+* Windows - ``WINDOWS_MODULES``;
+* Linux / Android - ``LINUX_MODULES`` + ``ANDROID_MODULES``;
+* macOS / iOS - ``MACOS_MODULES``.
 
 Сторонние библиотеки (``THIRD_PARTY_*``) системными не считаются: они
 преднамеренно исключены, чтобы в отчёт попадали только компоненты ОС.
@@ -25,7 +25,7 @@ from .linux import LINUX_MODULES
 from .android import ANDROID_MODULES
 from .macos import MACOS_MODULES
 
-# Контрактные DLL (API Sets) не перечислены полностью в словаре —
+# Контрактные DLL (API Sets) не перечислены полностью в словаре -
 # они определяются по префиксу имени и относятся только к Windows.
 _API_SET_PREFIXES: tuple[str, ...] = (
     "api-ms-win-",
@@ -42,7 +42,7 @@ def _collect_keys(dicts: Iterable[Mapping[str, str]]) -> frozenset[str]:
     return frozenset(keys)
 
 
-# Нормализованные ключи системных модулей по платформам — строятся лениво:
+# Нормализованные ключи системных модулей по платформам - строятся лениво:
 # module_name_aliases по всем словарям на import-е оплачивался даже прогонами,
 # где is_system_module не вызывается ни разу.
 _SYSTEM_KEYS: dict[str, frozenset[str]] = {}
@@ -81,7 +81,7 @@ _PLATFORM_ALIASES: dict[str, str] = {
 def normalize_platform(platform: str) -> str:
     """Приводит обозначение платформы к каноническому ключу.
 
-    Неизвестное значение возвращается как есть — вызывающий код в этом
+    Неизвестное значение возвращается как есть - вызывающий код в этом
     случае проверяет модуль по всем словарям.
     """
     if not platform:
@@ -111,7 +111,7 @@ def is_system_module(module_name: str, platform: str = "Windows") -> bool:
     platform = normalize_platform(platform)
 
     if platform not in ("Windows", "Linux / Android", "macOS / iOS"):
-        # Неизвестная платформа — ищем по всем системным словарям.
+        # Неизвестная платформа - ищем по всем системным словарям.
         win = _system_keys("Windows")
         lin = _system_keys("Linux / Android")
         mac = _system_keys("macOS / iOS")
@@ -131,10 +131,10 @@ def is_system_module(module_name: str, platform: str = "Windows") -> bool:
 
 
 # Категория классификатора, по которой формируются отчёты СФ: «системные
-# библиотеки» в понимании СФ — это именно базовые библиотеки ОС (kernel32,
+# библиотеки» в понимании СФ - это именно базовые библиотеки ОС (kernel32,
 # user32, gdi32, …). Криптографические (advapi32), сетевые (mpr) и runtime
 # (msvcrt) словари Windows тоже считаются системными, но относятся к другим
-# категориям — в СФ-отчёты они не включаются (иначе числа СФ-отчёта и
+# категориям - в СФ-отчёты они не включаются (иначе числа СФ-отчёта и
 # категории «Системные библиотеки ОС» в отчёте анализа ПО расходятся).
 SYSTEM_OS_CATEGORY = "Системные библиотеки ОС"
 
@@ -147,7 +147,7 @@ def is_sfa_module(module_name: str, platform: str = "Windows") -> bool:
     if normalize_platform(platform) != "Windows":
         # Для не-Windows словари категорий уже сгруппированы по назначению:
         # ядро/линковщик/glibc → «Системные библиотеки ОС», остальные
-        # системные словари — в своих категориях, критерий совпадает.
+        # системные словари - в своих категориях, критерий совпадает.
         return True
     from .categories import get_module_category
 

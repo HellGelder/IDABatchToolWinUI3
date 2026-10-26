@@ -1,5 +1,5 @@
 {# DataTables 3.0.3 (MIT) + стилизация под дизайн-токены.
-   Подключается через {% include "_datatables.html" %} — один раз, в <head>.
+   Подключается через {% include "_datatables.html" %} - один раз, в <head>.
    «Оживляет» таблицы с class="dt": поиск, сортировка по столбцу, пагинация. #}
 <style>{{ inline_vendor('datatables.min.css') | safe }}</style>
 <style>
@@ -46,7 +46,7 @@
     }
     .dt-container .dt-paging .dt-paging-button.disabled { opacity: .35 !important; }
 
-    /* Шапка таблицы — как в остальных таблицах отчёта */
+    /* Шапка таблицы - как в остальных таблицах отчёта */
     table.dt { width: 100% !important; margin: 0; }
     table.dt thead th {
         background: var(--surface-secondary);
@@ -81,13 +81,13 @@
                     lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'Все']],
                     autoWidth: false,
                     // Исходный порядок строк значим (сортировка по источнику,
-                    // порядок вызовов) — не переупорядочиваем при загрузке.
+                    // порядок вызовов) - не переупорядочиваем при загрузке.
                     order: [],
                     language: {
                         search: 'Поиск:',
                         searchPlaceholder: t.dataset.searchPlaceholder || 'фильтр…',
                         lengthMenu: 'Показать _MENU_',
-                        info: 'Показаны _START_–_END_ из _TOTAL_',
+                        info: 'Показаны _START_-_END_ из _TOTAL_',
                         infoEmpty: 'Нет записей',
                         infoFiltered: '(отфильтровано из _MAX_)',
                         zeroRecords: 'Ничего не найдено',

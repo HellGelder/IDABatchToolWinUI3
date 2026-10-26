@@ -8,7 +8,7 @@ namespace IDABatchToolWinUI.Tests;
 /// отсечение по порогу размера, устойчивость к коллизиям хэша окна.</summary>
 public sealed class HexdumpDiffServiceTests : IDisposable
 {
-    // Каталог тестовых файлов — рядом с тестовой сборкой: %TEMP% в этом
+    // Каталог тестовых файлов - рядом с тестовой сборкой: %TEMP% в этом
     // окружении может быть закрыт для процесса тестов.
     private readonly string _dir = Path.Combine(
         AppContext.BaseDirectory, "test-tmp", Guid.NewGuid().ToString("N"));
@@ -59,7 +59,7 @@ public sealed class HexdumpDiffServiceTests : IDisposable
     public void ShiftedSuffix_FullSimilarity()
     {
         // Второй файл = случайный префикс + весь первый файл: каждое окно
-        // первого находит продолжение во втором — схожесть полная.
+        // первого находит продолжение во втором - схожесть полная.
         var d1 = RandomBytes(2048, 4);
         var d2 = new byte[RandomBytes(512, 5).Length + d1.Length];
         RandomBytes(512, 5).CopyTo(d2, 0);
@@ -122,7 +122,7 @@ public sealed class HexdumpDiffServiceTests : IDisposable
     [Fact]
     public void TinyFiles_UnderMinMatch_ZeroSimilarity()
     {
-        // Меньше 16 байт — совпадающих окон быть не может.
+        // Меньше 16 байт - совпадающих окон быть не может.
         var (sim, skipped, _) = HexdumpDiffService.ComputeSimilarity(
             WriteFile("a.bin", RandomBytes(10, 13)), WriteFile("b.bin", RandomBytes(10, 14)));
         Assert.False(skipped);
@@ -132,7 +132,7 @@ public sealed class HexdumpDiffServiceTests : IDisposable
     [Fact]
     public void RepeatedPattern_CountsOncePerConsumedByte()
     {
-        // Полностью совпадающие файлы из повторяющегося шаблона — схожесть полная,
+        // Полностью совпадающие файлы из повторяющегося шаблона - схожесть полная,
         // при этом алгоритм не должен зациклиться на одинаковом ключе окна.
         var data = new byte[4096];
         for (int i = 0; i < data.Length; i++) data[i] = (byte)(i % 7 == 0 ? 0xAA : i % 251);

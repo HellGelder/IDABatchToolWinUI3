@@ -6,15 +6,15 @@ namespace IDABatchToolWinUI;
 
 /// <summary>
 /// UI-слой проверки Python-окружения: диалог при нехватке компонентов и диалог
-/// автоматической установки. Сама проверка и установка — в Services/PythonEnvironment
+/// автоматической установки. Сама проверка и установка - в Services/PythonEnvironment
 /// (сервис); сюда вынесено всё, что строит ContentDialog.
 /// </summary>
 public static class PythonEnvironmentUi
 {
     /// <summary>
-    /// Полный цикл при запуске приложения: если чего-то нет — диалог со списком
+    /// Полный цикл при запуске приложения: если чего-то нет - диалог со списком
     /// и предложением автоматической установки (install-prereqs.ps1 из поставки).
-    /// Если всё на месте — ничего не показывается. Вызывается с UI-потока.
+    /// Если всё на месте - ничего не показывается. Вызывается с UI-потока.
     /// </summary>
     public static async Task EnsureEnvironmentAsync()
     {
@@ -22,7 +22,7 @@ public static class PythonEnvironmentUi
         // DispatcherQueue, а после await мы уже в фоновом потоке.
         Microsoft.UI.Dispatching.DispatcherQueue? uiQueue = null;
         try { uiQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread(); }
-        catch { /* не UI-поток — диалоги покажутся напрямую (на свой страх) */ }
+        catch { /* не UI-поток - диалоги покажутся напрямую (на свой страх) */ }
 
         var result = await PythonEnvironment.CheckAsync();
         if (result.AllOk) return;
@@ -143,7 +143,7 @@ public static class PythonEnvironmentUi
                     ? "Скрипт завершился, но компоненты всё ещё не найдены:\n• "
                       + string.Join("\n• ", after.Missing)
                     : "Скрипт установки завершился с ошибкой (код " + code + ").\n" +
-                      "Подробности — в журнале " + logPath + "\n" +
+                      "Подробности - в журнале " + logPath + "\n" +
                       "Скрипт можно запустить и вручную: " + script;
                 await UiDialogs.WarnAsync("Установка не завершена", details);
             }

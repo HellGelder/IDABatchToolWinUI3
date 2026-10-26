@@ -6,8 +6,8 @@ namespace IDABatchToolWinUI.Diff;
 
 /// <summary>
 /// Проход фазы по списку пар: статусы колонок, параллельная обработка малых пар
-/// через семафор, последовательная — крупных, счётчик прогресса, учёт провалов.
-/// Перенос RunPass из DiffWorker при декомпозиции (пачка D) — поведение не менялось.
+/// через семафор, последовательная - крупных, счётчик прогресса, учёт провалов.
+/// Перенос RunPass из DiffWorker при декомпозиции (пачка D) - поведение не менялось.
 /// </summary>
 public sealed class DiffPassRunner
 {
@@ -17,7 +17,7 @@ public sealed class DiffPassRunner
     private readonly Action<string, int, int, string> _stageFile;  // (stage, current, total, fileName)
     private readonly Action<string> _errorOccurred;
 
-    /// <summary>Учёт результатов создаётся на каждый прогон — выставляется перед запуском.</summary>
+    /// <summary>Учёт результатов создаётся на каждый прогон - выставляется перед запуском.</summary>
     public OutcomeTracker? Outcomes { get; set; }
 
     public DiffPassRunner(string engine, int maxWorkers,
@@ -41,7 +41,7 @@ public sealed class DiffPassRunner
         if (pairs.Count == 0) return;
 
         // Начало фазы: статус этапа для задействованных колонок
-        // (не «waiting» — колонки других движков уже содержат их результат).
+        // (не «waiting» - колонки других движков уже содержат их результат).
         foreach (var p in pairs)
             if (engine == null)
             {
@@ -52,9 +52,9 @@ public sealed class DiffPassRunner
 
         _stageFile(stage, 0, total, "");
 
-        // parallelLarge=true — крупные файлы тоже идут через общий семафор
+        // parallelLarge=true - крупные файлы тоже идут через общий семафор
         // (доанализ Diaphora должен быть многопоточным; в исполнении 1 крупные
-        // файлы всегда последовательны — для основных фаз сохраняем это поведение).
+        // файлы всегда последовательны - для основных фаз сохраняем это поведение).
         var small = parallelLarge ? pairs : pairs.Where(p => !DiffProcessRunner.IsLarge(p.Primary)).ToList();
         var large = parallelLarge ? new List<DiffPair>() : pairs.Where(p => DiffProcessRunner.IsLarge(p.Primary)).ToList();
         var completed = 0;
@@ -99,7 +99,7 @@ public sealed class DiffPassRunner
 
         await Task.WhenAll(tasks);
 
-        // Крупные файлы — последовательно
+        // Крупные файлы - последовательно
         foreach (var p in large)
         {
             if (ct.IsCancellationRequested) break;

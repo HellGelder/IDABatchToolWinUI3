@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 <#
-install-prereqs.ps1 — доустановка Python-окружения для IDA Batch Tool.
+install-prereqs.ps1 - доустановка Python-окружения для IDA Batch Tool.
 
 Скачивает встроенный Python (embeddable, python.org) в app\Tools\Python,
 подключает site-packages и устанавливает туда пакеты jinja2 и requests.

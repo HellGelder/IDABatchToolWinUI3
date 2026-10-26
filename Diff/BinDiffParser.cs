@@ -5,7 +5,7 @@ namespace IDABatchToolWinUI.Diff;
 /// <summary>
 /// Разбор результата BinDiff (.BinDiff SQLite) в .diff.json: metadata, file info,
 /// matched functions (с учётом вариантов имён колонок), распределения.
-/// Перенос ParseBindiffResult из DiffWorker при декомпозиции (пачка D) — поведение не менялось.
+/// Перенос ParseBindiffResult из DiffWorker при декомпозиции (пачка D) - поведение не менялось.
 /// </summary>
 public static class BinDiffParser
 {
@@ -23,7 +23,7 @@ public static class BinDiffParser
         };
         try
         {
-            // Pooling=False — не держим файл .BinDiff открытым после разбора
+            // Pooling=False - не держим файл .BinDiff открытым после разбора
             using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={dbPath};Pooling=False");
             conn.Open();
 

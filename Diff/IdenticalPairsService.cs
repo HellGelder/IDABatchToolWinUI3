@@ -52,7 +52,7 @@ public static class IdenticalPairsService
     }
 
     /// <summary>Заглушка diff.json для побайтно идентичной пары: без запуска
-    /// BinDiff/Diaphora — сходство полная и по определению.</summary>
+    /// BinDiff/Diaphora - сходство полная и по определению.</summary>
     public static void WriteIdenticalJson(DiffPair p, string outputDir)
     {
         var jsonOutput = Path.Combine(outputDir, $"{p.Stem}.diff.json");

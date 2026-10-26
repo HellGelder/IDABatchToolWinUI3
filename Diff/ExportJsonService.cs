@@ -4,7 +4,7 @@ namespace IDABatchToolWinUI.Diff;
 
 /// <summary>
 /// Экспорт export.json из баз IDA через export_data.py (idat) для пары сторон.
-/// Перенос из DiffWorker при декомпозиции (пачка D) — поведение не менялось.
+/// Перенос из DiffWorker при декомпозиции (пачка D) - поведение не менялось.
 /// </summary>
 public sealed class ExportJsonService
 {

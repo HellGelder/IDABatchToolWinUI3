@@ -8,7 +8,7 @@ namespace IDABatchToolWinUI.Tests;
 /// фикстурах: контракт .diff.json, слияние Diaphora, «правда экспорта».</summary>
 public sealed class DiffParserTests : IDisposable
 {
-    // Каталог тестовых файлов — рядом с тестовой сборкой: %TEMP% в этом
+    // Каталог тестовых файлов - рядом с тестовой сборкой: %TEMP% в этом
     // окружении может быть закрыт для процесса тестов.
     private readonly string _dir = Path.Combine(
         AppContext.BaseDirectory, "test-tmp", Guid.NewGuid().ToString("N"));

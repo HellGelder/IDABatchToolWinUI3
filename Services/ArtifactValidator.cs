@@ -14,7 +14,7 @@ public static class ArtifactValidator
 
     /// <summary>
     /// Находит базу IDA (.i64/.idb) для исходного файла или возвращает сам файл,
-    /// если это уже база. null — базы рядом нет.
+    /// если это уже база. null - базы рядом нет.
     /// </summary>
     public static string? ResolveBasePath(string sourceOrBase)
     {
@@ -68,7 +68,7 @@ public static class ArtifactValidator
         var crashMarker = Path.ChangeExtension(basePath, ".id0");
         if (File.Exists(crashMarker))
         {
-            error = "рядом остался .id0 — IDA завершилась аварийно";
+            error = "рядом остался .id0 - IDA завершилась аварийно";
             return false;
         }
         return true;
@@ -98,7 +98,7 @@ public static class ArtifactValidator
             var root = doc.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
             {
-                error = "корень JSON — не объект";
+                error = "корень JSON - не объект";
                 return false;
             }
             if (!root.TryGetProperty("file_name", out var fileName)
@@ -164,21 +164,21 @@ public static class ArtifactValidator
             var root = doc.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
             {
-                error = "корень JSON — не объект";
+                error = "корень JSON - не объект";
                 return false;
             }
-            // primary/secondary в Diaphora-only режиме могут быть пустыми —
+            // primary/secondary в Diaphora-only режиме могут быть пустыми -
             // для отчёта важны similarity и matched_functions, а не эти поля.
             if (root.TryGetProperty("primary", out var primary)
                 && primary.ValueKind != JsonValueKind.String)
             {
-                error = "поле primary — не строка";
+                error = "поле primary - не строка";
                 return false;
             }
             if (root.TryGetProperty("secondary", out var secondary)
                 && secondary.ValueKind != JsonValueKind.String)
             {
-                error = "поле secondary — не строка";
+                error = "поле secondary - не строка";
                 return false;
             }
             if (!root.TryGetProperty("similarity", out var similarity)

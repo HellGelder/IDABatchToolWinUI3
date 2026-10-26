@@ -4,7 +4,7 @@
 1. Каждый модуль присутствует ровно в одной группе (без дубликатов).
 2. Группы имеют семантически связную тематику, соответствующую
    документации Microsoft (learn.microsoft.com).
-3. Описания — на русском, подробные, технически точные.
+3. Описания - на русском, подробные, технически точные.
 """
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -13,7 +13,7 @@
 
 _WINDOWS_HAL = {
     "hal.dll": (
-        "Hardware Abstraction Layer — HAL. Предоставляет единый интерфейс для "
+        "Hardware Abstraction Layer - HAL. Предоставляет единый интерфейс для "
         "работы ядра и драйверов с оборудованием (прерывания, таймеры, DMA, "
         "управление питанием), скрывая различия между чипсетами и платформами. "
         "Загружается в режиме ядра и недоступен пользовательским приложениям напрямую."
@@ -21,25 +21,25 @@ _WINDOWS_HAL = {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 2. NATIVE API — базовый интерфейс системных вызовов
+# 2. NATIVE API - базовый интерфейс системных вызовов
 # ═══════════════════════════════════════════════════════════════════════════
 
 _WINDOWS_NATIVE_API = {
     "ntdll.dll": (
-        "NT Layer DLL — диспетчер системных вызовов Native API. Предоставляет точки "
+        "NT Layer DLL - диспетчер системных вызовов Native API. Предоставляет точки "
         "входа для системных вызовов (syscall), функции загрузчика образов (Ldr), "
         "кучу процессов (RtlHeap), отладку и обработку исключений. Является "
         "обязательной зависимостью всех подсистемных DLL (kernel32, user32 и др.), "
         "но редко используется приложениями напрямую."
     ),
     "ntoskrnl.exe": (
-        "NT Operating System Kernel — ядро ОС и исполнительная система. Содержит "
+        "NT Operating System Kernel - ядро ОС и исполнительная система. Содержит "
         "диспетчер объектов, диспетчер памяти, диспетчер ввода/вывода, диспетчер "
         "процессов и потоков, подсистему безопасности (SRM), монитор безопасности. "
         "Выполняется в режиме ядра и реализует всю низкоуровневую логику ОС."
     ),
     "ntkrnlpa.exe": (
-        "NT Kernel Physical Addressing — вариант ядра NTOSKRNL с поддержкой "
+        "NT Kernel Physical Addressing - вариант ядра NTOSKRNL с поддержкой "
         "расширения физических адресов (PAE), позволяющий 32-битным системам "
         "адресовать более 4 ГБ оперативной памяти."
     ),
@@ -61,43 +61,43 @@ _WINDOWS_NATIVE_API = {
         "оконной системы и GDI для desktop-редакций Windows."
     ),
     "basesrv.dll": (
-        "Windows NT BASE API Server DLL — серверная библиотека CSRSS, отвечающая "
+        "Windows NT BASE API Server DLL - серверная библиотека CSRSS, отвечающая "
         "за базовые функции подсистемы Win32: управление процессами и потоками, "
         "обработку событий создания/завершения процессов, взаимодействие с LPC "
         "(Local Procedure Call). Загружается процессом csrss.exe."
     ),
     "winsrv.dll": (
-        "Windows Server DLL — серверная библиотека CSRSS, предоставляющая "
+        "Windows Server DLL - серверная библиотека CSRSS, предоставляющая "
         "функциональность оконной подсистемы: управление консольными окнами "
         "(Console Windows), обработка аппаратных ошибок (hard error), поддержка "
         "Virtual DOS Machine (VDM)."
     ),
     "csrsrv.dll": (
-        "Client/Server Runtime Subsystem Server DLL — основная серверная библиотека "
+        "Client/Server Runtime Subsystem Server DLL - основная серверная библиотека "
         "CSRSS, реализующая диспетчеризацию API-вызовов от клиентских приложений."
     ),
     "smss.exe": (
-        "Session Manager Subsystem (smss.exe) — первый пользовательский процесс, "
+        "Session Manager Subsystem (smss.exe) - первый пользовательский процесс, "
         "запускаемый ядром Windows. Является нативным приложением (Native Application), "
         "использующим исключительно Native API через ntdll.dll."
     ),
     "autochk.exe": (
-        "Auto Check Utility — нативное приложение (Native Application), выполняющее "
+        "Auto Check Utility - нативное приложение (Native Application), выполняющее "
         "проверку диска (chkdsk) на раннем этапе загрузки системы, до запуска "
         "Win32-подсистемы."
     ),
     "kdcom.dll": (
-        "Kernel Debugger Communication — реализует транспортный уровень для "
+        "Kernel Debugger Communication - реализует транспортный уровень для "
         "отладки ядра Windows через последовательный порт (COM), USB, IEEE 1394 "
         "или сетевое подключение."
     ),
     "kd.dll": (
-        "Kernel Debugger — реализация отладчика ядра Windows. Обеспечивает "
+        "Kernel Debugger - реализация отладчика ядра Windows. Обеспечивает "
         "управление точками останова, чтение/запись памяти ядра, управление "
         "целевой системой на ранних этапах загрузки."
     ),
     "kdexts.dll": (
-        "Kernel Debugger Extensions — набор расширений ядерного отладчика "
+        "Kernel Debugger Extensions - набор расширений ядерного отладчика "
         "Windows. Предоставляет команды для анализа структур ядра: !process, "
         "!thread, !pool, !object и др."
     ),
@@ -109,106 +109,106 @@ _WINDOWS_NATIVE_API = {
 
 _WINDOWS_KERNEL_SUBSYSTEM = {
     "kernel32.dll": (
-        "Kernel32 — клиентская библиотека Win32, предоставляющая высокоуровневые "
+        "Kernel32 - клиентская библиотека Win32, предоставляющая высокоуровневые "
         "обёртки над Native API. Реализует функции управления памятью (VirtualAlloc, "
         "HeapAlloc), файлового ввода/вывода (CreateFile, ReadFile), синхронизации "
         "(Mutex, Event, Semaphore), процессов и потоков (CreateProcess, CreateThread)."
     ),
     "kernelbase.dll": (
-        "KernelBase — облегчённая версия kernel32 для приложений UWP и OneCore. "
+        "KernelBase - облегчённая версия kernel32 для приложений UWP и OneCore. "
         "Начиная с Windows 7, kernel32.dll перенаправляет большинство вызовов в "
         "kernelbase.dll. Используется на всех устройствах Windows (ПК, Xbox, HoloLens)."
     ),
     "wow64.dll": (
-        "Wow64.dll — основной интерфейс к ядру Windows NT для подсистемы WOW64. "
+        "Wow64.dll - основной интерфейс к ядру Windows NT для подсистемы WOW64. "
         "Реализует инфраструктуру эмуляции ядра и преобразует (thunks) 32-битные "
         "вызовы в 64-битные. Загружается во все 32-битные процессы, работающие "
         "в 64-битной Windows."
     ),
     "wow64win.dll": (
-        "Wow64Win.dll — предоставляет точки входа для 32-битных приложений "
+        "Wow64Win.dll - предоставляет точки входа для 32-битных приложений "
         "в WOW64. Содержит thunks для функций win32k.sys (графическая и оконная "
         "подсистема). Обеспечивает корректную работу 32-битных GUI-приложений "
         "в 64-битной среде."
     ),
     "wow64cpu.dll": (
-        "Wow64Cpu.dll — отвечает за переключение процессора между 32-битным "
+        "Wow64Cpu.dll - отвечает за переключение процессора между 32-битным "
         "и 64-битным режимами на архитектуре x86-64. Обеспечивает аппаратно-"
         "ускоренное выполнение 32-битного кода без программной эмуляции."
     ),
     "wowarmw.dll": (
-        "Wowarmw.dll — поддержка запуска ARM32-приложений на ARM64-версиях "
+        "Wowarmw.dll - поддержка запуска ARM32-приложений на ARM64-версиях "
         "Windows. Аналог wow64cpu.dll для архитектуры ARM64."
     ),
     "xtajit.dll": (
-        "XtaJIT.dll — программный эмулятор x86 для ARM64-версий Windows. "
+        "XtaJIT.dll - программный эмулятор x86 для ARM64-версий Windows. "
         "Содержит JIT-компилятор (Just-In-Time), транслирующий x86-инструкции "
         "в ARM64-инструкции."
     ),
-    # API Sets — ядро (Core)
+    # API Sets - ядро (Core)
     "api-ms-win-core-sysinfo-l1-1-0.dll": (
-        "API Set: Core System Information — виртуальная DLL, предоставляющая "
+        "API Set: Core System Information - виртуальная DLL, предоставляющая "
         "доступ к функциям системной информации (GetSystemInfo, GetVersionEx и др.)."
     ),
     "api-ms-win-core-memory-l1-1-0.dll": (
-        "API Set: Core Memory Management — виртуальная DLL для функций управления "
+        "API Set: Core Memory Management - виртуальная DLL для функций управления "
         "виртуальной памятью (VirtualAlloc, VirtualFree, VirtualQuery)."
     ),
     "api-ms-win-core-processenvironment-l1-1-0.dll": (
-        "API Set: Core Process Environment — виртуальная DLL для функций работы "
+        "API Set: Core Process Environment - виртуальная DLL для функций работы "
         "с переменными окружения процесса."
     ),
     "api-ms-win-core-handle-l1-1-0.dll": (
-        "API Set: Core Handle Management — виртуальная DLL для функций управления "
+        "API Set: Core Handle Management - виртуальная DLL для функций управления "
         "дескрипторами (CloseHandle, DuplicateHandle)."
     ),
     "api-ms-win-core-synch-l1-1-0.dll": (
-        "API Set: Core Synchronization — виртуальная DLL для функций синхронизации "
+        "API Set: Core Synchronization - виртуальная DLL для функций синхронизации "
         "(WaitForSingleObject, CreateEvent, CreateMutex)."
     ),
     "api-ms-win-core-file-l1-1-0.dll": (
-        "API Set: Core File I/O — виртуальная DLL для функций файлового "
+        "API Set: Core File I/O - виртуальная DLL для функций файлового "
         "ввода/вывода (CreateFile, ReadFile, WriteFile)."
     ),
     "api-ms-win-core-processthreads-l1-1-0.dll": (
-        "API Set: Core Process Threads — виртуальная DLL для функций управления "
+        "API Set: Core Process Threads - виртуальная DLL для функций управления "
         "процессами и потоками (CreateProcess, CreateThread)."
     ),
     "api-ms-win-core-libraryloader-l1-1-0.dll": (
-        "API Set: Core Library Loader — виртуальная DLL для функций загрузки "
+        "API Set: Core Library Loader - виртуальная DLL для функций загрузки "
         "динамических библиотек (LoadLibrary, GetProcAddress)."
     ),
     "api-ms-win-core-util-l1-1-0.dll": (
-        "API Set: Core Utility — виртуальная DLL для вспомогательных функций "
+        "API Set: Core Utility - виртуальная DLL для вспомогательных функций "
         "(Beep, MulDiv, QueryPerformanceCounter)."
     ),
     "api-ms-win-core-heap-l1-1-0.dll": (
-        "API Set: Core Heap — виртуальная DLL для функций управления кучей "
+        "API Set: Core Heap - виртуальная DLL для функций управления кучей "
         "(HeapAlloc, HeapFree, HeapCreate)."
     ),
     "sechost.dll": (
-        "SecHost — Security Host: RPC-прокси между клиентскими библиотеками "
+        "SecHost - Security Host: RPC-прокси между клиентскими библиотеками "
         "безопасности (advapi32, secur32) и подсистемой LSASS. Начиная с "
         "Windows 7 размещает функции аутентификации, управления учётными "
         "данными и служб (OpenSCManager, LsaOpenPolicy)."
     ),
     "kernel.appcore.dll": (
-        "Kernel AppCore — базовые API модели пакетированных приложений "
+        "Kernel AppCore - базовые API модели пакетированных приложений "
         "(AppModel): состояние пакета, идентификаторы AUMID, поддержка "
         "MoApp-среды. Загружается UWP-приложениями и hosts-процессами."
     ),
     "twinapi.dll": (
-        "TwinAPI — API активации и управления жизненным циклом Windows "
+        "TwinAPI - API активации и управления жизненным циклом Windows "
         "Runtime-приложений (CoreApplication, ActivationManager): "
         "создание/завершение объектов приложения, управление окнами UWP."
     ),
     "twinapi.appcore.dll": (
-        "TwinAPI AppCore — вариант TwinAPI для системных компонентов "
+        "TwinAPI AppCore - вариант TwinAPI для системных компонентов "
         "(appcore-профиль): функции активации приложений без зависимости "
         "от полного WinRT-стека."
     ),
     "rstrtmgr.dll": (
-        "RstrtMgr — Restart Manager API: координация перезапуска приложений "
+        "RstrtMgr - Restart Manager API: координация перезапуска приложений "
         "и служб при установке обновлений (RmStartSession, RmRegisterResources, "
         "RmShutdown/RmRestart). Используется MSI-установщиками и Windows Update."
     ),
@@ -220,205 +220,205 @@ _WINDOWS_KERNEL_SUBSYSTEM = {
 
 _WINDOWS_USER_SUBSYSTEM = {
     "user32.dll": (
-        "User32 — управление окнами, сообщениями, элементами управления. "
+        "User32 - управление окнами, сообщениями, элементами управления. "
         "Реализует оконную процедуру (WindowProc), диспетчеризацию сообщений "
         "(GetMessage/DispatchMessage), создание окон (CreateWindowEx), меню, "
         "курсоры, иконки, буфер обмена, DDE."
     ),
     "gdi32.dll": (
-        "GDI32 — Graphics Device Interface. Примитивы рисования: линии, кривые, "
+        "GDI32 - Graphics Device Interface. Примитивы рисования: линии, кривые, "
         "прямоугольники, эллипсы; работа с кистями, перьями, шрифтами; растровые "
         "операции (BitBlt); метафайлы; управление контекстом устройства (DC)."
     ),
     "gdi32full.dll": (
-        "GDI32Full — расширенная версия GDI32 с дополнительными функциями "
+        "GDI32Full - расширенная версия GDI32 с дополнительными функциями "
         "рендеринга и поддержкой современных форматов."
     ),
     "comctl32.dll": (
-        "Comctl32 — Common Controls Library. Предоставляет стандартные элементы "
+        "Comctl32 - Common Controls Library. Предоставляет стандартные элементы "
         "управления: кнопки, списки, деревья (TreeView), списки изображений "
         "(ImageList), панели инструментов (Toolbar), вкладки (Tab), индикаторы "
         "прогресса, календари."
     ),
     "comdlg32.dll": (
-        "ComDlg32 — Common Dialog Box Library. Стандартные диалоговые окна: "
+        "ComDlg32 - Common Dialog Box Library. Стандартные диалоговые окна: "
         "открытие/сохранение файла (GetOpenFileName), выбор цвета (ChooseColor), "
         "выбор шрифта (ChooseFont), печать (PrintDlg), поиск/замена."
     ),
     "shlwapi.dll": (
-        "Shlwapi — Shell Lightweight API. Вспомогательные функции для работы "
+        "Shlwapi - Shell Lightweight API. Вспомогательные функции для работы "
         "с реестром, строками, путями, URL. Используется оболочкой Windows "
         "и проводником."
     ),
     "shell32.dll": (
-        "Shell32 — оболочка Windows: рабочий стол, панель задач, проводник, "
+        "Shell32 - оболочка Windows: рабочий стол, панель задач, проводник, "
         "контекстные меню, ассоциации файлов, корзина. Предоставляет API для "
         "работы с пространством имён оболочки (Shell Namespace)."
     ),
     "ole32.dll": (
-        "Ole32 — Object Linking and Embedding (OLE) и Component Object Model (COM). "
+        "Ole32 - Object Linking and Embedding (OLE) и Component Object Model (COM). "
         "Базовые службы COM: фабрики классов, маршалинг, моникеры, хранение "
         "(Structured Storage). Фундамент для всех технологий COM, включая ActiveX и OLE."
     ),
     "oleaut32.dll": (
-        "OleAut32 — OLE Automation. Поддержка типов VARIANT, BSTR, SAFEARRAY; "
+        "OleAut32 - OLE Automation. Поддержка типов VARIANT, BSTR, SAFEARRAY; "
         "диспетчерские интерфейсы (IDispatch); библиотеки типов (ITypeLib/ITypeInfo)."
     ),
     "combase.dll": (
-        "Combase — базовая поддержка COM и Windows Runtime (WinRT). Содержит "
+        "Combase - базовая поддержка COM и Windows Runtime (WinRT). Содержит "
         "фундаментальные функции COM, используемые как классическим COM, так "
         "и новыми приложениями WinRT/UWP."
     ),
     "uxtheme.dll": (
-        "UxTheme — Microsoft UxTheme Library. Реализует движок рендеринга "
+        "UxTheme - Microsoft UxTheme Library. Реализует движок рендеринга "
         "визуальных стилей (Visual Styles), отвечающий за современный внешний "
         "вид элементов управления и окон."
     ),
     "themeui.dll": (
-        "ThemeUI — Windows Theme API. Предоставляет функции для отображения "
+        "ThemeUI - Windows Theme API. Предоставляет функции для отображения "
         "и настройки визуальных тем рабочего стола."
     ),
     "themeservice.dll": (
-        "ThemeService — Windows Themes Service. Системная служба, управляющая "
+        "ThemeService - Windows Themes Service. Системная служба, управляющая "
         "загрузкой и применением визуальных тем."
     ),
     "dwmapi.dll": (
-        "DWMAPI — Desktop Window Manager API. Клиентская библиотека для "
+        "DWMAPI - Desktop Window Manager API. Клиентская библиотека для "
         "взаимодействия с Desktop Window Manager (DWM). Предоставляет "
         "программный доступ к функциям композиции рабочего стола: управление "
         "прозрачностью окон (Aero Glass), миниатюрами панели задач, Flip3D."
     ),
     "msimg32.dll": (
-        "Msimg32 — GDIEXT Client DLL. Предоставляет расширенные функции "
+        "Msimg32 - GDIEXT Client DLL. Предоставляет расширенные функции "
         "графического вывода поверх стандартного GDI: GradientFill для создания "
         "градиентных заливок и AlphaBlend для полупрозрачного наложения "
         "изображений с альфа-каналом."
     ),
     "gdiplus.dll": (
-        "GDI+ — библиотека двухмерной графики, преемник GDI. Поддерживает "
+        "GDI+ - библиотека двухмерной графики, преемник GDI. Поддерживает "
         "работу со сложными векторными формами, градиентными кистями, путями, "
         "альфа-каналами и множеством форматов изображений (JPEG, PNG, BMP, "
         "GIF, TIFF)."
     ),
     "oleacc.dll": (
-        "OLEACC — Microsoft Active Accessibility (MSAA) Core Component. "
+        "OLEACC - Microsoft Active Accessibility (MSAA) Core Component. "
         "Предоставляет инфраструктуру accessibility для стандартных элементов "
         "управления Windows."
     ),
     "propsys.dll": (
-        "Propsys — Microsoft Property System. Реализует систему метаданных "
+        "Propsys - Microsoft Property System. Реализует систему метаданных "
         "Windows Vista и новее, позволяющую приложениям регистрировать "
         "и запрашивать расширенные свойства файлов."
     ),
     "windows.storage.dll": (
-        "Windows.Storage — Windows Storage API. Предоставляет функции для "
+        "Windows.Storage - Windows Storage API. Предоставляет функции для "
         "работы с файловой системой, библиотеками и виртуальными папками "
         "в стиле Windows Runtime."
     ),
     "comdlg32.ocx": (
-        "ComDlg32.ocx — ActiveX-версия библиотеки общих диалоговых окон "
+        "ComDlg32.ocx - ActiveX-версия библиотеки общих диалоговых окон "
         "для использования в средах разработки, таких как Visual Basic."
     ),
     "stobject.dll": (
-        "STObject — System Tray Object. Библиотека для управления значками "
+        "STObject - System Tray Object. Библиотека для управления значками "
         "в системном трее (notification area), включая часы, громкость, "
         "состояние сети, индикатор батареи."
     ),
     "batmeter.dll": (
-        "BatMeter — Battery Meter. Библиотека для отображения состояния "
+        "BatMeter - Battery Meter. Библиотека для отображения состояния "
         "батареи ноутбука/планшета в системном трее и диалоговых окнах."
     ),
     "wlanapi.dll": (
-        "WlanApi — Windows Wireless LAN API. Предоставляет функции для "
+        "WlanApi - Windows Wireless LAN API. Предоставляет функции для "
         "управления беспроводными сетевыми подключениями: сканирование "
         "сетей, подключение, отключение, управление профилями."
     ),
     "wlanui.dll": (
-        "WlanUI — Wireless LAN UI. Библиотека пользовательского интерфейса "
+        "WlanUI - Wireless LAN UI. Библиотека пользовательского интерфейса "
         "для управления Wi-Fi-подключениями: выбор сети, ввод пароля, "
         "отображение статуса соединения."
     ),
     "pnidui.dll": (
-        "PniDui — Network List Manager UI. Предоставляет интерфейсы для "
+        "PniDui - Network List Manager UI. Предоставляет интерфейсы для "
         "отображения списка доступных сетей и управления сетевыми "
         "подключениями из области уведомлений."
     ),
     "msctf.dll": (
-        "MSCTF — Text Services Framework. Базовая библиотека для поддержки "
+        "MSCTF - Text Services Framework. Базовая библиотека для поддержки "
         "ввода текста, включая IME (Input Method Editor), проверку орфографии, "
         "автозамену, распознавание речи и рукописного ввода."
     ),
     "ctfmon.exe": (
-        "CTF Loader — ctfmon.exe. Процесс, управляющий Text Services "
+        "CTF Loader - ctfmon.exe. Процесс, управляющий Text Services "
         "Framework (MSCTF), обеспечивающий работу IME, клавиатурных "
         "раскладок и других текстовых служб."
     ),
     "input.dll": (
-        "Input — библиотека управления вводом. Обрабатывает события "
+        "Input - библиотека управления вводом. Обрабатывает события "
         "от клавиатуры, мыши, сенсорного экрана, пера и других "
         "устройств ввода в Windows 8+."
     ),
     "inputswitch.dll": (
-        "InputSwitch — библиотека переключения методов ввода. "
+        "InputSwitch - библиотека переключения методов ввода. "
         "Управляет переключением между раскладками клавиатуры "
         "и IME в Windows 8+."
     ),
     "imm32.dll": (
-        "Imm32 — Input Method Manager (IMM). Менеджер методов ввода: "
-        "API для работы с редакторами метода ввода (IME) — переключение "
+        "Imm32 - Input Method Manager (IMM). Менеджер методов ввода: "
+        "API для работы с редакторами метода ввода (IME) - переключение "
         "раскладок и языков, композиция вводимых строк "
         "(иероглифические письменности), обработка IME-сообщений "
         "(WM_IME_*). Клиентский интерфейс над Text Services Framework "
         "(MSCTF)."
     ),
     "credui.dll": (
-        "CredUI — Credential User Interface. Диалоговое окно для ввода, "
+        "CredUI - Credential User Interface. Диалоговое окно для ввода, "
         "сохранения и управления учётными данными пользователя "
         "(пароли, PIN-коды, сертификаты)."
     ),
     "printui.dll": (
-        "PrintUI — Print UI Library. Предоставляет пользовательский "
+        "PrintUI - Print UI Library. Предоставляет пользовательский "
         "интерфейс для управления принтерами: установка, настройка, "
         "управление очередями печати."
     ),
     # --- Web / Browser ---
     "ieframe.dll": (
-        "IEFrame — Internet Explorer Frame: встраиваемый "
+        "IEFrame - Internet Explorer Frame: встраиваемый "
         "веб-браузер (WebBrowser control)."
     ),
     "shdocvw.dll": (
-        "SHDocVw — Shell Doc Object and Control: интерфейс "
+        "SHDocVw - Shell Doc Object and Control: интерфейс "
         "ActiveX для WebBrowser и оболочки."
     ),
     "xmllite.dll": (
-        "XmlLite — лёгкий парсер XML (SAX/Reader): быстрый "
+        "XmlLite - лёгкий парсер XML (SAX/Reader): быстрый "
         "разбор XML-файлов."
     ),
     "msxml3.dll": (
-        "MSXML3 — Microsoft XML Core Services 3.0: DOM и "
+        "MSXML3 - Microsoft XML Core Services 3.0: DOM и "
         "SAX-парсер XML."
     ),
     "msxml6.dll": (
-        "MSXML6 — Microsoft XML Core Services 6.0: актуальная "
+        "MSXML6 - Microsoft XML Core Services 6.0: актуальная "
         "версия XML-парсера."
     ),
     "userenv.dll": (
-        "UserEnv — User Environment API: загрузка/выгрузка профилей "
+        "UserEnv - User Environment API: загрузка/выгрузка профилей "
         "пользователей (LoadUserProfile), переменные окружения, "
         "роуминговые профили, применение групповых политик к профилю."
     ),
     "ntmarta.dll": (
-        "NTMarta — Windows NT Marta Provider: универсальный провайдер "
+        "NTMarta - Windows NT Marta Provider: универсальный провайдер "
         "разрешений доступа. Разбирает дескрипторы безопасности (SACL/DACL), "
         "используется aclui.dll и редакторами прав (EditSecurity)."
     ),
     "aclui.dll": (
-        "ACLUI — Access Control List UI: стандартный диалог «Безопасность» "
+        "ACLUI - Access Control List UI: стандартный диалог «Безопасность» "
         "(вкладка разрешений файла/реестра), расчёт эффективных прав, "
         "редактирование ACE через провайдеры (ntmarta)."
     ),
     "msvcp_win.dll": (
-        "MSVCP Win — UCRT-совместимая STL-библиотека для системных "
+        "MSVCP Win - UCRT-совместимая STL-библиотека для системных "
         "компонентов Windows (msvcp140_win): реализация std::* поверх "
         "ucrtbase без привязки к версии Visual C++ Redistributable."
     ),
@@ -430,91 +430,91 @@ _WINDOWS_USER_SUBSYSTEM = {
 
 _WINDOWS_SECURITY_CRYPTO = {
     "advapi32.dll": (
-        "Advapi32 — Advanced API: службы безопасности (управление ACL, "
+        "Advapi32 - Advanced API: службы безопасности (управление ACL, "
         "токенами, привилегиями), реестр (RegCreateKey, RegQueryValue), "
         "сервисы Windows (Service Control Manager), криптография."
     ),
     "crypt32.dll": (
-        "Crypt32 — CryptoAPI: управление сертификатами (X.509), "
+        "Crypt32 - CryptoAPI: управление сертификатами (X.509), "
         "хранилищами сертификатов, кодирование/декодирование ASN.1, "
         "проверка цифровых подписей, работа с цепочками сертификатов."
     ),
     "wintrust.dll": (
-        "WinTrust — Microsoft Trust Verification: проверка подлинности "
+        "WinTrust - Microsoft Trust Verification: проверка подлинности "
         "исполняемых файлов (Authenticode), проверка цифровых подписей "
         "ActiveX-компонентов, управление поставщиками доверия."
     ),
     "ncrypt.dll": (
-        "Ncrypt — Cryptography API Next Generation (CNG): современный "
+        "Ncrypt - Cryptography API Next Generation (CNG): современный "
         "криптографический API. Поддержка алгоритмов AES, RSA, ECDSA, "
         "SHA-2/3, управление ключами (Key Storage)."
     ),
     "bcrypt.dll": (
-        "Bcrypt — Cryptographic Primitives: низкоуровневые криптографические "
+        "Bcrypt - Cryptographic Primitives: низкоуровневые криптографические "
         "примитивы, включая хеширование (SHA, MD5), симметричное шифрование "
         "(AES, 3DES), генерация случайных чисел."
     ),
     "bcryptprimitives.dll": (
-        "BCryptPrimitives — высокопроизводительные криптографические примитивы "
+        "BCryptPrimitives - высокопроизводительные криптографические примитивы "
         "Windows: симметричное шифрование, хеширование, генерация случайных "
         "чисел. Фундамент для bcrypt.dll."
     ),
     "dpapi.dll": (
-        "DPAPI — Data Protection API: шифрование и расшифровка данных "
+        "DPAPI - Data Protection API: шифрование и расшифровка данных "
         "с привязкой к учётной записи пользователя или компьютеру."
     ),
     "secur32.dll": (
-        "Secur32 — Security Support Provider Interface (SSPI): аутентификация "
+        "Secur32 - Security Support Provider Interface (SSPI): аутентификация "
         "(NTLM, Kerberos, Negotiate), управление учётными данными, "
         "контексты безопасности."
     ),
     "sspicli.dll": (
-        "SspiCli — SSPI Client: клиентская часть Security Support Provider "
+        "SspiCli - SSPI Client: клиентская часть Security Support Provider "
         "Interface. Используется приложениями для аутентификации и установки "
         "защищённых соединений."
     ),
     "winscard.dll": (
-        "Winscard — Windows Smart Card API. Ресурсный менеджер смарт-карт "
+        "Winscard - Windows Smart Card API. Ресурсный менеджер смарт-карт "
         "(SCard*-функции): обнаружение читателей и карт, установление "
         "сеансов, обмен APDU-командами. Основа входа по смарт-карте и "
         "работы криптопровайдеров с токенами; работает поверх драйвера "
         "читателя."
     ),
     "msasn1.dll": (
-        "Msasn1 — ASN.1 Runtime: кодирование/декодирование данных в формате "
+        "Msasn1 - ASN.1 Runtime: кодирование/декодирование данных в формате "
         "ASN.1 для криптографических операций, сертификатов, Kerberos."
     ),
     "samlib.dll": (
-        "Samlib — Security Account Manager Library: API для управления "
+        "Samlib - Security Account Manager Library: API для управления "
         "локальной базой учётных записей (SAM), включая пользователей, "
         "группы, пароли."
     ),
     "cryptsp.dll": (
-        "CryptSP — Cryptographic Service Provider API: библиотека, "
+        "CryptSP - Cryptographic Service Provider API: библиотека, "
         "обеспечивающая взаимодействие между CryptoAPI и криптографическими "
         "провайдерами (CSP)."
     ),
     "cryptdll.dll": (
-        "CryptDll — Cryptography Helper DLL: вспомогательная библиотека "
+        "CryptDll - Cryptography Helper DLL: вспомогательная библиотека "
         "для CryptoAPI. Предоставляет дополнительные криптографические "
         "функции и управление цифровыми сертификатами."
     ),
     "cryptnet.dll": (
-        "CryptNet — Cryptographic Network Services: обеспечивает сетевую "
+        "CryptNet - Cryptographic Network Services: обеспечивает сетевую "
         "поддержку для CryptoAPI, включая проверку сертификатов по сети, "
         "работу со списками отзыва сертификатов (CRL)."
     ),
     "cryptui.dll": (
-        "CryptUI — Cryptographic User Interface: предоставляет стандартные "
+        "CryptUI - Cryptographic User Interface: предоставляет стандартные "
         "диалоговые окна для работы с сертификатами."
     ),
     "cryptngc.dll": (
-        "CryptNgc — Cryptographic Next Generation API: расширение CNG "
+        "CryptNgc - Cryptographic Next Generation API: расширение CNG "
         "с поддержкой PIN-кодов и биометрических данных для Windows Hello, "
         "взаимодействие с Trusted Platform Module (TPM)."
     ),
     "msv1_0.dll": (
-        "MSV1_0 — Microsoft Authentication Package v1.0: реализует протокол "
+        "MSV1_0 - Microsoft Authentication Package v1.0: реализует протокол "
         "аутентификации NTLM (NT LAN Manager)."
     ),
     "kerberos.dll": (
@@ -523,77 +523,77 @@ _WINDOWS_SECURITY_CRYPTO = {
         "(tickets). С Windows Vista добавлена поддержка шифрования AES."
     ),
     "schannel.dll": (
-        "Schannel — Secure Channel: реализует протоколы аутентификации "
+        "Schannel - Secure Channel: реализует протоколы аутентификации "
         "TLS/SSL. Обеспечивает шифрование и целостность сетевых соединений, "
         "включая проверку сертификатов X.509."
     ),
     "wdigest.dll": (
-        "WDigest — Digest Authentication SSP: реализует Digest-аутентификацию "
+        "WDigest - Digest Authentication SSP: реализует Digest-аутентификацию "
         "по протоколам HTTP и SASL."
     ),
     "tspkg.dll": (
-        "TSPkg — Terminal Services Security Package: обеспечивает "
+        "TSPkg - Terminal Services Security Package: обеспечивает "
         "аутентификацию для служб терминалов (Remote Desktop Services)."
     ),
     "pku2u.dll": (
-        "PKU2U — Public Key Cryptography User-to-User: реализует "
+        "PKU2U - Public Key Cryptography User-to-User: реализует "
         "аутентификацию на основе сертификатов для одноранговых сетей."
     ),
     "cloudap.dll": (
-        "CloudAP — Cloud Authentication Provider: современный SSP, "
+        "CloudAP - Cloud Authentication Provider: современный SSP, "
         "обеспечивающий аутентификацию с использованием облачных учётных "
         "записей Microsoft (Microsoft Account, Azure AD/Entra ID)."
     ),
     "negoexts.dll": (
-        "NegoExts — Negotiate Extensions: расширения для протокола Negotiate, "
+        "NegoExts - Negotiate Extensions: расширения для протокола Negotiate, "
         "обеспечивающие согласование между различными поставщиками "
         "безопасности (SSP)."
     ),
     "credssp.dll": (
-        "CredSSP — Credential Security Support Provider: реализует "
+        "CredSSP - Credential Security Support Provider: реализует "
         "делегирование учётных данных для сценариев PowerShell Remoting, "
         "WinRM."
     ),
     "lsasrv.dll": (
-        "Lsasrv — Local Security Authority Server DLL: основной модуль "
+        "Lsasrv - Local Security Authority Server DLL: основной модуль "
         "подсистемы локальной безопасности (LSASS). Реализует большинство "
         "функций безопасности Windows."
     ),
     "samsrv.dll": (
-        "Samsrv — Security Accounts Manager Server DLL: управляет "
+        "Samsrv - Security Accounts Manager Server DLL: управляет "
         "локальной базой учётных записей (SAM)."
     ),
     "netlogon.dll": (
-        "NetLogon — Net Logon Service: поддерживает безопасный канал "
+        "NetLogon - Net Logon Service: поддерживает безопасный канал "
         "между компьютером и контроллером домена."
     ),
     "keyiso.dll": (
-        "KeyIso — Key Isolation Service. Обеспечивает изоляцию "
+        "KeyIso - Key Isolation Service. Обеспечивает изоляцию "
         "криптографических ключей в изолированном процессе (LSA), "
         "предотвращая доступ к ключам со стороны непривилегированных "
         "процессов даже при компрометации."
     ),
     "cngaudit.dll": (
-        "CNG Audit — Cryptographic Next Generation Audit. Реализует "
+        "CNG Audit - Cryptographic Next Generation Audit. Реализует "
         "аудит криптографических операций CNG для соответствия "
         "требованиям безопасности (PCI DSS, FIPS 140-2)."
     ),
     # --- XML Digital Signature ---
     "cryptxml.dll": (
-        "CryptXML — XML Digital Signature: работа с "
+        "CryptXML - XML Digital Signature: работа с "
         "XML-подписями (XMLDSig)."
     ),
     # --- LDAP / Directory access ---
     "wldap32.dll": (
-        "WLDAP32 — Windows LDAP API: клиентская библиотека "
+        "WLDAP32 - Windows LDAP API: клиентская библиотека "
         "протокола LDAP v3."
     ),
     "logoncli.dll": (
-        "LogonCLI — Logon Client: поддержка входа в домен, "
+        "LogonCLI - Logon Client: поддержка входа в домен, "
         "запрос билетов Kerberos."
     ),
     "dsrole.dll": (
-        "DSRole — Directory Services Role: определение роли "
+        "DSRole - Directory Services Role: определение роли "
         "сервера в Active Directory (DC, member)."
     ),
 }
@@ -604,173 +604,173 @@ _WINDOWS_SECURITY_CRYPTO = {
 
 _WINDOWS_NETWORK = {
     "ws2_32.dll": (
-        "Ws2_32 — Windows Sockets 2 (Winsock): реализация Berkeley Sockets "
+        "Ws2_32 - Windows Sockets 2 (Winsock): реализация Berkeley Sockets "
         "API для Windows. Создание и управление сокетами TCP/UDP, асинхронные "
         "операции, поддержка IPv4/IPv6."
     ),
     "winhttp.dll": (
-        "WinHTTP — Windows HTTP Services: клиентская библиотека для отправки "
+        "WinHTTP - Windows HTTP Services: клиентская библиотека для отправки "
         "HTTP/HTTPS-запросов. Предназначена для серверных приложений и служб."
     ),
     "wininet.dll": (
-        "WinINet — Windows Internet: реализация протоколов HTTP, FTP, Gopher "
+        "WinINet - Windows Internet: реализация протоколов HTTP, FTP, Gopher "
         "для интерактивных приложений. Поддерживает кэширование, автонастройку "
         "прокси, обработку cookie."
     ),
     "urlmon.dll": (
-        "Urlmon — URL Moniker: связывание URL с объектами, асинхронная "
+        "Urlmon - URL Moniker: связывание URL с объектами, асинхронная "
         "загрузка данных, поддержка MIME-типов, security zones."
     ),
     "iertutil.dll": (
-        "Iertutil — Internet Explorer Runtime Utility: вспомогательные "
+        "Iertutil - Internet Explorer Runtime Utility: вспомогательные "
         "функции для WinINet и UrlMon, включая работу со строками, "
         "памятью и кэшем."
     ),
     "dnsapi.dll": (
-        "Dnsapi — DNS Client API: преобразование имён хостов в IP-адреса "
+        "Dnsapi - DNS Client API: преобразование имён хостов в IP-адреса "
         "(DNS resolution), управление локальным кэшем DNS, асинхронные запросы."
     ),
     "iphlpapi.dll": (
-        "IpHlpApi — IP Helper API: информация о сетевых интерфейсах, "
+        "IpHlpApi - IP Helper API: информация о сетевых интерфейсах, "
         "таблице маршрутизации, ARP-таблице, статистика TCP/UDP, "
         "управление адаптерами."
     ),
     "mpr.dll": (
-        "Mpr — Multiple Provider Router: маршрутизация вызовов к сетевым "
+        "Mpr - Multiple Provider Router: маршрутизация вызовов к сетевым "
         "провайдерам (LAN Manager, NetWare)."
     ),
     "netapi32.dll": (
-        "Netapi32 — Network Management API: управление общими ресурсами, "
+        "Netapi32 - Network Management API: управление общими ресурсами, "
         "пользователями и группами домена, сетевыми соединениями."
     ),
     "wtsapi32.dll": (
-        "Wtsapi32 — Windows Terminal Services API: управление сеансами "
+        "Wtsapi32 - Windows Terminal Services API: управление сеансами "
         "удалённого рабочего стола (RDP), отправка сообщений между сессиями."
     ),
     "httpapi.dll": (
-        "Httpapi — HTTP Server API: реализация серверного HTTP-стека Windows. "
+        "Httpapi - HTTP Server API: реализация серверного HTTP-стека Windows. "
         "Предоставляет интерфейс для создания высокопроизводительных "
         "веб-серверов и обработки HTTP-запросов без участия IIS."
     ),
     "webio.dll": (
-        "Webio — Windows Web IO Library: низкоуровневая библиотека "
+        "Webio - Windows Web IO Library: низкоуровневая библиотека "
         "ввода-вывода для веб-протоколов. Обеспечивает асинхронную "
         "передачу данных по HTTP и HTTPS."
     ),
     "mswsock.dll": (
-        "MSWSock — Microsoft Winsock Service Provider: реализация "
+        "MSWSock - Microsoft Winsock Service Provider: реализация "
         "поставщика услуг Winsock от Microsoft. Предоставляет "
         "AcceptEx, ConnectEx и другие расширения Winsock 2."
     ),
     "wsock32.dll": (
-        "Wsock32 — Windows Sockets 1.1 API: оригинальная реализация "
+        "Wsock32 - Windows Sockets 1.1 API: оригинальная реализация "
         "Winsock для 16/32-битных приложений. В современных системах "
         "является оболочкой над ws2_32.dll для обратной совместимости."
     ),
     "rpcrt4.dll": (
-        "Rpcrt4 — Remote Procedure Call Runtime: реализация клиентской "
+        "Rpcrt4 - Remote Procedure Call Runtime: реализация клиентской "
         "и серверной частей RPC в Windows. Является фундаментом для "
         "множества системных служб."
     ),
     "authz.dll": (
-        "Authz — Authorization Framework: библиотека авторизации на основе "
+        "Authz - Authorization Framework: библиотека авторизации на основе "
         "ролей и политик для проверки прав доступа к ресурсам "
         "в распределённых системах."
     ),
     "mgmtapi.dll": (
-        "Mgmtapi — SNMP Management API: реализация протокола SNMP "
+        "Mgmtapi - SNMP Management API: реализация протокола SNMP "
         "(Simple Network Management Protocol) для управления сетевыми "
         "устройствами."
     ),
     "snmpapi.dll": (
-        "Snmpapi — SNMP Utility API: дополнительные функции для работы "
+        "Snmpapi - SNMP Utility API: дополнительные функции для работы "
         "с протоколом SNMP."
     ),
     "traffic.dll": (
-        "Traffic — Quality of Service Traffic Control: библиотека "
+        "Traffic - Quality of Service Traffic Control: библиотека "
         "управления качеством обслуживания (QoS) сетевого трафика."
     ),
     "mprapi.dll": (
-        "Mprapi — Multi-Protocol Routing API: интерфейс для "
+        "Mprapi - Multi-Protocol Routing API: интерфейс для "
         "администрирования служб маршрутизации и удалённого доступа "
         "(RRAS): VPN-подключения, маршрутизация между сетями, NAT."
     ),
     "rtutils.dll": (
-        "Rtutils — Routing Utilities: вспомогательная библиотека "
+        "Rtutils - Routing Utilities: вспомогательная библиотека "
         "для служб маршрутизации и удалённого доступа."
     ),
     "security.dll": (
-        "Security — RAS Security Library: библиотека безопасности "
+        "Security - RAS Security Library: библиотека безопасности "
         "для служб удалённого доступа."
     ),
     "clusapi.dll": (
-        "Clusapi — Cluster API: интерфейс для управления "
+        "Clusapi - Cluster API: интерфейс для управления "
         "отказоустойчивыми кластерами Windows."
     ),
     "resutils.dll": (
-        "Resutils — Cluster Resource Utilities: вспомогательная "
+        "Resutils - Cluster Resource Utilities: вспомогательная "
         "библиотека ресурсов кластера."
     ),
     "netshell.dll": (
-        "Netshell — Network Shell: библиотека поддержки утилиты "
+        "Netshell - Network Shell: библиотека поддержки утилиты "
         "netsh (Network Shell) для скриптового управления сетевыми "
         "конфигурациями."
     ),
     "fwpuclnt.dll": (
-        "Fwpuclnt — Windows Filtering Platform (WFP) User Mode Client: "
+        "Fwpuclnt - Windows Filtering Platform (WFP) User Mode Client: "
         "клиентская библиотека для взаимодействия с подсистемой "
         "фильтрации сетевых пакетов Windows."
     ),
     "dhcpsvc.dll": (
-        "Dhcpsvc — DHCP Server Service: реализация сервера DHCP "
+        "Dhcpsvc - DHCP Server Service: реализация сервера DHCP "
         "(Dynamic Host Configuration Protocol). Отвечает за автоматическое "
         "назначение IP-адресов клиентам."
     ),
     "dhcpclient.dll": (
-        "DHCP Client — библиотека DHCP-клиента для автоматического "
+        "DHCP Client - библиотека DHCP-клиента для автоматического "
         "получения конфигурации сети через протокол DHCP."
     ),
     "winrnr.dll": (
-        "WinRNR — Windows Resolution Name Service Provider. Обеспечивает "
+        "WinRNR - Windows Resolution Name Service Provider. Обеспечивает "
         "разрешение имён NetBIOS и DNS через стандартный Winsock API."
     ),
     "svchost.exe": (
-        "Service Host — svchost.exe. Универсальный процесс-хост для "
+        "Service Host - svchost.exe. Универсальный процесс-хост для "
         "Windows-служб. Одна из ключевых исполняемых систем Windows, "
         "используется для запуска разнообразных служб (DHCP, DNS, "
         "Windows Update, BFE и др.)."
     ),
     # --- Remote Access & Telephony ---
     "rasapi32.dll": (
-        "RASAPI32 — Remote Access API: управление VPN- и "
+        "RASAPI32 - Remote Access API: управление VPN- и "
         "dial-up-подключениями."
     ),
     "rasdlg.dll": (
-        "RASDLG — Remote Access Dialogs: диалоговые окна "
+        "RASDLG - Remote Access Dialogs: диалоговые окна "
         "для настройки удалённого доступа (RAS)."
     ),
     "tapi32.dll": (
-        "TAPI32 — Telephony API: управление телефонными "
+        "TAPI32 - Telephony API: управление телефонными "
         "линиями и модемами."
     ),
     "tapi3.dll": (
-        "TAPI3 — Telephony API 3.0: современная COM-версия TAPI."
+        "TAPI3 - Telephony API 3.0: современная COM-версия TAPI."
     ),
     # --- SMB / Network services ---
     "browser.dll": (
-        "Browser — Computer Browser Service: просмотр сетевых "
+        "Browser - Computer Browser Service: просмотр сетевых "
         "ресурсов (NetBIOS)."
     ),
     "trkwks.dll": (
-        "TrkWks — Distributed Link Tracking Client: отслеживание "
+        "TrkWks - Distributed Link Tracking Client: отслеживание "
         "перемещённых файлов в сети."
     ),
     "srvsvc.dll": (
-        "SrvSvc — Server Service: управление серверными "
+        "SrvSvc - Server Service: управление серверными "
         "службами SMB."
     ),
     "wkssvc.dll": (
-        "WksSvc — Workstation Service: управление рабочими "
+        "WksSvc - Workstation Service: управление рабочими "
         "станциями в сети."
     ),
     "dhcpcsvc.dll": (
@@ -785,35 +785,35 @@ _WINDOWS_NETWORK = {
         "RPC Name Service 4: устаревшая служба имён RPC."
     ),
     "netutils.dll": (
-        "NetUtils — Network Utility API: низкоуровневые проверки и "
+        "NetUtils - Network Utility API: низкоуровневые проверки и "
         "преобразования для NetApi (NetApiBufferFree, NetpIsRemote, "
         "работа с именами серверов/доменов). Клиентская поддержка netapi32."
     ),
     "samcli.dll": (
-        "SamCli — SAM Client RPC-обёртки: клиентские заглушки вызовов "
+        "SamCli - SAM Client RPC-обёртки: клиентские заглушки вызовов "
         "к Security Accounts Manager (перечисление пользователей/групп, "
         "информация об учётных записях) через netapi32."
     ),
     "srvcli.dll": (
-        "SrvCli — Server Service Client RPC-обёртки: клиентские вызовы "
+        "SrvCli - Server Service Client RPC-обёртки: клиентские вызовы "
         "службы сервера SMB (NetShareEnum, NetServerEnum, управление "
         "общими ресурсами и сессиями)."
     ),
     "wkscli.dll": (
-        "WksCli — Workstation Service Client RPC-обёртки: клиентские "
+        "WksCli - Workstation Service Client RPC-обёртки: клиентские "
         "вызовы службы рабочей станции (NetWkstaGetInfo, информация "
         "о домене и локальной машине)."
     ),
     # --- Bluetooth ---
     "bluetoothapis.dll": (
-        "BluetoothAPIs — Bluetooth API: поиск устройств поблизости "
+        "BluetoothAPIs - Bluetooth API: поиск устройств поблизости "
         "(BluetoothFindFirstDevice/BluetoothFindFirstRadio), получение "
         "сведений об адаптерах и устройствах (BLUETOOTH_DEVICE_INFO), "
         "аутентификация и сопряжение, выбор радиомодуля. Клиентский "
         "интерфейс над службой bthserv."
     ),
     "bthprops.cpl": (
-        "BthProps — Bluetooth Control Panel: элемент панели управления "
+        "BthProps - Bluetooth Control Panel: элемент панели управления "
         "и API-обёртки для устройств Bluetooth (сопряжение, передача "
         "файлов, свойства устройства). В приложениях встречается как "
         "импорт Bluetooth-функций наряду с bluetoothapis.dll."
@@ -826,109 +826,109 @@ _WINDOWS_NETWORK = {
 
 _WINDOWS_GRAPHICS = {
     "dxgi.dll": (
-        "DXGI — DirectX Graphics Infrastructure: управление адаптерами "
+        "DXGI - DirectX Graphics Infrastructure: управление адаптерами "
         "дисплея, цепочками переключения (swap chains), перечисление "
         "видеорежимов. Фундамент для Direct3D."
     ),
     "d3d11.dll": (
-        "D3D11 — Direct3D 11: трёхмерная графика и GPGPU-вычисления "
+        "D3D11 - Direct3D 11: трёхмерная графика и GPGPU-вычисления "
         "с использованием шейдерной модели 5.0. Поддержка тесселяции, "
         "compute-шейдеров, многопоточного рендеринга."
     ),
     "d3d12.dll": (
-        "D3D12 — Direct3D 12: низкоуровневый API трёхмерной графики "
+        "D3D12 - Direct3D 12: низкоуровневый API трёхмерной графики "
         "с явным управлением ресурсами и меньшими накладными расходами "
         "(ближе к «metal»). Поддержка шейдерной модели 6.x, ray-tracing, "
         "Variable Rate Shading, Mesh Shaders."
     ),
     "d3d12core.dll": (
-        "D3D12Core — Direct3D 12 Core: базовая реализация Direct3D 12, "
+        "D3D12Core - Direct3D 12 Core: базовая реализация Direct3D 12, "
         "содержащая функциональность для всех устройств Windows 10+."
     ),
     "d3d9.dll": (
-        "D3D9 — Direct3D 9: трёхмерная графика предыдущего поколения. "
+        "D3D9 - Direct3D 9: трёхмерная графика предыдущего поколения. "
         "Поддерживает шейдерную модель 3.0. Всё ещё широко используется "
         "для совместимости со старыми приложениями и играми."
     ),
     "d2d1.dll": (
-        "D2D1 — Direct2D: аппаратно-ускоренная двухмерная графика. "
+        "D2D1 - Direct2D: аппаратно-ускоренная двухмерная графика. "
         "Рендеринг векторной графики, текста, растровых изображений "
         "через GPU. Современная замена GDI/GDI+."
     ),
     "dwrite.dll": (
-        "DWrite — DirectWrite: высококачественный рендеринг текста "
+        "DWrite - DirectWrite: высококачественный рендеринг текста "
         "с поддержкой ClearType, OpenType-шрифтов, сложных скриптов."
     ),
     "normaliz.dll": (
-        "Normaliz — Unicode Normalization API (IDN): нормализация "
+        "Normaliz - Unicode Normalization API (IDN): нормализация "
         "Unicode-строк (NormalizeString) по стандартам NFC/NFD/NFKC/NFKD; "
         "используется международными доменными именами (IDNA) и "
         "подготовкой строк к сравнению. Разрешает зависимость от "
         "icu-библиотек для старых приложений."
     ),
     "usp10.dll": (
-        "USP10 — Uniscribe: обработка и отрисовка сложных скриптов "
+        "USP10 - Uniscribe: обработка и отрисовка сложных скриптов "
         "(Unscribe ScriptShape/ScriptTextOut): арабский, иврит, "
         "индийские письменности, тайский. Разбивка на глифы, шейпинг, "
         "двунаправленный текст (bidi). Предшественник DirectWrite; "
         "системная надстройка над GDI."
     ),
     "dcomp.dll": (
-        "DComp — DirectComposition: библиотека композиции визуального "
+        "DComp - DirectComposition: библиотека композиции визуального "
         "контента с аппаратным ускорением. Анимации, трансформации, "
         "прозрачность окон. Используется DWM."
     ),
     "opengl32.dll": (
-        "OpenGL32 — реализация OpenGL API для Windows. Обеспечивает "
+        "OpenGL32 - реализация OpenGL API для Windows. Обеспечивает "
         "доступ к аппаратно-ускоренной 2D/3D-графике через "
         "стандартизированный кроссплатформенный интерфейс."
     ),
     "glu32.dll": (
-        "GLU32 — OpenGL Utility Library: вспомогательные функции "
+        "GLU32 - OpenGL Utility Library: вспомогательные функции "
         "для OpenGL: построение квадратичных поверхностей (сферы, "
         "цилиндры), NURBS-кривые, матричные преобразования."
     ),
     "dxva2.dll": (
-        "DXVA2 — DirectX Video Acceleration 2.0. Предоставляет "
+        "DXVA2 - DirectX Video Acceleration 2.0. Предоставляет "
         "аппаратное ускорение декодирования видео (H.264, VC-1, "
         "MPEG-2) через DirectX."
     ),
     "dxdiagn.dll": (
-        "DXDiag — DirectX Diagnostic Tool: библиотека сбора "
+        "DXDiag - DirectX Diagnostic Tool: библиотека сбора "
         "информации о системе DirectX для диагностики и "
         "отчётов (dxdiag.exe)."
     ),
     "uiautomationcore.dll": (
-        "UIAutomationCore — UI Automation Core: инфраструктура "
+        "UIAutomationCore - UI Automation Core: инфраструктура "
         "для accessibility-инструментов (экранные дикторы, "
         "программы для людей с ограниченными возможностями)."
     ),
     "d3d10.dll": (
-        "D3D10 — Direct3D 10: трёхмерная графика поколения Windows Vista. "
+        "D3D10 - Direct3D 10: трёхмерная графика поколения Windows Vista. "
         "Целочисленная шейдерная модель 4.0, обязательный API-слой над "
         "dxgi.dll."
     ),
     "d3d10_1.dll": (
-        "D3D10.1 — Direct3D 10.1: расширение Direct3D 10 (шейдерная "
+        "D3D10.1 - Direct3D 10.1: расширение Direct3D 10 (шейдерная "
         "модель 4.1, улучшенный MSAA, independent blend per render target)."
     ),
     "d3d10core.dll": (
-        "D3D10Core — базовая реализация Direct3D 10: ядро создания "
+        "D3D10Core - базовая реализация Direct3D 10: ядро создания "
         "устройств и ресурсов, общее для d3d10.dll и d3d10_1.dll."
     ),
     "d3dcompiler_47.dll": (
-        "D3DCompiler 47 — компилятор HLSL-шейдеров в байт-код DirectX "
+        "D3DCompiler 47 - компилятор HLSL-шейдеров в байт-код DirectX "
         "(D3DCompile): компиляция, разбор и отражение (reflection) "
-        "шейдеров для Direct3D 9–12."
+        "шейдеров для Direct3D 9-12."
     ),
     "ksuser.dll": (
-        "KS User — Kernel Streaming User Library: пользовательская "
+        "KS User - Kernel Streaming User Library: пользовательская "
         "поддержка Kernel Streaming (KsCreatePin, KsInstantiateDevice) "
         "для аудио/видео-захвата и рендеринга в режиме ядра."
     ),
     "msdmo.dll": (
-        "MSDMO — DirectX Media Objects Runtime: регистрация и "
-        "перечисление DMO (DirectX Media Objects) — программных "
+        "MSDMO - DirectX Media Objects Runtime: регистрация и "
+        "перечисление DMO (DirectX Media Objects) - программных "
         "кодеков и DSP-эффектов аудио/видео."
     ),
 }
@@ -939,90 +939,90 @@ _WINDOWS_GRAPHICS = {
 
 _WINDOWS_MULTIMEDIA = {
     "winmm.dll": (
-        "WinMM — Windows Multimedia: аудио (waveOut, midiOut), "
+        "WinMM - Windows Multimedia: аудио (waveOut, midiOut), "
         "таймеры высокого разрешения (timeGetTime), управление "
         "джойстиком. Устаревший API, заменён DirectX / Media Foundation."
     ),
     "mf.dll": (
-        "MF — Media Foundation: базовая библиотека мультимедийного "
+        "MF - Media Foundation: базовая библиотека мультимедийного "
         "фреймворка Windows. Управление сессиями воспроизведения, "
         "топологией медиа-графов, синхронизацией потоков."
     ),
     "mfplat.dll": (
-        "MFPlat — Media Foundation Platform: платформенная "
+        "MFPlat - Media Foundation Platform: платформенная "
         "библиотека Media Foundation. Предоставляет базовые типы, "
         "интерфейсы (IMFMediaBuffer, IMFMediaSample, IMFAttributes) "
         "и вспомогательные функции."
     ),
     "mfreadwrite.dll": (
-        "MFReadWrite — Media Foundation Reader/Writer: высокоуровневый "
+        "MFReadWrite - Media Foundation Reader/Writer: высокоуровневый "
         "API для чтения и записи медиа-файлов (Sink Writer, "
         "Source Reader)."
     ),
     "mfsrcsnk.dll": (
-        "MFSrcSnk — Media Foundation Sources and Sinks: содержит "
+        "MFSrcSnk - Media Foundation Sources and Sinks: содержит "
         "стандартные источники (файлы, устройства захвата) "
         "и приёмники мультимедийных данных."
     ),
     "mfmpeg2srcsnk.dll": (
-        "MFMPEG2SrcSnk — Media Foundation MPEG-2 Source/Sink: "
+        "MFMPEG2SrcSnk - Media Foundation MPEG-2 Source/Sink: "
         "источники и приёмники для MPEG-2 контейнеров (TS, PS)."
     ),
     "mfh264enc.dll": (
-        "MFH264Enc — Media Foundation H.264 Video Encoder: "
+        "MFH264Enc - Media Foundation H.264 Video Encoder: "
         "программный кодировщик H.264/AVC для Media Foundation."
     ),
     "mfh264dec.dll": (
-        "MFH264Dec — Media Foundation H.264 Video Decoder: "
+        "MFH264Dec - Media Foundation H.264 Video Decoder: "
         "программный декодировщик H.264/AVC для Media Foundation."
     ),
     "mfperfhelper.dll": (
-        "MFPerfHelper — Media Foundation Performance Helper: "
+        "MFPerfHelper - Media Foundation Performance Helper: "
         "вспомогательная библиотека для сбора данных "
         "о производительности Media Foundation."
     ),
     "wmcodecdsp.dll": (
-        "WMCodecDSP — Windows Media Codec DSP: набор кодеков "
+        "WMCodecDSP - Windows Media Codec DSP: набор кодеков "
         "Windows Media Video/Audio в виде DSP-модулей (MFT). "
         "Содержит WMV9, WMA, VC-1 кодеки."
     ),
     "msmpeg2vdec.dll": (
-        "MSMPEG2VDec — Microsoft MPEG-2 Video Decoder: программный "
+        "MSMPEG2VDec - Microsoft MPEG-2 Video Decoder: программный "
         "декодировщик MPEG-2 видео, используемый Media Foundation "
         "и DShow."
     ),
     "msmpeg2enc.dll": (
-        "MSMPEG2Enc — Microsoft MPEG-2 Encoder: программный "
+        "MSMPEG2Enc - Microsoft MPEG-2 Encoder: программный "
         "кодировщик MPEG-2 видео."
     ),
     "evr.dll": (
-        "EVR — Enhanced Video Renderer: улучшенный видео-рендерер "
+        "EVR - Enhanced Video Renderer: улучшенный видео-рендерер "
         "на базе Direct3D. Замена старого VMR (Video Mixing Renderer). "
         "Поддерживает аппаратное ускорение и deinterlacing."
     ),
     "colorcnv.dll": (
-        "ColorCNV — Color Converter DSP: преобразование цветовых "
+        "ColorCNV - Color Converter DSP: преобразование цветовых "
         "пространств (RGB ↔ YUV, Y′CbCr ↔ Y′PbPr и др.) "
         "для мультимедийных pipeline."
     ),
     "resampledmo.dll": (
-        "ResampleDMO — Audio Resampler DMO: преобразование частоты "
+        "ResampleDMO - Audio Resampler DMO: преобразование частоты "
         "дискретизации аудио (sample rate conversion) для Media "
         "Foundation и DirectShow."
     ),
     "avrt.dll": (
-        "AVRT — Multimedia Class Scheduler Service: библиотека "
+        "AVRT - Multimedia Class Scheduler Service: библиотека "
         "для управления приоритетами аудио/видео потоков "
         "(MMCSS). Обеспечивает плавное воспроизведение без "
         "прерываний."
     ),
     "audioses.dll": (
-        "AudioSes — Audio Session API: библиотека управления "
+        "AudioSes - Audio Session API: библиотека управления "
         "аудиосессиями Windows. Предоставляет программам доступ "
         "к управлению громкостью и маршрутизацией звука."
     ),
     "mmdevapi.dll": (
-        "MMDevApi — Multimedia Device API: библиотека перечисления "
+        "MMDevApi - Multimedia Device API: библиотека перечисления "
         "и управления аудиоустройствами (динамики, наушники, "
         "микрофоны). Фундамент для Core Audio API."
     ),
@@ -1034,138 +1034,138 @@ _WINDOWS_MULTIMEDIA = {
 
 _WINDOWS_RUNTIME = {
     "msvcrt.dll": (
-        "MSVCRT — Microsoft Visual C Runtime: стандартная библиотека "
+        "MSVCRT - Microsoft Visual C Runtime: стандартная библиотека "
         "C (printf, malloc, fopen, memcpy) для приложений, "
         "скомпилированных с Visual C++. Системная версия."
     ),
     "vcruntime140.dll": (
-        "VCRuntime140 — Visual C++ 2015-2022 Runtime: базовые функции "
+        "VCRuntime140 - Visual C++ 2015-2022 Runtime: базовые функции "
         "времени выполнения (инициализация/завершение потока, "
         "проброс исключений, проверки безопасности)."
     ),
     "vcruntime140_1.dll": (
-        "VCRuntime140_1 — Microsoft C Runtime Library: расширенная "
+        "VCRuntime140_1 - Microsoft C Runtime Library: расширенная "
         "версия vcruntime140.dll с дополнительными функциями "
         "поддержки компилятора."
     ),
     "msvcp140.dll": (
-        "MSVCP140 — Microsoft Visual C++ 2015-2022 Standard Library: "
+        "MSVCP140 - Microsoft Visual C++ 2015-2022 Standard Library: "
         "реализация STL (std::string, std::vector, std::map), "
         "ввод/вывод (iostream), работа с файлами."
     ),
     "msvcp140_1.dll": (
-        "MSVCP140_1 — Microsoft C++ Standard Library Extension: "
+        "MSVCP140_1 - Microsoft C++ Standard Library Extension: "
         "дополнительная библиотека STL, введённая в Visual Studio "
         "2017 версии 15.6."
     ),
     "msvcp140_2.dll": (
-        "MSVCP140_2 — Microsoft C++ Standard Library Extension 2: "
+        "MSVCP140_2 - Microsoft C++ Standard Library Extension 2: "
         "второй уровень расширения STL для более поздних обновлений "
         "Visual Studio 2017/2019."
     ),
     "msvcp140_atomic_wait.dll": (
-        "MSVCP140_Atomic_Wait — Microsoft C++ Atomic Wait Library: "
+        "MSVCP140_Atomic_Wait - Microsoft C++ Atomic Wait Library: "
         "специализированная библиотека для поддержки атомарных "
         "операций ожидания в C++20."
     ),
     "msvcp140_codecvt_ids.dll": (
-        "MSVCP140_Codecvt_IDs — Microsoft C Runtime Library codecvt_ids: "
+        "MSVCP140_Codecvt_IDs - Microsoft C Runtime Library codecvt_ids: "
         "поддержка идентификации кодировок символов (codecvt facets) "
         "в стандартной библиотеке C++."
     ),
     "ucrtbase.dll": (
-        "UCRTBase — Universal CRT: универсальная библиотека времени "
+        "UCRTBase - Universal CRT: универсальная библиотека времени "
         "выполнения C для Windows 10+. Включает стандартные функции "
         "C99, математические функции, locale-поддержку."
     ),
     "concrt140.dll": (
-        "ConcRT140 — Concurrency Runtime: поддержка параллельных "
-        "вычислений (PPL — Parallel Patterns Library), асинхронных "
+        "ConcRT140 - Concurrency Runtime: поддержка параллельных "
+        "вычислений (PPL - Parallel Patterns Library), асинхронных "
         "операций, агентов. Часть Visual C++ Runtime."
     ),
     "vccorlib140.dll": (
-        "VCCorLib140 — Microsoft VC WinRT Core Library: библиотека "
+        "VCCorLib140 - Microsoft VC WinRT Core Library: библиотека "
         "времени выполнения для управляемого кода C++/CX и C++/CLI, "
         "обеспечивающая поддержку Windows Runtime (WinRT)."
     ),
     "vcomp140.dll": (
-        "VCOMP140 — Microsoft C/C++ OpenMP Runtime: библиотека "
+        "VCOMP140 - Microsoft C/C++ OpenMP Runtime: библиотека "
         "поддержки параллельных вычислений по стандарту OpenMP."
     ),
     "vcamp140.dll": (
-        "VCAMP140 — Microsoft C++ AMP Runtime: библиотека поддержки "
+        "VCAMP140 - Microsoft C++ AMP Runtime: библиотека поддержки "
         "технологии C++ Accelerated Massive Parallelism (C++ AMP) "
         "для параллельных вычислений на GPU."
     ),
     "atl.dll": (
-        "ATL — Active Template Library: набор шаблонных классов C++ "
+        "ATL - Active Template Library: набор шаблонных классов C++ "
         "для COM-разработки. Упрощает создание COM-объектов, "
         "ActiveX-компонентов."
     ),
     "atl100.dll": (
-        "ATL100 — Visual C++ ATL 10.0: версия ATL для Visual Studio 2010."
+        "ATL100 - Visual C++ ATL 10.0: версия ATL для Visual Studio 2010."
     ),
     "mfc140.dll": (
-        "MFC140 — Microsoft Foundation Classes Library: основная "
+        "MFC140 - Microsoft Foundation Classes Library: основная "
         "библиотека MFC для Visual Studio 2015-2022. Предоставляет "
         "объектно-ориентированную обёртку над Win32 API."
     ),
     "mfc140u.dll": (
-        "MFC140U — Microsoft Foundation Classes Library (Unicode): "
+        "MFC140U - Microsoft Foundation Classes Library (Unicode): "
         "Unicode-версия библиотеки MFC140."
     ),
     "mfcm140.dll": (
-        "MFCM140 — MFC Managed Library: управляемая библиотека MFC "
+        "MFCM140 - MFC Managed Library: управляемая библиотека MFC "
         "для приложений, использующих Windows Forms Controls."
     ),
     "mfcmifc140.dll": (
-        "MFCMifc140 — MFC Managed Interfaces Library: библиотека "
+        "MFCMifc140 - MFC Managed Interfaces Library: библиотека "
         "управляемых интерфейсов для MFC."
     ),
-    # --- Устаревшие VC++ runtime (VS 2005–2013) ---
+    # --- Устаревшие VC++ runtime (VS 2005-2013) ---
     "msvcr80.dll": (
-        "MSVCR80 — Visual C++ 2005 C Runtime: стандартная библиотека C "
+        "MSVCR80 - Visual C++ 2005 C Runtime: стандартная библиотека C "
         "(printf, malloc, fopen) для приложений VS 2005."
     ),
     "msvcr90.dll": (
-        "MSVCR90 — Visual C++ 2008 C Runtime: стандартная библиотека C "
+        "MSVCR90 - Visual C++ 2008 C Runtime: стандартная библиотека C "
         "для приложений VS 2008."
     ),
     "msvcr100.dll": (
-        "MSVCR100 — Visual C++ 2010 C Runtime: стандартная библиотека C, "
+        "MSVCR100 - Visual C++ 2010 C Runtime: стандартная библиотека C, "
         "последняя версия, содержащая и C-функции, и STL-совместимую обвязку."
     ),
     "msvcr110.dll": (
-        "MSVCR110 — Visual C++ 2012 C Runtime: стандартная библиотека C "
+        "MSVCR110 - Visual C++ 2012 C Runtime: стандартная библиотека C "
         "для приложений VS 2012."
     ),
     "msvcr120.dll": (
-        "MSVCR120 — Visual C++ 2013 C Runtime: последняя монолитная "
+        "MSVCR120 - Visual C++ 2013 C Runtime: последняя монолитная "
         "версия C Runtime; с VS 2015 разделена на ucrtbase + vcruntime140."
     ),
     "msvcp80.dll": (
-        "MSVCP80 — Visual C++ 2005 Standard Library: реализация STL "
+        "MSVCP80 - Visual C++ 2005 Standard Library: реализация STL "
         "(std::string, std::vector, iostream) для VS 2005."
     ),
     "msvcp90.dll": (
-        "MSVCP90 — Visual C++ 2008 Standard Library: STL для VS 2008."
+        "MSVCP90 - Visual C++ 2008 Standard Library: STL для VS 2008."
     ),
     "msvcp100.dll": (
-        "MSVCP100 — Visual C++ 2010 Standard Library: STL для VS 2010."
+        "MSVCP100 - Visual C++ 2010 Standard Library: STL для VS 2010."
     ),
     "msvcp110.dll": (
-        "MSVCP110 — Visual C++ 2012 Standard Library: STL для VS 2012."
+        "MSVCP110 - Visual C++ 2012 Standard Library: STL для VS 2012."
     ),
     "msvcp120.dll": (
-        "MSVCP120 — Visual C++ 2013 Standard Library: STL для VS 2013."
+        "MSVCP120 - Visual C++ 2013 Standard Library: STL для VS 2013."
     ),
     "mfc42.dll": (
-        "MFC42 — Microsoft Foundation Classes 4.2/6.0: классическая "
+        "MFC42 - Microsoft Foundation Classes 4.2/6.0: классическая "
         "библиотека MFC для приложений VS 6.0, широко используется "
         "в legacy-приложениях."
     ),
     "mfc42u.dll": (
-        "MFC42U — Unicode-версия библиотеки MFC 4.2/6.0."
+        "MFC42U - Unicode-версия библиотеки MFC 4.2/6.0."
     ),
 }
 
@@ -1175,59 +1175,59 @@ _WINDOWS_RUNTIME = {
 
 _WINDOWS_DOTNET = {
     "mscoree.dll": (
-        "MSCoree — .NET Runtime Execution Engine: точка входа "
+        "MSCoree - .NET Runtime Execution Engine: точка входа "
         "для запуска управляемого кода .NET Framework (CLR). "
         "Загрузчик среды выполнения .NET."
     ),
     "mscorlib.dll": (
-        "MSCorLib — Multilanguage Standard Common Object Runtime "
+        "MSCorLib - Multilanguage Standard Common Object Runtime "
         "Library: основная библиотека классов .NET Framework. "
         "Содержит базовые типы (System.Object, System.String, "
         "System.Int32) и фундаментальные классы."
     ),
     "clr.dll": (
-        "CLR — Common Language Runtime: исполняющая среда .NET "
+        "CLR - Common Language Runtime: исполняющая среда .NET "
         "Framework. Реализует JIT-компиляцию, сборку мусора, "
         "безопасность типов, управление потоками."
     ),
     "clrjit.dll": (
-        "CLRJIT — CLR Just-In-Time Compiler: компилятор MSIL "
+        "CLRJIT - CLR Just-In-Time Compiler: компилятор MSIL "
         "(CIL) в машинный код во время выполнения. Отвечает "
         "за оптимизацию и генерацию нативного кода."
     ),
     "dfdll.dll": (
-        "DFDLL — .NET Framework Delegation: библиотека для "
+        "DFDLL - .NET Framework Delegation: библиотека для "
         "поддержки делегирования вызовов и маршалинга "
         "в .NET Framework."
     ),
     "mscordacwks.dll": (
-        "MSCordacWks — .NET Data Access Component (Workstation): "
+        "MSCordacWks - .NET Data Access Component (Workstation): "
         "библиотека отладки управляемого кода, используемая "
         "отладчиками (WinDbg, Visual Studio) для доступа "
         "к внутренним структурам CLR."
     ),
     "sos.dll": (
-        "SOS — Son of Strike: расширение отладчика для CLR "
+        "SOS - Son of Strike: расширение отладчика для CLR "
         "(Debugging Extension). Предоставляет команды !dumpobj, "
         "!clrstack, !gcroot для анализа управляемой памяти."
     ),
     "hostfxr.dll": (
-        "HostFxr — .NET Host Framework Resolver: библиотека "
+        "HostFxr - .NET Host Framework Resolver: библиотека "
         "для определения версии .NET Runtime и загрузки "
         "соответствующей среды выполнения."
     ),
     "hostpolicy.dll": (
-        "HostPolicy — .NET Host Policy: библиотека управления "
+        "HostPolicy - .NET Host Policy: библиотека управления "
         "политиками загрузки .NET Core / .NET 5+. Определяет "
         "какую версию фреймворка использовать."
     ),
     "coreclr.dll": (
-        "CoreCLR — .NET Core / .NET 5+ Common Language Runtime: "
+        "CoreCLR - .NET Core / .NET 5+ Common Language Runtime: "
         "современная кроссплатформенная исполняющая среда .NET. "
         "Реализует JIT (RyuJIT), сборку мусора, метаданные."
     ),
     "msquic.dll": (
-        "MsQuic — Microsoft QUIC Library: реализация протокола "
+        "MsQuic - Microsoft QUIC Library: реализация протокола "
         "QUIC (RFC 9000) от Microsoft. Используется .NET для "
         "HTTP/3 и ASP.NET Core для современных сетевых соединений."
     ),
@@ -1240,79 +1240,79 @@ _WINDOWS_DOTNET = {
 _WINDOWS_SYSTEM_SERVICES = {
     # --- Process / Debug ---
     "psapi.dll": (
-        "PSAPI — Process Status API: получение информации "
+        "PSAPI - Process Status API: получение информации "
         "о процессах и потоках, включая список загруженных "
         "модулей, использование памяти, количество handles."
     ),
     "dbghelp.dll": (
-        "DbgHelp — Debug Help Library: функции для работы "
+        "DbgHelp - Debug Help Library: функции для работы "
         "с отладочной информацией (символы, формат PDB), "
         "анализ стека вызовов, создание минидампов."
     ),
     # --- Power ---
     "powrprof.dll": (
-        "PowrProf — Power Profile: управление схемами "
+        "PowrProf - Power Profile: управление схемами "
         "электропитания, запрос состояния батареи, "
         "управление спящим режимом."
     ),
     # --- Setup / Devices ---
     "setupapi.dll": (
-        "SetupAPI — Setup API: установка и удаление устройств "
+        "SetupAPI - Setup API: установка и удаление устройств "
         "Plug and Play, драйверов, классов устройств."
     ),
     "newdev.dll": (
-        "NewDev — Device Installation DLL: библиотека для "
+        "NewDev - Device Installation DLL: библиотека для "
         "установки и обновления драйверов устройств "
         "(часть SetupAPI)."
     ),
     # --- Printing ---
     "winspool.drv": (
-        "Winspool.drv — Windows Print Spooler Driver: управление "
+        "Winspool.drv - Windows Print Spooler Driver: управление "
         "принтерами, очередями печати и заданиями печати."
     ),
     # --- Performance ---
     "pdh.dll": (
-        "PDH — Performance Data Helper: сбор данных "
+        "PDH - Performance Data Helper: сбор данных "
         "о производительности системы (счётчики CPU, "
         "памяти, дисков, сети)."
     ),
     "perfos.dll": (
-        "PerfOS — Performance Counter DLL for OS: поставщик "
+        "PerfOS - Performance Counter DLL for OS: поставщик "
         "данных производительности для ОС (системные счётчики)."
     ),
     # --- SFC ---
     "sfc.dll": (
-        "SFC — System File Checker: проверка целостности "
+        "SFC - System File Checker: проверка целостности "
         "системных файлов Windows."
     ),
     "sfc_os.dll": (
-        "SFC_OS — System File Checker OS Support: низкоуровневый "
+        "SFC_OS - System File Checker OS Support: низкоуровневый "
         "доступ к защищённым системным файлам."
     ),
     # --- Compatibility ---
     "apphelp.dll": (
-        "AppHelp — Application Compatibility: реализация механизма "
+        "AppHelp - Application Compatibility: реализация механизма "
         "совместимости приложений (shim engine). Позволяет старым "
         "приложениям работать на новых версиях Windows."
     ),
     "acgenral.dll": (
-        "ACGenral — Application Compatibility General: общая "
+        "ACGenral - Application Compatibility General: общая "
         "библиотека совместимости приложений, содержащая "
         "часть базы данных shim-исправлений."
     ),
     "aclayers.dll": (
-        "ACLayers — Application Compatibility Layers: библиотека, "
+        "ACLayers - Application Compatibility Layers: библиотека, "
         "реализующая отдельные слои совместимости приложений."
     ),
     # --- Profiles ---
     "profapi.dll": (
-        "ProfApi — Profile API: управление пользовательскими "
+        "ProfApi - Profile API: управление пользовательскими "
         "профилями: загрузка/выгрузка, управление реестром "
         "профиля, уведомления об изменениях."
     ),
     # --- Win32 User Mode Kernel Interface ---
     "win32u.dll": (
-        "Win32U — Windows 32-bit User-mode: содержит реализацию "
+        "Win32U - Windows 32-bit User-mode: содержит реализацию "
         "части user32 и gdi32 для поддержки UWP-приложений "
         "и изоляции syscall-интерфейса."
     ),
@@ -1324,237 +1324,237 @@ _WINDOWS_SYSTEM_SERVICES = {
     ),
     # --- WMI (Windows Management Instrumentation) ---
     "wbemprox.dll": (
-        "WBEMProx — WMI Provider Proxy: прокси-библиотека WMI, "
+        "WBEMProx - WMI Provider Proxy: прокси-библиотека WMI, "
         "обеспечивающая межпроцессное взаимодействие между "
         "WMI-клиентами и провайдерами."
     ),
     "wbemcomn.dll": (
-        "WBEMComn — WMI Common: общая библиотека WMI, содержащая "
+        "WBEMComn - WMI Common: общая библиотека WMI, содержащая "
         "базовые утилиты, менеджер контекстов и общие интерфейсы "
         "(IWbemContext, IWbemClassObject)."
     ),
     "wbemsvc.dll": (
-        "WBEMSvc — WMI Service: библиотека-загрузчик WMI-"
+        "WBEMSvc - WMI Service: библиотека-загрузчик WMI-"
         "провайдеров. Отвечает за обнаружение и активацию "
         "провайдеров WMI."
     ),
     "fastprox.dll": (
-        "FastProx — Fast WMI Provider: оптимизированный "
+        "FastProx - Fast WMI Provider: оптимизированный "
         "WMI-провайдер для работы с реестром, процессами "
         "и системной информацией."
     ),
     "wmi.dll": (
-        "WMI — Windows Management Instrumentation: основная "
+        "WMI - Windows Management Instrumentation: основная "
         "библиотека WMI, содержащая реализацию CIM Object "
         "Manager и репозитория WMI."
     ),
     # --- Windows Event Log / Tracing (ETW) ---
     "wevtapi.dll": (
-        "WEvtAPI — Windows Event Log API: библиотека для "
+        "WEvtAPI - Windows Event Log API: библиотека для "
         "чтения, записи и управления журналами событий "
         "Windows (Event Log)."
     ),
     "es.dll": (
-        "ES — Event Tracing for Windows (ETW): библиотека "
+        "ES - Event Tracing for Windows (ETW): библиотека "
         "системного трассирования событий. Используется "
         "для профилирования и диагностики системы."
     ),
     "tdh.dll": (
-        "TDH — Trace Data Helper: библиотека для декодирования "
+        "TDH - Trace Data Helper: библиотека для декодирования "
         "и анализа данных ETW-трассировки. Предоставляет "
         "доступ к метаданным событий (провайдеры, манифесты)."
     ),
     # --- Windows Error Reporting (WER) ---
     "wer.dll": (
-        "WER — Windows Error Reporting: библиотека сбора "
+        "WER - Windows Error Reporting: библиотека сбора "
         "и отправки отчётов об ошибках (crash dumps) "
         "в Microsoft."
     ),
     "faultrep.dll": (
-        "FaultRep — Fault Reporting: библиотека генерации "
+        "FaultRep - Fault Reporting: библиотека генерации "
         "отчётов об ошибках (Watson). Создаёт минидампы "
         "и контекстные данные для WER."
     ),
     "wermgr.exe": (
-        "WER Manager — werMgr.exe: диспетчер Windows Error "
+        "WER Manager - werMgr.exe: диспетчер Windows Error "
         "Reporting. Обрабатывает очередь отчётов об ошибках, "
         "управляет отправкой и хранением минидампов."
     ),
     # --- Windows Update ---
     "wuapi.dll": (
-        "WUAPI — Windows Update Agent API: библиотека для "
+        "WUAPI - Windows Update Agent API: библиотека для "
         "программного управления обновлениями Windows: "
         "поиск, загрузка, установка обновлений."
     ),
     "wuaueng.dll": (
-        "WUAUEng — Windows Update Agent Engine: движок "
+        "WUAUEng - Windows Update Agent Engine: движок "
         "Windows Update, реализующий синхронизацию "
         "с серверами Microsoft Update и применение обновлений."
     ),
     "wucltux.dll": (
-        "WUCLTUX — Windows Update Client UI: библиотека "
+        "WUCLTUX - Windows Update Client UI: библиотека "
         "пользовательского интерфейса для Windows Update "
         "(Параметры → Центр обновлений)."
     ),
     "wuweb.dll": (
-        "WUWeb — Windows Update Web: библиотека для "
+        "WUWeb - Windows Update Web: библиотека для "
         "интеграции веб-интерфейса Windows Update."
     ),
     "cbsapi.dll": (
-        "CBSApi — Component Based Servicing API: библиотека "
+        "CBSApi - Component Based Servicing API: библиотека "
         "API для обслуживания компонентов Windows, используемая "
         "DISM и Windows Update."
     ),
     # --- Windows Installer ---
     "msi.dll": (
-        "MSI — Windows Installer: библиотека установки "
+        "MSI - Windows Installer: библиотека установки "
         "приложений в формате MSI (Microsoft Installer "
         "Package). Реализует транзакционную установку, "
         "откат, рекламу."
     ),
     "msiexec.exe": (
-        "MSIExec — Windows Installer Engine: исполняемый "
+        "MSIExec - Windows Installer Engine: исполняемый "
         "файл установщика Windows (Windows Installer). "
         "Обрабатывает .msi и .msp пакеты."
     ),
     "msihnd.dll": (
-        "MSI Hand — Windows Installer Handler: библиотека-"
+        "MSI Hand - Windows Installer Handler: библиотека-"
         "обработчик файлов .msi для shell-контекстных меню."
     ),
     "msimsg.dll": (
-        "MSI Msg — Windows Installer Message: библиотека "
+        "MSI Msg - Windows Installer Message: библиотека "
         "строковых сообщений и локализации для Windows "
         "Installer."
     ),
     # --- WIC (Windows Imaging Component) ---
     "windowscodecs.dll": (
-        "WindowsCodecs — Windows Imaging Component (WIC): "
+        "WindowsCodecs - Windows Imaging Component (WIC): "
         "фреймворк для работы с изображениями. Предоставляет "
         "единый API для кодирования/декодирования JPEG, PNG, "
         "TIFF, GIF, BMP, HD Photo и др."
     ),
     "windowscodecsext.dll": (
-        "WindowsCodecsExt — Windows Imaging Component Extensions: "
+        "WindowsCodecsExt - Windows Imaging Component Extensions: "
         "расширения WIC для дополнительных форматов "
         "изображений, включая метаданные EXIF и IPTC."
     ),
     # --- Windows Search / Indexing ---
     "tquery.dll": (
-        "TQuery — Indexing Query: библиотека выполнения "
+        "TQuery - Indexing Query: библиотека выполнения "
         "запросов к индексу Windows Search. Обрабатывает "
         "поисковые запросы и возвращает результаты."
     ),
     "msscntrs.dll": (
-        "MSSCntrs — Microsoft Search Counters: поставщик "
+        "MSSCntrs - Microsoft Search Counters: поставщик "
         "счётчиков производительности для Windows Search."
     ),
     "mssrch.dll": (
-        "MSSrch — Microsoft Search: основная библиотека "
+        "MSSrch - Microsoft Search: основная библиотека "
         "движка индексации Windows Search."
     ),
     "searchfolder.dll": (
-        "SearchFolder — Search Folder: библиотека для "
+        "SearchFolder - Search Folder: библиотека для "
         "виртуальных папок поиска (Saved Search Files .search-ms)."
     ),
     # --- Thumbnails ---
     "thumbcache.dll": (
-        "ThumbCache — Thumbnail Cache: библиотека кэширования "
+        "ThumbCache - Thumbnail Cache: библиотека кэширования "
         "миниатюр (thumbnails) файлов и изображений для "
         "Проводника Windows."
     ),
     # --- Firewall API ---
     "firewallapi.dll": (
-        "FirewallAPI — Windows Firewall API: библиотека "
+        "FirewallAPI - Windows Firewall API: библиотека "
         "программного управления брандмауэром Windows "
         "(Windows Defender Firewall with Advanced Security)."
     ),
     "netfw.dll": (
-        "NetFw — Network Firewall: библиотека для "
+        "NetFw - Network Firewall: библиотека для "
         "управления правилами брандмауэра Windows "
         "через COM-интерфейс (HNetCfg)."
     ),
     # --- Time / NTP ---
     "w32time.dll": (
-        "W32Time — Windows Time Service: библиотека службы "
+        "W32Time - Windows Time Service: библиотека службы "
         "точного времени Windows. Реализует протокол NTP "
         "для синхронизации системного времени."
     ),
     # --- Volume Shadow Copy ---
     "vssapi.dll": (
-        "VssApi — Volume Shadow Copy Service API: библиотека "
+        "VssApi - Volume Shadow Copy Service API: библиотека "
         "для создания теневых копий томов (Volume Shadow "
         "Copy), используемая для резервного копирования."
     ),
     # --- Data Deduplication ---
     "ddpapi.dll": (
-        "DDPApi — Data Deduplication API: библиотека для "
+        "DDPApi - Data Deduplication API: библиотека для "
         "дедупликации данных на томе, используемая "
         "в Windows Server."
     ),
     # --- Disk Management ---
     "diskdyn.dll": (
-        "DiskDyn — Dynamic Disk Library: библиотека для "
+        "DiskDyn - Dynamic Disk Library: библиотека для "
         "управления динамическими дисками и томами "
         "Windows (RAID-0, RAID-1, RAID-5)."
     ),
     # --- Configuration & Version ---
     "cfgmgr32.dll": (
-        "CfgMgr32 — Configuration Manager API: управление "
+        "CfgMgr32 - Configuration Manager API: управление "
         "устройствами Plug and Play, конфигурацией оборудования, "
         "запрос списка устройств и их свойств."
     ),
     "shcore.dll": (
-        "SHCore — Shell Core: базовые функции оболочки Windows, "
+        "SHCore - Shell Core: базовые функции оболочки Windows, "
         "включая DPI-адаптацию (SetProcessDpiAwareness), "
         "работу с display-режимами."
     ),
     "version.dll": (
-        "Version — Version API: получение информации о версии "
+        "Version - Version API: получение информации о версии "
         "файлов (GetFileVersionInfo), чтение ресурсов VERSIONINFO."
     ),
     "verifier.dll": (
-        "Verifier — Application Verifier Runtime: проверка "
+        "Verifier - Application Verifier Runtime: проверка "
         "приложений на ошибки работы с памятью и дескрипторами."
     ),
     "imagehlp.dll": (
-        "ImageHlp — Image Helper Library: работа с PE-образами "
+        "ImageHlp - Image Helper Library: работа с PE-образами "
         "(MapAndLoad), получение информации о загруженных модулях."
     ),
     "dbgcore.dll": (
-        "DbgCore — Debug Core: базовые функции отладки и "
+        "DbgCore - Debug Core: базовые функции отладки и "
         "создания минидампов, используемые dbghelp.dll."
     ),
     "spoolss.dll": (
-        "SpoolSS — Print Spooler API: управление очередями "
+        "SpoolSS - Print Spooler API: управление очередями "
         "печати, принтерами, драйверами печати."
     ),
     "devobj.dll": (
-        "DevObj — Device Information API: перечисление и получение "
+        "DevObj - Device Information API: перечисление и получение "
         "свойств устройств (DevObjCreateDeviceInfoList, DevObjGetDeviceProperty), "
         "современная замена setupapi-функций PnP."
     ),
     "cabinet.dll": (
-        "Cabinet — Cabinet File API: создание и распаковка .cab-архивов "
+        "Cabinet - Cabinet File API: создание и распаковка .cab-архивов "
         "(FCI/FDI-интерфейсы). Используется установщиками и Windows Update."
     ),
     "fltlib.dll": (
-        "FltLib — Filter Manager User-Mode Library: взаимодействие "
+        "FltLib - Filter Manager User-Mode Library: взаимодействие "
         "пользовательских компонентов с минифильтр-драйверами файловой "
         "системы (FilterConnectCommunicationPort, FilterSendMessage). "
         "Используется антивирусами, DLP и системами мониторинга."
     ),
     "cryptbase.dll": (
-        "CryptBase — базовые криптографические примитивы CNG для ранней "
+        "CryptBase - базовые криптографические примитивы CNG для ранней "
         "загрузки системы. Экспортирует SystemFunction036 (RtlGenRandom) "
         "и функции инициализации провайдера ядра."
     ),
     "wldp.dll": (
-        "WLDP — Windows Lockdown Policy: проверка целостности и подписи "
+        "WLDP - Windows Lockdown Policy: проверка целостности и подписи "
         "скриптов/бинарников (WldpIsClassInApprovedList, WldpQueryDynamicCodeTrust). "
         "Часть защиты Smart App Control / SGRM."
     ),
     "policymanager.dll": (
-        "PolicyManager — Windows Policy Manager: доступ к политикам MDM и "
+        "PolicyManager - Windows Policy Manager: доступ к политикам MDM и "
         "системным CSP (PolicyConfigurations), чтение параметров, заданных "
         "через Intune/групповые политики."
     ),
@@ -1566,27 +1566,27 @@ _WINDOWS_SYSTEM_SERVICES = {
 
 _WINDOWS_USB_DEVICE = {
     "winusb.dll": (
-        "WinUSB — Windows USB Driver API: предоставляет "
+        "WinUSB - Windows USB Driver API: предоставляет "
         "приложениям прямой доступ к USB-устройствам "
         "без написания пользовательского драйвера."
     ),
     "hid.dll": (
-        "HID — Human Interface Device API: взаимодействие "
+        "HID - Human Interface Device API: взаимодействие "
         "с HID-устройствами (клавиатуры, мыши, джойстики, "
         "сенсорные панели) через протокол USB HID."
     ),
     "usbd.sys": (
-        "USBD — USB Bus Driver: драйвер шины USB в режиме "
+        "USBD - USB Bus Driver: драйвер шины USB в режиме "
         "ядра. Управляет USB-контроллером и устройствами "
         "на шине."
     ),
     "usbhub.sys": (
-        "USBHub — USB Hub Driver: драйвер USB-концентратора. "
+        "USBHub - USB Hub Driver: драйвер USB-концентратора. "
         "Управляет подключением и отключением USB-устройств, "
         "распределением питания по портам."
     ),
     "usbccgp.sys": (
-        "USBCCGP — USB Composite Device Generic Parent Driver: "
+        "USBCCGP - USB Composite Device Generic Parent Driver: "
         "родительский драйвер для составных USB-устройств "
         "(например, веб-камера + микрофон)."
     ),
@@ -1613,237 +1613,237 @@ _WINDOWS_API_SETS = {
         "Windows."
     ),
     "api-ms-win-core-console-l1-1-0": (
-        "API Set: Core Console — виртуальная DLL для функций "
+        "API Set: Core Console - виртуальная DLL для функций "
         "управления консолью (AllocConsole, WriteConsole, "
         "ReadConsole, GetStdHandle)."
     ),
     "api-ms-win-core-string-l1-1-0": (
-        "API Set: Core String — виртуальная DLL для функций "
+        "API Set: Core String - виртуальная DLL для функций "
         "работы со строками (lstrcmp, lstrcpy, wcslen, "
         "MultiByteToWideChar)."
     ),
     "api-ms-win-core-errorhandling-l1-1-0": (
-        "API Set: Core Error Handling — виртуальная DLL для "
+        "API Set: Core Error Handling - виртуальная DLL для "
         "функций обработки ошибок (GetLastError, SetLastError, "
         "SetUnhandledExceptionFilter)."
     ),
     "api-ms-win-core-timezone-l1-1-0": (
-        "API Set: Core TimeZone — виртуальная DLL для функций "
+        "API Set: Core TimeZone - виртуальная DLL для функций "
         "работы с часовыми поясами (GetTimeZoneInformation, "
         "SystemTimeToTzSpecificLocalTime)."
     ),
     "api-ms-win-core-fibers-l1-1-0": (
-        "API Set: Core Fibers — виртуальная DLL для функций "
+        "API Set: Core Fibers - виртуальная DLL для функций "
         "управления файберами (легковесные потоки в "
         "пользовательском режиме: CreateFiber, SwitchToFiber)."
     ),
     "api-ms-win-core-comm-l1-1-0": (
-        "API Set: Core Communications — виртуальная DLL для "
+        "API Set: Core Communications - виртуальная DLL для "
         "функций работы с последовательными портами (COM-порты: "
         "CreateFile для COM, SetCommState, WaitCommEvent)."
     ),
     "api-ms-win-core-debug-l1-1-0": (
-        "API Set: Core Debug — виртуальная DLL для функций "
+        "API Set: Core Debug - виртуальная DLL для функций "
         "отладки (DebugBreak, IsDebuggerPresent, "
         "WaitForDebugEvent)."
     ),
     "api-ms-win-core-namedpipe-l1-1-0": (
-        "API Set: Core Named Pipe — виртуальная DLL для функций "
+        "API Set: Core Named Pipe - виртуальная DLL для функций "
         "именованных каналов (CreateNamedPipe, ConnectNamedPipe, "
         "CallNamedPipe)."
     ),
     "api-ms-win-core-atoms-l1-1-0": (
-        "API Set: Core Atoms — виртуальная DLL для функций "
+        "API Set: Core Atoms - виртуальная DLL для функций "
         "работы с атомарными таблицами (GlobalAddAtom, "
         "GlobalGetAtomName, AddAtom)."
     ),
     "api-ms-win-core-delayload-l1-1-0": (
-        "API Set: Core Delay Load — виртуальная DLL для "
+        "API Set: Core Delay Load - виртуальная DLL для "
         "поддержки отложенной загрузки DLL (DelayLoadHelper, "
         "__delayLoadHelper2)."
     ),
     "api-ms-win-core-localization-l1-2-0": (
-        "API Set: Core Localization — виртуальная DLL для "
+        "API Set: Core Localization - виртуальная DLL для "
         "функций локализации и поддержки языковых стандартов "
         "(EnumSystemLocalesEx, GetUserDefaultLocaleName, "
         "GetLocaleInfoEx)."
     ),
     "api-ms-win-core-interlocked-l1-1-0": (
-        "API Set: Core Interlocked — виртуальная DLL для "
+        "API Set: Core Interlocked - виртуальная DLL для "
         "функций атомарных операций Interlocked (InterlockedIncrement, "
         "InterlockedCompareExchange, InterlockedExchange)."
     ),
     "api-ms-win-core-rtlsupport-l1-1-0": (
-        "API Set: Core RTL Support — виртуальная DLL для "
+        "API Set: Core RTL Support - виртуальная DLL для "
         "функций поддержки библиотеки времени выполнения "
         "(RtlCaptureStackBackTrace, RtlLookupFunctionEntry, "
         "RtlUnwindEx)."
     ),
     "api-ms-win-core-datetime-l1-1-1": (
-        "API Set: Core DateTime — виртуальная DLL для функций "
+        "API Set: Core DateTime - виртуальная DLL для функций "
         "работы с датой и временем (GetSystemTime, "
         "GetLocalTime, SetSystemTime, FileTimeToSystemTime)."
     ),
     "api-ms-win-core-misc-l1-1-0": (
-        "API Set: Core Miscellaneous — виртуальная DLL для "
+        "API Set: Core Miscellaneous - виртуальная DLL для "
         "различных базовых функций (lstrlen, OutputDebugString, "
         "GetModuleFileName, GetTickCount)."
     ),
     "api-ms-win-core-registry-l1-1-0": (
-        "API Set: Core Registry — виртуальная DLL для функций "
+        "API Set: Core Registry - виртуальная DLL для функций "
         "работы с реестром (RegOpenKeyEx, RegQueryValueEx, "
         "RegSetValueEx, RegEnumKeyEx)."
     ),
     "api-ms-win-core-threadpool-l1-2-0": (
-        "API Set: Core Thread Pool — виртуальная DLL для "
+        "API Set: Core Thread Pool - виртуальная DLL для "
         "функций работы с пулом потоков (QueueUserWorkItem, "
         "CreateTimerQueue, TrySubmitThreadpoolCallback)."
     ),
     "api-ms-win-core-wow64-l1-1-0": (
-        "API Set: Core WOW64 — виртуальная DLL для функций "
+        "API Set: Core WOW64 - виртуальная DLL для функций "
         "поддержки WOW64 (Wow64DisableWow64FsRedirection, "
         "Wow64RevertWow64FsRedirection, IsWow64Process)."
     ),
     "api-ms-win-core-io-l1-1-0": (
-        "API Set: Core I/O — виртуальная DLL для функций "
+        "API Set: Core I/O - виртуальная DLL для функций "
         "управления портами завершения ввода-вывода "
         "(CreateIoCompletionPort, GetQueuedCompletionStatus, "
         "PostQueuedCompletionStatus)."
     ),
     "api-ms-win-core-job-l1-1-0": (
-        "API Set: Core Job — виртуальная DLL для функций "
+        "API Set: Core Job - виртуальная DLL для функций "
         "управления объектами задания (CreateJobObject, "
         "AssignProcessToJobObject, SetInformationJobObject, "
         "QueryInformationJobObject)."
     ),
     "api-ms-win-core-shlwapi-l1-1-0": (
-        "API Set: Core Shell Lightweight — виртуальная DLL "
+        "API Set: Core Shell Lightweight - виртуальная DLL "
         "для функций Shell Lightweight API (PathFindFileName, "
         "PathAppend, StrCmpLogicalW, SHGetValue)."
     ),
     "api-ms-win-core-com-l1-1-0": (
-        "API Set: Core COM — виртуальная DLL для базовых "
+        "API Set: Core COM - виртуальная DLL для базовых "
         "функций COM (CoInitializeEx, CoCreateInstance, "
         "CoUninitialize, CoTaskMemAlloc)."
     ),
     "api-ms-win-core-kernel32-legacy-l1-1-0": (
-        "API Set: Kernel32 Legacy — виртуальная DLL для "
+        "API Set: Kernel32 Legacy - виртуальная DLL для "
         "устаревших функций kernel32, сохранённых для "
         "обратной совместимости."
     ),
     "api-ms-win-core-process-l1-1-1": (
-        "API Set: Core Process — расширенная виртуальная "
+        "API Set: Core Process - расширенная виртуальная "
         "DLL для функций управления процессами (IsProcessCritical, "
         "PowerCreateRequest, PowerMessage)."
     ),
     "api-ms-win-core-namedpipe-anonymous-l1-1-0": (
-        "API Set: Core Anonymous Pipe — виртуальная DLL для "
+        "API Set: Core Anonymous Pipe - виртуальная DLL для "
         "функций анонимных каналов (CreatePipe, "
         "GetStdHandle для pipes)."
     ),
     "api-ms-win-eventing-l1-1-0": (
-        "API Set: Eventing — виртуальная DLL для функций "
+        "API Set: Eventing - виртуальная DLL для функций "
         "Event Tracing (EventRegister, EventWrite, "
         "EventEnabled)."
     ),
     "api-ms-win-eventing-provider-l1-1-0": (
-        "API Set: Eventing Provider — виртуальная DLL для "
+        "API Set: Eventing Provider - виртуальная DLL для "
         "поставщиков событий ETW (EventRegister, "
         "EventUnregister, EventWriteString)."
     ),
     "api-ms-win-security-base-l1-1-0": (
-        "API Set: Security Base — виртуальная DLL для "
+        "API Set: Security Base - виртуальная DLL для "
         "базовых функций безопасности (GetTokenInformation, "
         "CheckTokenMembership, AdjustTokenPrivileges, "
         "AllocateAndInitializeSid)."
     ),
     "api-ms-win-security-attributes-l1-1-0": (
-        "API Set: Security Attributes — виртуальная DLL "
+        "API Set: Security Attributes - виртуальная DLL "
         "для функций управления атрибутами безопасности "
         "(ConvertSecurityDescriptorToStringSecurityDescriptor)."
     ),
     "api-ms-win-crt-runtime-l1-1-0": (
-        "API Set: CRT Runtime — виртуальная DLL для функций "
+        "API Set: CRT Runtime - виртуальная DLL для функций "
         "универсальной CRT (memcpy, strcmp, sprintf, malloc, "
         "free) в составе Universal CRT."
     ),
     "api-ms-win-crt-heap-l1-1-0": (
-        "API Set: CRT Heap — виртуальная DLL для функций "
+        "API Set: CRT Heap - виртуальная DLL для функций "
         "работы с кучей из Universal CRT (calloc, realloc "
         "в терминах Win32 Heap)."
     ),
     "api-ms-win-crt-string-l1-1-0": (
-        "API Set: CRT String — виртуальная DLL для строковых "
+        "API Set: CRT String - виртуальная DLL для строковых "
         "функций Universal CRT (strcat, strcpy, wcscmp, "
         "mbstowcs)."
     ),
     "api-ms-win-crt-stdio-l1-1-0": (
-        "API Set: CRT Stdio — виртуальная DLL для функций "
+        "API Set: CRT Stdio - виртуальная DLL для функций "
         "стандартного ввода/вывода Universal CRT (fopen, "
         "fread, fprintf, printf, scanf)."
     ),
     "api-ms-win-crt-convert-l1-1-0": (
-        "API Set: CRT Convert — виртуальная DLL для функций "
+        "API Set: CRT Convert - виртуальная DLL для функций "
         "преобразования данных Universal CRT (atof, atoi, "
         "strtod, wcstombs, itoa)."
     ),
     "api-ms-win-crt-environment-l1-1-0": (
-        "API Set: CRT Environment — виртуальная DLL для "
+        "API Set: CRT Environment - виртуальная DLL для "
         "функций окружения Universal CRT (getenv, "
         "_putenv, _environ)."
     ),
     "api-ms-win-crt-time-l1-1-0": (
-        "API Set: CRT Time — виртуальная DLL для функций "
+        "API Set: CRT Time - виртуальная DLL для функций "
         "работы с датой/временем Universal CRT (time, "
         "localtime, strftime, mktime, gmtime)."
     ),
     "api-ms-win-crt-multibyte-l1-1-0": (
-        "API Set: CRT Multibyte — виртуальная DLL для функций "
+        "API Set: CRT Multibyte - виртуальная DLL для функций "
         "преобразования многобайтовых кодировок Universal CRT "
         "(_mbstowcs_l, _wcstombs_l, _mbslen)."
     ),
     "api-ms-win-crt-math-l1-1-0": (
-        "API Set: CRT Math — виртуальная DLL для математических "
+        "API Set: CRT Math - виртуальная DLL для математических "
         "функций Universal CRT (sin, cos, sqrt, pow, exp, "
         "ceil, floor)."
     ),
     "api-ms-win-crt-filesystem-l1-1-0": (
-        "API Set: CRT Filesystem — виртуальная DLL для функций "
+        "API Set: CRT Filesystem - виртуальная DLL для функций "
         "файловой системы Universal CRT (_access, _chmod, "
         "_mkdir, _findfirst, _fullpath)."
     ),
     "api-ms-win-crt-utility-l1-1-0": (
-        "API Set: CRT Utility — виртуальная DLL для "
+        "API Set: CRT Utility - виртуальная DLL для "
         "вспомогательных функций Universal CRT (abs, "
         "labs, rand, srand, bsearch, qsort)."
     ),
     "api-ms-win-crt-process-l1-1-0": (
-        "API Set: CRT Process — виртуальная DLL для функций "
+        "API Set: CRT Process - виртуальная DLL для функций "
         "управления процессами Universal CRT (_beginthread, "
         "_beginthreadex, _endthread, _wexecl)."
     ),
     "api-ms-win-crt-conio-l1-1-0": (
-        "API Set: CRT ConIO — виртуальная DLL для функций "
+        "API Set: CRT ConIO - виртуальная DLL для функций "
         "консольного ввода/вывода Universal CRT (_cgets, "
         "_cputs, _getch, _kbhit, _putch)."
     ),
     "api-ms-win-crt-locale-l1-1-0": (
-        "API Set: CRT Locale — виртуальная DLL для функций "
+        "API Set: CRT Locale - виртуальная DLL для функций "
         "локализации Universal CRT (setlocale, _wsetlocale, "
         "_create_locale, _free_locale)."
     ),
     "api-ms-win-core-window-l1-1-0": (
-        "API Set: Core Window — виртуальная DLL для функций "
+        "API Set: Core Window - виртуальная DLL для функций "
         "оконного API (RegisterClass, CreateWindowEx, "
         "DefWindowProc, SendMessage)."
     ),
     "api-ms-win-core-cursor-l1-1-0": (
-        "API Set: Core Cursor — виртуальная DLL для функций "
+        "API Set: Core Cursor - виртуальная DLL для функций "
         "управления курсорами (SetCursor, GetCursor, "
         "LoadCursor, CreateCursor)."
     ),
     "api-ms-win-core-message-l1-1-0": (
-        "API Set: Core Message — виртуальная DLL для функций "
+        "API Set: Core Message - виртуальная DLL для функций "
         "диспетчеризации сообщений (GetMessage, PeekMessage, "
         "DispatchMessage, PostMessage, SendMessage)."
     ),
@@ -1855,45 +1855,45 @@ _WINDOWS_API_SETS = {
 
 _WINDOWS_REMOTE = {
     "mstscax.dll": (
-        "MSTSCAX — Microsoft Terminal Server Control ActiveX: "
+        "MSTSCAX - Microsoft Terminal Server Control ActiveX: "
         "элемент управления для встраивания RDP-клиента "
         "(Remote Desktop Protocol) в приложения."
     ),
     "mstsc.exe": (
-        "MSTSC — Remote Desktop Client: исполняемый файл "
+        "MSTSC - Remote Desktop Client: исполняемый файл "
         "клиента подключения к удалённому рабочему столу "
         "(mstsc.exe)."
     ),
     "rdpcore.dll": (
-        "RDPCore — Remote Desktop Protocol Core: реализация "
+        "RDPCore - Remote Desktop Protocol Core: реализация "
         "протокола удалённого рабочего стола Windows (RDP)."
     ),
     "rdpcorets.dll": (
-        "RDPCoreTS — Remote Desktop Protocol Core Terminal "
+        "RDPCoreTS - Remote Desktop Protocol Core Terminal "
         "Services: расширения RDP для терминальных служб."
     ),
     "rdpshareroom.dll": (
-        "RDShareRoom — Remote Desktop Sharing: библиотека "
+        "RDShareRoom - Remote Desktop Sharing: библиотека "
         "для совместного доступа к сеансу удалённого "
         "рабочего стола."
     ),
     "vmcompute.dll": (
-        "VMCompute — Hyper-V Compute: библиотека для "
+        "VMCompute - Hyper-V Compute: библиотека для "
         "управления виртуальными машинами Hyper-V "
         "(создание, запуск, остановка)."
     ),
     "vmsvc.dll": (
-        "VMSvc — Hyper-V Management Service: библиотека "
+        "VMSvc - Hyper-V Management Service: библиотека "
         "службы управления Hyper-V. Координирует работу "
         "с host-системой."
     ),
     "vmms.exe": (
-        "VMMS — Hyper-V Virtual Machine Management Service: "
+        "VMMS - Hyper-V Virtual Machine Management Service: "
         "исполняемый файл службы управления виртуальными "
         "машинами Hyper-V."
     ),
     "winsta.dll": (
-        "WinSta — Terminal Services WinStation API: низкоуровневое "
+        "WinSta - Terminal Services WinStation API: низкоуровневое "
         "управление сеансами терминального сервера (WinStationEnumerate, "
         "WinStationQueryInformation), основа wtsapi32."
     ),
@@ -1906,56 +1906,56 @@ _WINDOWS_REMOTE = {
 _WINDOWS_DATA_SERVICES = {
     # --- ODBC ---
     "odbc32.dll": (
-        "ODBC32 — ODBC Driver Manager: диспетчер драйверов "
+        "ODBC32 - ODBC Driver Manager: диспетчер драйверов "
         "ODBC (Open Database Connectivity). Управляет загрузкой "
         "драйверов баз данных и маршрутизацией вызовов."
     ),
     "odbcbcp.dll": (
-        "ODBCBCP — ODBC Bulk Copy: библиотека для массового "
-        "копирования данных через ODBC (BCP — Bulk Copy "
+        "ODBCBCP - ODBC Bulk Copy: библиотека для массового "
+        "копирования данных через ODBC (BCP - Bulk Copy "
         "Protocol), используемая с SQL Server."
     ),
     "odbcint.dll": (
-        "ODBCInt — ODBC Integrity: библиотека поддержки "
+        "ODBCInt - ODBC Integrity: библиотека поддержки "
         "целостности данных ODBC."
     ),
     "odbccp32.dll": (
-        "ODBCCP32 — ODBC Control Panel: библиотека для "
+        "ODBCCP32 - ODBC Control Panel: библиотека для "
         "настройки ODBC через панель управления (администрирование "
         "DSN, драйверов)."
     ),
     "odbcjt32.dll": (
-        "ODBCJT32 — ODBC Jet: драйвер ODBC для баз данных "
+        "ODBCJT32 - ODBC Jet: драйвер ODBC для баз данных "
         "Access (Jet Database Engine)."
     ),
     # --- ADSI / Active Directory ---
     "ntdsapi.dll": (
-        "NTDSApi — NT Directory Services API: библиотека "
+        "NTDSApi - NT Directory Services API: библиотека "
         "для взаимодействия со службами каталогов Active "
         "Directory (доменные операции, репликация)."
     ),
     "adsi.dll": (
-        "ADSI — Active Directory Service Interfaces: библиотека "
+        "ADSI - Active Directory Service Interfaces: библиотека "
         "для программного доступа к Active Directory через "
         "COM-интерфейсы (IADs, IADsContainer)."
     ),
     "adsldp.dll": (
-        "ADSLDP — ADSI LDAP Provider: провайдер LDAP для "
+        "ADSLDP - ADSI LDAP Provider: провайдер LDAP для "
         "ADSI, обеспечивающий доступ к каталогам через "
         "протокол LDAP."
     ),
     "adsnt.dll": (
-        "ADSNT — ADSI Windows NT Provider: провайдер ADSI "
+        "ADSNT - ADSI Windows NT Provider: провайдер ADSI "
         "для Windows NT 4.0 Directory Services (обратная "
         "совместимость)."
     ),
     # --- Active Directory Services ---
     "activeds.dll": (
-        "ActiveDS — Active Directory Services: интерфейс "
+        "ActiveDS - Active Directory Services: интерфейс "
         "для работы с Active Directory через ADSI."
     ),
     "adsldpc.dll": (
-        "ADsLDPC — Active Directory LDAP Provider: провайдер "
+        "ADsLDPC - Active Directory LDAP Provider: провайдер "
         "LDAP для ADSI."
     ),
 }
@@ -1966,112 +1966,112 @@ _WINDOWS_DATA_SERVICES = {
 
 _WINDOWS_KERNEL_DRIVERS = {
     "ndis.sys": (
-        "NDIS — Network Driver Interface Specification: сетевой фреймворк "
+        "NDIS - Network Driver Interface Specification: сетевой фреймворк "
         "Windows. Связывает мини-драйверы сетевых адаптеров с сетевым "
         "стеком (tcpip.sys); предоставляет буферы NET_BUFFER, фильтры, "
         "offload-функции."
     ),
     "fltmgr.sys": (
-        "Filter Manager — менеджер минифильтров файловой системы. "
+        "Filter Manager - менеджер минифильтров файловой системы. "
         "Регистрация callback-ов пре/пост-I/O, управление экземплярами "
         "фильтров. Основа антивирусов, шифраторов, систем мониторинга."
     ),
     "wdf01000.sys": (
-        "WDF 01000 — Kernel-Mode Driver Framework (KMDF) Runtime: "
+        "WDF 01000 - Kernel-Mode Driver Framework (KMDF) Runtime: "
         "объектная модель драйверов WDM-надстройки (WDFDEVICE, WDFQUEUE, "
         "WDFMEMORY). Основа современных KMDF-драйверов."
     ),
     "ksecdd.sys": (
-        "KSecDD — Security Kernel Driver: драйвер безопасности режима ядра. "
+        "KSecDD - Security Kernel Driver: драйвер безопасности режима ядра. "
         "Генерация случайных чисел, проверка подписи LSA, поддержка "
         "аутентификации на ранней загрузке."
     ),
     "cng.sys": (
-        "CNG — Cryptography Next Generation Kernel Mode: криптографические "
+        "CNG - Cryptography Next Generation Kernel Mode: криптографические "
         "примитивы ядра (AES, RSA, ECDSA, SHA). Используется BitLocker, "
         "Code Integrity, проверкой подписи драйверов."
     ),
     "clipsp.sys": (
-        "ClipSP — Client Licensing Security Provider: драйвер лицензирования "
+        "ClipSP - Client Licensing Security Provider: драйвер лицензирования "
         "клиента. Участвует в проверке цифровой лицензии Windows и "
         "защите от подмены активации."
     ),
     "tcpip.sys": (
-        "TCP/IP Driver — сетевой стек Windows в режиме ядра: реализация "
+        "TCP/IP Driver - сетевой стек Windows в режиме ядра: реализация "
         "TCP, UDP, IP, ICMP, фрагментация, таблицы маршрутизации, "
         "Windows Filtering Platform (WFP)."
     ),
     "ntfs.sys": (
-        "NTFS Driver — драйвер файловой системы NTFS: транзакции (TxF), "
+        "NTFS Driver - драйвер файловой системы NTFS: транзакции (TxF), "
         "ACL, сжатие, EFS-интеграция, журналирование ($LogFile, $UsnJrnl)."
     ),
     "fastfat.sys": (
-        "FastFAT — драйвер файловых систем FAT12/16/32 и exFAT-подобных "
+        "FastFAT - драйвер файловых систем FAT12/16/32 и exFAT-подобных "
         "носителей (USB-накопители, загрузочные разделы)."
     ),
     "storport.sys": (
-        "StorPort — Storage Port Driver: базовый порт-драйвер накопителей. "
+        "StorPort - Storage Port Driver: базовый порт-драйвер накопителей. "
         "Управление SRB-запросами, очередями, DPC для мини-драйверов "
         "SCSI/RAID/SCM."
     ),
     "classpnp.sys": (
-        "ClassPnP — Storage Class Driver: общий классовый драйвер дисковых "
+        "ClassPnP - Storage Class Driver: общий классовый драйвер дисковых "
         "устройств поверх storport. Запросы READ/WRITE, sense-обработка, "
         "power management."
     ),
     "disk.sys": (
-        "Disk Driver — драйвер дисковых устройств: слой над classpnp, "
+        "Disk Driver - драйвер дисковых устройств: слой над classpnp, "
         "экспортирует устройства \\Device\\Harddisk*, обработка геометрии "
         "и разбиения."
     ),
     "mountmgr.sys": (
-        "Mount Manager — менеджер точек монтирования. Сопоставление томов "
+        "Mount Manager - менеджер точек монтирования. Сопоставление томов "
         "и буквы дисков (\\GLOBAL??\\C:), хранение постоянных меток в базе "
         "\\System\\MountedDevices."
     ),
     "partmgr.sys": (
-        "Partition Manager — менеджер разделов диска. Уведомляет mountmgr "
+        "Partition Manager - менеджер разделов диска. Уведомляет mountmgr "
         "и disk о разбиении MBR/GPT, обеспечивает согласованность таблиц "
         "разделов."
     ),
     "volmgr.sys": (
-        "Volume Manager — менеджер томов: агрегация разделов в тома, "
+        "Volume Manager - менеджер томов: агрегация разделов в тома, "
         "передача запросов от файловых систем к дисковым устройствам."
     ),
     "volsnap.sys": (
-        "Volsnap — Volume Shadow Copy Driver: драйвер теневых копий томов. "
+        "Volsnap - Volume Shadow Copy Driver: драйвер теневых копий томов. "
         "Copy-on-write снапшоты для резервного копирования и точек "
         "восстановления."
     ),
     "fvevol.sys": (
-        "FVE — Full Volume Encryption Driver: драйвер шифрования «на лету» "
+        "FVE - Full Volume Encryption Driver: драйвер шифрования «на лету» "
         "BitLocker. Прозрачное расшифрование/шифрование томов при I/O."
     ),
     "acpi.sys": (
-        "ACPI Driver — драйвер ACPI: интерпретатор AML-кода, управление "
+        "ACPI Driver - драйвер ACPI: интерпретатор AML-кода, управление "
         "электропитанием устройств, температурными зонами, кнопками "
         "и батареями."
     ),
     "pci.sys": (
-        "PCI Driver — драйвер шины PCI/PCIe: перечисление устройств, "
+        "PCI Driver - драйвер шины PCI/PCIe: перечисление устройств, "
         "распределение ресурсов (BAR, IRQ), поддержка MSI/MSI-X."
     ),
     "usbport.sys": (
-        "USB 2.0 Port Driver — порт-драйвер USB-контроллеров EHCI/UHCI/OHCI. "
+        "USB 2.0 Port Driver - порт-драйвер USB-контроллеров EHCI/UHCI/OHCI. "
         "Управление передачами (isochronous, bulk, interrupt), хабами, "
         "эндпоинтами."
     ),
     "usbxhci.sys": (
-        "USB xHCI Driver — порт-драйвер контроллеров USB 3.x (xHCI). "
+        "USB xHCI Driver - порт-драйвер контроллеров USB 3.x (xHCI). "
         "Управление кольцами передачи (transfer rings), потоками, "
         "SuperSpeed-эндпоинтами."
     ),
     "usbhub3.sys": (
-        "USB 3.0 Hub Driver — драйвер USB-концентраторов для xHCI. "
+        "USB 3.0 Hub Driver - драйвер USB-концентраторов для xHCI. "
         "Перечисление устройств, управление питанием портов."
     ),
     "dxgkrnl.sys": (
-        "DirectX Graphics Kernel — ядро графической подсистемы Windows. "
+        "DirectX Graphics Kernel - ядро графической подсистемы Windows. "
         "Управление контекстами GPU, памятью, планированием (GPU scheduler), "
         "DXGI-адаптерами. Связующее звено между драйвером дисплея и "
         "пользовательским dxgi.dll."

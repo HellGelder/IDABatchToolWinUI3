@@ -46,7 +46,7 @@ def normalize_module_name(module_name: str) -> str:
     if "\\" in name or "/" in name:
         name = name.replace("\\", "/").rsplit("/", 1)[-1]
 
-    # Отдельно стоящие префиксы (без разделителя пути) — защитный случай.
+    # Отдельно стоящие префиксы (без разделителя пути) - защитный случай.
     for prefix in _DYLD_PREFIXES:
         if name.startswith(prefix):
             name = name[len(prefix):]
@@ -64,7 +64,7 @@ def normalize_module_name(module_name: str) -> str:
 def _strip_path_and_lower(name: str) -> str:
     """Убирает путь и префиксы Mach-O, приводит к нижнему регистру.
 
-    Расширение сохраняется — это нужно для построения вариантов имён,
+    Расширение сохраняется - это нужно для построения вариантов имён,
     в которых платформенный маркер (``.so`` / ``.dylib``) значим.
     """
     if not name:
@@ -97,7 +97,7 @@ _DYLIB_FLAVOR_RE = re.compile(
 def module_name_aliases(module_name: str) -> tuple[str, ...]:
     """Возвращает варианты ключа модуля для сопоставления со словарями.
 
-    Первый элемент — канонический ключ ``normalize_module_name``. При
+    Первый элемент - канонический ключ ``normalize_module_name``. При
     наличии версии добавляется форма с сохранённым платформенным маркером
     (``libz.so.1.2.11`` → ``libz.so``, ``libz.1.2.dylib`` → ``libz.dylib``).
     Это позволяет находить системную библиотеку при несовпадении точной

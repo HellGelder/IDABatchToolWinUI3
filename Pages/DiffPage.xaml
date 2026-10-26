@@ -107,7 +107,7 @@
                             <!-- Кастомный Padding у радиокнопок убран: он сдвигал подпись вверх относительно кружка -->
                             <RadioButton x:Name="EngineBindiff" GroupName="DiffEngine" Content="Только BinDiff"
                                          IsChecked="True" MinWidth="140" VerticalAlignment="Center" />
-                            <!-- «i» в кружочке: наведение — ToolTip, нажатие — TeachingTip -->
+                            <!-- «i» в кружочке: наведение - ToolTip, нажатие - TeachingTip -->
                             <Button x:Name="BindiffInfoButton" Padding="4" MinWidth="24" MinHeight="24"
                                     VerticalAlignment="Center" Click="BindiffInfoButton_Click"
                                     ToolTipService.ToolTip="Для пар со схожестью менее 99% выполняется доанализ. Нажмите для подробностей.">
@@ -207,7 +207,7 @@
                     <TextBlock x:Name="MapStatusLabel" Text="Укажите обе директории для анализа."
                                FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
-                    <!-- Кнопки: запуск/отмена слева, генерация отчёта — правый нижний угол -->
+                    <!-- Кнопки: запуск/отмена слева, генерация отчёта - правый нижний угол -->
                     <Grid ColumnSpacing="6" Margin="0,6,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -234,7 +234,7 @@
                 <StackPanel Spacing="6">
                     <TextBlock Text="Прогресс выполнения" Style="{StaticResource GroupHeaderStyle}" />
                     <StackPanel x:Name="StagesPanel" Orientation="Horizontal" Spacing="14" />
-                    <TextBlock x:Name="CurrentFileLabel" Text="Файл: —" FontSize="11"
+                    <TextBlock x:Name="CurrentFileLabel" Text="Файл: -" FontSize="11"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                TextTrimming="CharacterEllipsis" />
                 </StackPanel>
@@ -315,17 +315,17 @@
                                 <TextBlock Grid.Column="0" Text="Исключить (через запятую):"
                                            VerticalAlignment="Center" FontSize="12" />
                                 <TextBox x:Name="GitExcludesTextBox" Grid.Column="1"
-                                         ToolTipService.ToolTip="Шаблоны имён файлов и каталогов; совпадение по любому компоненту пути. Пустой список — исключений нет." />
+                                         ToolTipService.ToolTip="Шаблоны имён файлов и каталогов; совпадение по любому компоненту пути. Пустой список - исключений нет." />
                             </Grid>
                             <CheckBox x:Name="GitFullDiffCheckBox" FontSize="12"
                                       Content="Полный дифф (все строки файлов)"
-                                      ToolTipService.ToolTip="Отмечено — в дифф пишутся все строки файлов целиком, неизменённые участки не сжимаются. Снято — стандартный контекст: 3 неизменённые строки вокруг каждого изменения." />
+                                      ToolTipService.ToolTip="Отмечено - в дифф пишутся все строки файлов целиком, неизменённые участки не сжимаются. Снято - стандартный контекст: 3 неизменённые строки вокруг каждого изменения." />
                             <CheckBox x:Name="GitSourcesOnlyCheckBox" IsChecked="True" FontSize="12"
                                       Content="Сравнивать только исходные коды (без бинарных файлов)"
-                                      ToolTipService.ToolTip="Файлы, распознанные как двоичные по содержимому, не попадают в changes.diff и HTML-отчёт — в сравнении участвуют только текстовые файлы (исходники, конфиги, документация). Двоичные файлы остаются в статистике и журнале." />
+                                      ToolTipService.ToolTip="Файлы, распознанные как двоичные по содержимому, не попадают в changes.diff и HTML-отчёт - в сравнении участвуют только текстовые файлы (исходники, конфиги, документация). Двоичные файлы остаются в статистике и журнале." />
                             <CheckBox x:Name="GitModulesCheckBox" IsThreeState="True" FontSize="12"
-                                      Content="Модульное сравнение (подпапки — отдельные модули)"
-                                      ToolTipService.ToolTip="Включено — всегда модульный режим: каждая подпапка OLD/NEW — отдельный модуль со своим changes.diff, отчётом и строкой в индексе (4 потока). Выключено — плоский режим, вся папка целиком как раньше. Частично (по умолчанию) — автоматически: есть подпапки → модульный режим, нет → плоский." />
+                                      Content="Модульное сравнение (подпапки - отдельные модули)"
+                                      ToolTipService.ToolTip="Включено - всегда модульный режим: каждая подпапка OLD/NEW - отдельный модуль со своим changes.diff, отчётом и строкой в индексе (4 потока). Выключено - плоский режим, вся папка целиком как раньше. Частично (по умолчанию) - автоматически: есть подпапки → модульный режим, нет → плоский." />
                         </StackPanel>
                     </Border>
 

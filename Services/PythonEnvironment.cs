@@ -15,7 +15,7 @@ public sealed record PythonEnvResult(string? Interpreter, bool PackagesOk, IRead
 /// Python-мостам (генерация отчётов, документация СФ). Проверка повторяет логику
 /// мостов: интерпретатор из Tools\Python, PATH или Py Launcher; site-packages
 /// встроенного Python подключается через PYTHONPATH.
-/// Диалоги проверки/установки — в PythonEnvironmentUi (UI-слой), сервис UI не трогает.
+/// Диалоги проверки/установки - в PythonEnvironmentUi (UI-слой), сервис UI не трогает.
 /// </summary>
 public static class PythonEnvironment
 {
@@ -132,7 +132,7 @@ public static class PythonEnvironment
             using var proc = Process.Start(psi);
             if (proc == null) return (-1, logPath);
 
-            // Читаем каналы до WaitForExit — иначе переполнение пайпа может
+            // Читаем каналы до WaitForExit - иначе переполнение пайпа может
             // заблокировать дочерний процесс.
             var outTask = proc.StandardOutput.ReadToEndAsync();
             var errTask = proc.StandardError.ReadToEndAsync();

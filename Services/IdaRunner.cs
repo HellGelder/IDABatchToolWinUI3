@@ -3,9 +3,9 @@ using System.Diagnostics;
 namespace IDABatchToolWinUI.Services;
 
 /// <summary>
-/// Пакетный запуск IDA Pro — аналог ida_batch_tool/ida/runner.py.
+/// Пакетный запуск IDA Pro - аналог ida_batch_tool/ida/runner.py.
 /// Параллельный анализ файлов (создание .i64) и выполнение скриптов на готовых базах.
-/// Прогресс и статусы отдаются через колбэки; отмена — через CancellationToken.
+/// Прогресс и статусы отдаются через колбэки; отмена - через CancellationToken.
 /// </summary>
 public sealed class IdaRunner : IDisposable
 {
@@ -17,13 +17,13 @@ public sealed class IdaRunner : IDisposable
     public Action<string>? FileStartCallback { get; set; }
     public Action<string, bool>? FileDoneCallback { get; set; }
 
-    /// <summary>(имя цели, PID процесса IDA, managed thread id) — вызывается сразу после запуска процесса.</summary>
+    /// <summary>(имя цели, PID процесса IDA, managed thread id) - вызывается сразу после запуска процесса.</summary>
     public Action<string, int, int>? ProcessStartedCallback { get; set; }
 
-    /// <summary>Причина неудачи процесса — для журнала и UI (код выхода, хвост stderr).</summary>
+    /// <summary>Причина неудачи процесса - для журнала и UI (код выхода, хвост stderr).</summary>
     public Action<string>? ErrorCallback { get; set; }
 
-    /// <summary>(имя файла, текст пульса) — для строки статуса и диспетчера анализа.</summary>
+    /// <summary>(имя файла, текст пульса) - для строки статуса и диспетчера анализа.</summary>
     public Action<string, string>? PulseCallback { get; set; }
 
     public IdaRunner(string idatPath, int maxWorkers)
@@ -32,7 +32,7 @@ public sealed class IdaRunner : IDisposable
         MaxWorkers = Math.Max(1, maxWorkers);
     }
 
-    /// <summary>Анализ файлов пакетом; после — очистка временных файлов. Возвращает результаты.</summary>
+    /// <summary>Анализ файлов пакетом; после - очистка временных файлов. Возвращает результаты.</summary>
     public async Task<Dictionary<string, bool>> AnalyzeBatchAsync(
         IReadOnlyList<string> files, string? outputDir,
         bool cleanup, bool tempCleanup, CancellationToken ct)
@@ -77,7 +77,7 @@ public sealed class IdaRunner : IDisposable
                     {
                         results[file] = ok;
                         completed++;
-                        // Вход — либо исходный файл (экспорт после анализа:
+                        // Вход - либо исходный файл (экспорт после анализа:
                         // добавляем .i64), либо готовая база .i64/.idb
                         // (export_only: имя уже полное, ничего не добавляем).
                         var name = Path.GetFileName(file);
@@ -222,7 +222,7 @@ public sealed class IdaRunner : IDisposable
             if (File.GetLastWriteTimeUtc(idbPath) >= startedUtc.AddSeconds(-2))
                 File.Delete(idbPath);
         }
-        catch { /* файл занят — оставляем как есть */ }
+        catch { /* файл занят - оставляем как есть */ }
     }
 
     private async Task<bool> RunScriptOnBaseAsync(

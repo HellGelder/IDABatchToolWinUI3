@@ -29,7 +29,7 @@ public partial class App : Application
         AppLog.Info($"Запуск приложения: {AppContext.BaseDirectory}");
 
         // Журнал необработанных исключений XAML (stowed 0xc000027b выглядит в
-        // журнале событий как немой нативный краш — здесь берём управляемый стек).
+        // журнале событий как немой нативный краш - здесь берём управляемый стек).
         UnhandledException += (s, e) =>
         {
             try { AppLog.Crash(e.Exception); }
@@ -40,7 +40,7 @@ public partial class App : Application
         };
 
         // Исключения «потерянных» задач (_ = ...) по умолчанию молча пропадают:
-        // держим последний рубеж — пишем в журнал, но процесс не роняем.
+        // держим последний рубеж - пишем в журнал, но процесс не роняем.
         TaskScheduler.UnobservedTaskException += (s, e) =>
         {
             try

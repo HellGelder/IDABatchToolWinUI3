@@ -5,7 +5,7 @@ namespace IDABatchToolWinUI.Tests;
 
 /// <summary>
 /// AnalysisMonitor: ключи-пути с фолбэком по имени, независимость снимков,
-/// рантайм-статистика по PID, завершение сессии. Класс потокобезопасен —
+/// рантайм-статистика по PID, завершение сессии. Класс потокобезопасен -
 /// параллельные мутации проверяются аналогично OutcomeTrackerTests.
 /// </summary>
 public sealed class MonitorTests
@@ -35,7 +35,7 @@ public sealed class MonitorTests
         Assert.Equal(MonitorFileStatus.Pending, snap[0].Status);
         Assert.Equal(MonitorFileStatus.Running, snap[1].Status);
 
-        // Событие воркера несёт только имя — фолбэк по нормализованному имени
+        // Событие воркера несёт только имя - фолбэк по нормализованному имени
         AnalysisMonitor.MarkCompleted("b.exe", ok: true);
         snap = AnalysisMonitor.Snapshot();
         Assert.Equal(MonitorFileStatus.Done, snap[1].Status);
@@ -52,14 +52,14 @@ public sealed class MonitorTests
         AnalysisMonitor.UpdateRuntimeStats(222, "00:01:02", "12.3 МБ", "7");
 
         var snap = AnalysisMonitor.Snapshot();
-        Assert.Equal("—", snap[0].CpuTime);
+        Assert.Equal("-", snap[0].CpuTime);
         Assert.Equal("00:01:02", snap[1].CpuTime);
         Assert.Equal("12.3 МБ", snap[1].MemoryMb);
         Assert.Equal("7", snap[1].OsThreads);
 
         AnalysisMonitor.ClearRuntimeStats(222);
         snap = AnalysisMonitor.Snapshot();
-        Assert.Equal("—", snap[1].CpuTime);
+        Assert.Equal("-", snap[1].CpuTime);
     }
 
     [Fact]

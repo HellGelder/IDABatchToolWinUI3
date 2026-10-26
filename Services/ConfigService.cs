@@ -3,7 +3,7 @@ using System.Text;
 namespace IDABatchToolWinUI.Services;
 
 /// <summary>
-/// Конфигурация приложения — аналог ida_batch_tool/config/loader.py.
+/// Конфигурация приложения - аналог ida_batch_tool/config/loader.py.
 /// Работает с общим config.yaml (в корне суперпроекта), чтобы исполнение 1 и 2
 /// использовали одни настройки.
 /// </summary>
@@ -21,7 +21,7 @@ public sealed class AppConfig
 
 public static class ConfigService
 {
-    /// <summary>Загружает конфиг из config.yaml, сливая с дефолтами. При отсутствии файла — дефолты.</summary>
+    /// <summary>Загружает конфиг из config.yaml, сливая с дефолтами. При отсутствии файла - дефолты.</summary>
     public static AppConfig Load(string? path = null)
     {
         path ??= AppConstants.ConfigPath;
@@ -44,7 +44,7 @@ public static class ConfigService
         }
         catch
         {
-            // Невалидный YAML — используем дефолты; глобальные настройки не должны ломать запуск.
+            // Невалидный YAML - используем дефолты; глобальные настройки не должны ломать запуск.
         }
         return cfg;
     }
@@ -119,7 +119,7 @@ public static class MiniYaml
             var key = content.Substring(0, colon).Trim().Trim('"', '\'');
             var value = content.Substring(colon + 1).Trim();
 
-            // Вернёмся на нужный уровень: если indent <= верхнего уровня стека — pop
+            // Вернёмся на нужный уровень: если indent <= верхнего уровня стека - pop
             while (stack.Count > 1 && indent <= stack.Peek().indent) stack.Pop();
             var map = stack.Peek().map;
 

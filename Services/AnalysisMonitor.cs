@@ -1,7 +1,7 @@
 namespace IDABatchToolWinUI.Services;
 
 /// <summary>Статус файла в мини-диспетчере задач анализа.
-/// Текстовые подписи — в UI-слое (TaskManagerWindow).</summary>
+/// Текстовые подписи - в UI-слое (TaskManagerWindow).</summary>
 public enum MonitorFileStatus
 {
     Pending,
@@ -13,7 +13,7 @@ public enum MonitorFileStatus
 
 /// <summary>
 /// Строка мини-диспетчера: анализируемый файл + сведения о процессе/потоке.
-/// Ключ записи — полный путь (уникален); FileName — отображаемое имя.
+/// Ключ записи - полный путь (уникален); FileName - отображаемое имя.
 /// Снимки CPU/памяти заполняет монитор по запросу окна диспетчера
 /// (UpdateRuntimeStats), наружу отдаются только копии (Snapshot).
 /// </summary>
@@ -22,7 +22,7 @@ public sealed class MonitorEntry
     public required string Key { get; init; }
     public required string FileName { get; init; }
     public MonitorFileStatus Status { get; set; } = MonitorFileStatus.Pending;
-    /// <summary>"analysis" | "export" — текущая фаза обработки файла.</summary>
+    /// <summary>"analysis" | "export" - текущая фаза обработки файла.</summary>
     public string Phase { get; set; } = "";
     public int Pid { get; set; }
     /// <summary>Managed thread id воркера, ожидающего процесс IDA.</summary>
@@ -31,9 +31,9 @@ public sealed class MonitorEntry
     public DateTime? EndedAt { get; set; }
 
     // Снимок процесса (обновляется при опросе)
-    public string CpuTime { get; set; } = "—";
-    public string MemoryMb { get; set; } = "—";
-    public string OsThreads { get; set; } = "—";
+    public string CpuTime { get; set; } = "-";
+    public string MemoryMb { get; set; } = "-";
+    public string OsThreads { get; set; } = "-";
     /// <summary>Текст пульса: время, CPU, артефакты, последняя активность.</summary>
     public string Pulse { get; set; } = "";
 
@@ -57,9 +57,9 @@ public sealed class MonitorEntry
 /// <summary>
 /// Общее состояние очереди анализа для окна «мини-диспетчер задач».
 /// Заполняется страницей анализа из событий воркера (все методы вызываются на
-/// UI-потоке); все мутации — под общим локом, Snapshot() возвращает независимые
+/// UI-потоке); все мутации - под общим локом, Snapshot() возвращает независимые
 /// копии, поэтому окно диспетчера не может изменить состояние монитора.
-/// Идентификация записи: точное совпадение ключа (путь), иначе — по
+/// Идентификация записи: точное совпадение ключа (путь), иначе - по
 /// нормализованному имени (события воркера передают только имя файла).
 /// </summary>
 public static class AnalysisMonitor
@@ -77,7 +77,7 @@ public static class AnalysisMonitor
     }
 
     /// <summary>Начать новую сессию: очередь всех файлов со статусом «В ожидании».
-    /// Ключи — полные пути файлов; для отображения имя нормализуется.</summary>
+    /// Ключи - полные пути файлов; для отображения имя нормализуется.</summary>
     public static void BeginSession(IEnumerable<string> keys, int maxWorkers)
     {
         lock (_entries)
@@ -157,7 +157,7 @@ public static class AnalysisMonitor
         }
     }
 
-    /// <summary>Процесс недоступен (завершился) — снимок обнуляется.</summary>
+    /// <summary>Процесс недоступен (завершился) - снимок обнуляется.</summary>
     public static void ClearRuntimeStats(int pid)
     {
         lock (_entries)
@@ -165,9 +165,9 @@ public static class AnalysisMonitor
             foreach (var e in _entries)
             {
                 if (e.Pid != pid) continue;
-                e.CpuTime = "—";
-                e.MemoryMb = "—";
-                e.OsThreads = "—";
+                e.CpuTime = "-";
+                e.MemoryMb = "-";
+                e.OsThreads = "-";
             }
         }
     }
@@ -211,7 +211,7 @@ public static class AnalysisMonitor
         return name;
     }
 
-    /// <summary>Точное совпадение ключа, иначе — совпадение по нормализованному
+    /// <summary>Точное совпадение ключа, иначе - совпадение по нормализованному
     /// имени (события воркера несут только имя; одноимённые файлы обновляются все).
     /// Вызывается под локом.</summary>
     private static List<MonitorEntry> FindAllLocked(string id)

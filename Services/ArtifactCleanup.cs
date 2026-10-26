@@ -46,7 +46,7 @@ public static class ArtifactCleanup
                     deleted++;
                 }
             }
-            catch { /* файл занят — не трогаем */ }
+            catch { /* файл занят - не трогаем */ }
         }
         return deleted;
     }

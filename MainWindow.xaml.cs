@@ -38,13 +38,13 @@ public sealed partial class MainWindow : Window
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         AppWindow.SetIcon("Assets/AppIcon.ico");
 
-        // Ширина открывающегося окна — на 30% меньше стандартной
+        // Ширина открывающегося окна - на 30% меньше стандартной
         var initial = AppWindow.Size;
         AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(initial.Width * 0.7), initial.Height));
 
         ThemeHelper.Apply(this, _store.Current.Theme);
         // Тема применяется сразу при сохранении конфига (SettingsPage пишет
-        // через тот же store) — подписка живёт столько же, сколько окно.
+        // через тот же store) - подписка живёт столько же, сколько окно.
         _store.Changed += cfg => ThemeHelper.Apply(this, cfg.Theme);
 
         UiDialogs.MainWindow = this;
@@ -53,7 +53,7 @@ public sealed partial class MainWindow : Window
         _analysisPage = new AnalysisPage(_store);
         NavFrame.Content = _analysisPage;
 
-        // Проверка Python-окружения — после показа окна; диалог только при нехватке.
+        // Проверка Python-окружения - после показа окна; диалог только при нехватке.
         Activated += OnFirstActivated;
 
         // Закрытие окна: не оставляем IDA/Python/BinDiff сиротами.
@@ -183,7 +183,7 @@ public sealed partial class MainWindow : Window
                 break;
             case "settings":
                 // SettingsPage не кэшируется (как и раньше: Navigate создавал
-                // новый экземпляр на каждый показ) — читает актуальный конфиг.
+                // новый экземпляр на каждый показ) - читает актуальный конфиг.
                 if (NavFrame.Content is not SettingsPage)
                     NavFrame.Content = new SettingsPage(_store);
                 break;

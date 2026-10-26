@@ -5,9 +5,9 @@ namespace IDABatchToolWinUI.Services;
 
 /// <summary>
 /// Job Object с флагом KILL_ON_JOB_CLOSE: когда приложение завершается
-/// (в том числе аварийно), все дочерние процессы — idat.exe, pythonw.exe,
-/// bindiff.exe, 7z.exe и их потомки — убиваются операционной системой.
-/// Это основная защита от процессов-сирот; ProcessRegistry — страховка.
+/// (в том числе аварийно), все дочерние процессы - idat.exe, pythonw.exe,
+/// bindiff.exe, 7z.exe и их потомки - убиваются операционной системой.
+/// Это основная защита от процессов-сирот; ProcessRegistry - страховка.
 /// </summary>
 public sealed class JobObject : IDisposable
 {

@@ -37,7 +37,7 @@ param(
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 
-# Версия сборки — из csproj (FileVersion); ею же штампуется лончер.
+# Версия сборки - из csproj (FileVersion); ею же штампуется лончер.
 $csprojRaw = Get-Content "$root\IDABatchToolWinUI.csproj" -Raw
 $AppVersion = if ($csprojRaw -match '<FileVersion>([^<]+)</FileVersion>') { $Matches[1] } else { "1.0.0.0" }
 Write-Host "Версия сборки: $AppVersion"
@@ -58,7 +58,7 @@ if (-not $publishDir) {
     throw "Не найдена папка publish (bin\$Configuration\net9.0-*\$Rid\publish). Сначала выполните dotnet publish."
 }
 if (-not (Test-Path (Join-Path $publishDir "IDABatchToolWinUI.exe"))) {
-    throw "В $publishDir нет IDABatchToolWinUI.exe — публикация неполная."
+    throw "В $publishDir нет IDABatchToolWinUI.exe - публикация неполная."
 }
 
 # ── 2. Раскладка: всё содержимое publish -> dist\portable\app\ ─────────────
@@ -70,21 +70,21 @@ if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
 New-Item -ItemType Directory -Path $appDir -Force | Out-Null
 Copy-Item (Join-Path $publishDir "*") $appDir -Recurse -Force
 
-# ── 3. bindiff.exe — в корень поставки ──────────────────────────────────────
+# ── 3. bindiff.exe - в корень поставки ──────────────────────────────────────
 $bindiff = Join-Path $appDir "bindiff.exe"
 if (Test-Path $bindiff) {
     Move-Item $bindiff (Join-Path $staging "bindiff.exe") -Force
     Write-Host "bindiff.exe перенесён в корень поставки"
 }
 else {
-    Write-Warning "bindiff.exe не найден в publish — корень будет без него (поиск BinDiff: конфиг/реестр/PATH)"
+    Write-Warning "bindiff.exe не найден в publish - корень будет без него (поиск BinDiff: конфиг/реестр/PATH)"
 }
 
 # ── 3.5. Документация поставки: readme, журнал версий, автоустановка Python ─
 foreach ($doc in @("README.txt", "version.txt", "install-prereqs.ps1")) {
     $src = Join-Path $root $doc
     if (Test-Path $src) { Copy-Item $src (Join-Path $staging $doc) -Force }
-    else { Write-Warning "$doc не найден в проекте — в поставку не попал" }
+    else { Write-Warning "$doc не найден в проекте - в поставку не попал" }
 }
 
 # ── 3.6. Python-окружение: встроить Tools\Python из проекта, если есть ─────
@@ -138,7 +138,7 @@ static class Launcher
             WorkingDirectory = Path.GetDirectoryName(appExe),
             UseShellExecute = true,
         };
-        // ProcessStartInfo.ArgumentList недоступен в .NET Framework 4.8 —
+        // ProcessStartInfo.ArgumentList недоступен в .NET Framework 4.8 -
         // передаём аргументы строкой с простым кавычиванием.
         if (args != null && args.Length > 0)
         {
@@ -156,7 +156,7 @@ static class Launcher
 }
 '@
 $launcherSource = $launcherSource.Replace("__APPVERSION__", $AppVersion)
-# .NET Framework csc не знает /version — версия задаётся assembly-атрибутами выше
+# .NET Framework csc не знает /version - версия задаётся assembly-атрибутами выше
 Set-Content -Path $launcherCs -Value $launcherSource -Encoding ASCII
 
 $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
@@ -186,7 +186,7 @@ if (-not $NoZip) {
 }
 
 # ── 6. Граф знаний (graphify): малый граф, свой код без вендоренной diaphora ─
-# Полный граф (graphify-out-full, с diaphora) обновляется вручную — см. AGENTS.md.
+# Полный граф (graphify-out-full, с diaphora) обновляется вручную - см. AGENTS.md.
 if ($NoPublish) {
     Write-Host "Граф знаний: пропущен (-NoPublish)"
 }
@@ -194,7 +194,7 @@ elseif ($SkipGraph) {
     Write-Host "Граф знаний: пропущен (-SkipGraph)"
 }
 elseif (-not (Get-Command graphify -ErrorAction SilentlyContinue)) {
-    Write-Warning "graphify не установлен — граф не обновлён (pip install graphifyy)"
+    Write-Warning "graphify не установлен - граф не обновлён (pip install graphifyy)"
 }
 else {
     Push-Location $root
@@ -209,7 +209,7 @@ else {
             if ($LASTEXITCODE -eq 0) { & graphify cluster-only . }
         }
         if ($LASTEXITCODE -ne 0) {
-            Write-Warning "graphify завершился с кодом $LASTEXITCODE — граф не обновлён"
+            Write-Warning "graphify завершился с кодом $LASTEXITCODE - граф не обновлён"
         }
         else {
             Write-Host "Граф знаний обновлён: graphify-out\GRAPH_REPORT.md"

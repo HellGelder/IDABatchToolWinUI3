@@ -8,7 +8,7 @@ using Microsoft.UI.Xaml.Controls;
 namespace IDABatchToolWinUI.Pages;
 
 /// <summary>
-/// Страница «Анализ СФ» (системных функций) — аналог SfaPage из исполнения 1.
+/// Страница «Анализ СФ» (системных функций) - аналог SfaPage из исполнения 1.
 /// </summary>
 public sealed partial class SfaPage : Page
 {
@@ -39,7 +39,7 @@ public SfaPage(IConfigStore store)
         SfaMaxIdaSlider.ValueChanged += (_, _) => UpdateThreadsWarning();
         UpdateThreadsWarning();
 
-        // Подписки — один раз в конструкторе, чтобы при повторном показе
+        // Подписки - один раз в конструкторе, чтобы при повторном показе
         // не дублировались (страница кэшируется в MainWindow).
         SfaBrowseDirButton.Click += (_, _) =>
             UiDialogs.PickFolderAsync(SfaInputDirTextBox).SafeFireAndForget("Sfa.BrowseDir");
@@ -48,7 +48,7 @@ public SfaPage(IConfigStore store)
         SfaGenerateHtmlButton.Click += GenerateHtml_Click;
         SfaInputDirTextBox.TextChanged += (_, _) => RefreshFileList();
 
-        // Скан папки — в фоне с дебаунсом TextChanged (как на вкладке «Общий анализ»).
+        // Скан папки - в фоне с дебаунсом TextChanged (как на вкладке «Общий анализ»).
         _refreshTimer = DispatcherQueue.CreateTimer();
         _refreshTimer.Interval = TimeSpan.FromMilliseconds(400);
         _refreshTimer.IsRepeating = false;
@@ -78,7 +78,7 @@ public SfaPage(IConfigStore store)
         => SfaThreadsWarningBar.IsOpen = (int)SfaMaxIdaSlider.Value >= (int)SfaMaxIdaSlider.Maximum;
 
     /// <summary>Индикатор занятости (как SetProgressRunning на вкладке
-    /// «Общий анализ»): пока идёт любая фаза — полоса анимируется, точные
+    /// «Общий анализ»): пока идёт любая фаза - полоса анимируется, точные
     /// счётчики видны в строке статуса над ней. Без анимации полоса стоит
     /// на месте, пока IDA/npx обрабатывает очередной файл, и выглядит «замороженной».</summary>
     private void SetSfaProgressRunning(bool running)
@@ -134,7 +134,7 @@ public SfaPage(IConfigStore store)
             return;
         }
 
-        // Платформа — по фактическим файлам (расширения, при их отсутствии — сигнатуры)
+        // Платформа - по фактическим файлам (расширения, при их отсутствии - сигнатуры)
         UpdatePlatformBar(PlatformInfo.DetectPlatform(_cachedFiles.Select(f => f.Path)));
 
         SfaTreemap.SetData(_cachedFiles);
@@ -214,10 +214,10 @@ public SfaPage(IConfigStore store)
         }
 
         // Кэш документации MS Learn: диалог показывается сразу после нажатия
-        // кнопки анализа (при наличии БД кэша и только для Windows — Linux
+        // кнопки анализа (при наличии БД кэша и только для Windows - Linux
         // априори документируется по man-pages, без вопросов). «Перегенерировать
         // из кэша» запускает перегенерацию HTML без IDA-анализа; «полный
-        // анализ» — обычный цикл, документация доищется фазой после анализа.
+        // анализ» - обычный цикл, документация доищется фазой после анализа.
         if (_detectedPlatform == "Windows")
         {
             var sfaReportsDir = Path.Combine(SfaInputDirTextBox.Text.Trim(), AppConstants.SfaReportsDirName);
@@ -259,7 +259,7 @@ public SfaPage(IConfigStore store)
         _worker = new AnalysisWorker(
             files.Select(f => f.Path).ToList(), idatPath, (int)SfaMaxIdaSlider.Value, null,
             SfaCleanupCheck.IsChecked == true, SfaTempCleanupCheck.IsChecked == true,
-            // СФ-отчёты псевдокод не используют — экспорт всегда без него
+            // СФ-отчёты псевдокод не используют - экспорт всегда без него
             false, SfaDeleteJsonCheck.IsChecked == true,
             exportOnly);
         HookWorker(_worker);
@@ -275,7 +275,7 @@ public SfaPage(IConfigStore store)
         });
         w.AnalysisProgress += (name, cur, total) => RunOnUi(() =>
         {
-            SfaProcessStatusText.Text = $"Анализ: {cur}/{total} – {name}";
+            SfaProcessStatusText.Text = $"Анализ: {cur}/{total} - {name}";
             if (total > 0) SfaProcessProgress.Value = 100.0 * cur / total;
         });
         w.PulseUpdated += (_, text) => RunOnUi(() =>
@@ -292,18 +292,18 @@ public SfaPage(IConfigStore store)
         w.AnalysisFileCompleted += (name, ok) => RunOnUi(() =>
         {
             SetFileStatusByName(name, ok ? AnalysisStatus.Success : AnalysisStatus.Error);
-            AppendLog($"[Анализ] {name} — {(ok ? "успешно" : "ошибка")}");
+            AppendLog($"[Анализ] {name} - {(ok ? "успешно" : "ошибка")}");
         });
         w.ExportProgress += (name, cur, total) => RunOnUi(() =>
         {
-            SfaProcessStatusText.Text = $"Экспорт: {cur}/{total} – {name}";
+            SfaProcessStatusText.Text = $"Экспорт: {cur}/{total} - {name}";
             if (total > 0) SfaProcessProgress.Value = 100.0 * cur / total;
         });
         w.ExportFileCompleted += (name, ok) => RunOnUi(() =>
         {
             SetFileStatusByName(name, ok ? AnalysisStatus.Success : AnalysisStatus.Error);
             if (!ok) AppendError($"Ошибка экспорта для {name}");
-            else AppendLog($"[Экспорт] {name} — успешно");
+            else AppendLog($"[Экспорт] {name} - успешно");
         });
         w.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
         w.Finished += (ok, total) => RunOnUi(() => OnAnalysisFinished(ok, total));
@@ -343,7 +343,7 @@ public SfaPage(IConfigStore store)
         _worker = null;
         RefreshFileList();
 
-        // Поиск документации MS Learn — фаза кнопки «Запустить анализ СФ»
+        // Поиск документации MS Learn - фаза кнопки «Запустить анализ СФ»
         // (после анализа и экспорта), чтобы генерация отчёта шла по кэшу
         // без вызовов npx. Linux/Android использует man-pages при генерации.
         if (_analysisCancelled)
@@ -355,7 +355,7 @@ public SfaPage(IConfigStore store)
             StartDocsSearchAsync().SafeFireAndForget("Sfa.DocsSearch");
     }
 
-    /// <summary>Поиск документации MS Learn по всем export.json — выполняется
+    /// <summary>Поиск документации MS Learn по всем export.json - выполняется
     /// сразу после анализа СФ, параллельно, с тихими вызовами npx.</summary>
     private async Task StartDocsSearchAsync()
     {
@@ -384,7 +384,7 @@ public SfaPage(IConfigStore store)
         {
             if (total > 0) { SfaProcessProgress.Maximum = total; SfaProcessProgress.Value = cur; }
             SfaProcessStatusText.Text = msg.Length > 0
-                ? $"Поиск документации: {cur}/{total} — {msg}"
+                ? $"Поиск документации: {cur}/{total} - {msg}"
                 : $"Поиск документации: {cur}/{total}";
         });
         _docsWorker.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
@@ -439,7 +439,7 @@ public SfaPage(IConfigStore store)
         }
         else if (_htmlInProgress)
         {
-            // Фаза генерации отчётов: мягкая отмена — мост останавливает
+            // Фаза генерации отчётов: мягкая отмена - мост останавливает
             // поиск документации и завершает все процессы npx.
             _htmlCancelled = true;
             _htmlWorker?.Cancel();
@@ -497,8 +497,8 @@ public SfaPage(IConfigStore store)
         // Вопрос про кэш задаётся при запуске анализа, не здесь: к моменту
         // нажатия «Сгенерировать HTML» поиск документации уже выполнен, и
         // генерация идёт по кэшу mslearn_cache.db. Если индекс покрывает все
-        // найденные JSON — перегенерация из кэша; есть неучтённые файлы
-        // (добавлены после анализа) — полная генерация, индекс перестроится.
+        // найденные JSON - перегенерация из кэша; есть неучтённые файлы
+        // (добавлены после анализа) - полная генерация, индекс перестроится.
         var scannedJsons = ExecutableFinder.SafeEnumerateFiles(inputDir)
             .Where(f => f.EndsWith(".export.json", StringComparison.OrdinalIgnoreCase)).ToArray();
         var indexDb = Path.Combine(sfaReports, "sfa_function_index.db");
@@ -509,7 +509,7 @@ public SfaPage(IConfigStore store)
         bool reuseCache;
         if (scannedJsons.Length == 0 && indexPaths.Length > 0)
         {
-            // JSON удалены (например, «удалять JSON» включён) — только кэш.
+            // JSON удалены (например, «удалять JSON» включён) - только кэш.
             jsonFiles = indexPaths;
             reuseCache = true;
         }
@@ -557,7 +557,7 @@ public SfaPage(IConfigStore store)
         {
             if (total > 0) { SfaProcessProgress.Maximum = total; SfaProcessProgress.Value = cur; }
             SfaProcessStatusText.Text = msg.Length > 0
-                ? $"Генерация HTML: {cur}/{total} — {msg}"
+                ? $"Генерация HTML: {cur}/{total} - {msg}"
                 : $"Генерация HTML: {cur}/{total}";
         });
         _htmlWorker.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
@@ -566,7 +566,7 @@ public SfaPage(IConfigStore store)
             if (msg.Length > 0) AppendLog($"[HTML] {msg}");
         });
         // Finished приходит из фонового потока Task.Run: без RunOnUi обработчик
-        // трогал UI (кнопки, прогресс, ContentDialog) из не-UI потока —
+        // трогал UI (кнопки, прогресс, ContentDialog) из не-UI потока -
         // приложение падало аварийно в момент завершения/отмены генерации.
         _htmlWorker.Finished += result => RunOnUi(() => OnHtmlFinishedAsync(result));
 
@@ -641,9 +641,9 @@ public SfaPage(IConfigStore store)
         var idx = await UiDialogs.AskButtonsAsync(
             "Найден кэш документации MS Learn",
             $"Обнаружен ранее собранный кэш документации ({sizeKb:F1} КБ).\n\n" +
-            "«Перегенерировать HTML из кэша» — отчёты строятся из сохранённой " +
+            "«Перегенерировать HTML из кэша» - отчёты строятся из сохранённой " +
             "документации без повторного анализа IDA; недостающие функции доищутся автоматически.\n\n" +
-            "«Выполнить полный анализ» — обычный цикл IDA + экспорт; документация " +
+            "«Выполнить полный анализ» - обычный цикл IDA + экспорт; документация " +
             "будет искаться после анализа.",
             new[] { "Выполнить полный анализ", "Перегенерировать HTML из кэша", "Отмена" });
         return idx switch

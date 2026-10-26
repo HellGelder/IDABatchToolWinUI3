@@ -20,7 +20,7 @@ public sealed class AnalysisWorker : IDisposable
 
     /// <summary>(фаза "analysis"|"export")</summary>
     public event Action<string>? PhaseChanged;
-    /// <summary>(имя цели, PID процесса IDA, managed thread id) — сразу после запуска idat.exe.</summary>
+    /// <summary>(имя цели, PID процесса IDA, managed thread id) - сразу после запуска idat.exe.</summary>
     public event Action<string, int, int>? ProcessStarted;
     public event Action<string, int, int>? AnalysisProgress;
     public event Action<string>? AnalysisFileStarted;
@@ -29,7 +29,7 @@ public sealed class AnalysisWorker : IDisposable
     public event Action<string>? ExportFileStarted;
     public event Action<string, bool>? ExportFileCompleted;
     public event Action<string>? ErrorOccurred;
-    /// <summary>(имя файла, текст пульса процесса) — для строки статуса/диспетчера.</summary>
+    /// <summary>(имя файла, текст пульса процесса) - для строки статуса/диспетчера.</summary>
     public event Action<string, string>? PulseUpdated;
     public event Action<int, int>? Finished;
 
@@ -139,7 +139,7 @@ public sealed class AnalysisWorker : IDisposable
             return;
         }
 
-        // Фаза 2: экспорт в JSON — успех только по валидному JSON, а не по факту
+        // Фаза 2: экспорт в JSON - успех только по валидному JSON, а не по факту
         // существования базы: старый .i64 мог остаться от прошлого запуска.
         PhaseChanged?.Invoke("export");
 
@@ -204,7 +204,7 @@ public sealed class AnalysisWorker : IDisposable
         Finished?.Invoke(succeeded, _files.Count);
     }
 
-    /// <summary>Имя базы для UI-событий — без служебного суффикса .i64/.idb.</summary>
+    /// <summary>Имя базы для UI-событий - без служебного суффикса .i64/.idb.</summary>
     private static string DisplayName(string fileName)
     {
         if (fileName.EndsWith(".i64", StringComparison.OrdinalIgnoreCase)
@@ -219,7 +219,7 @@ public sealed class AnalysisWorker : IDisposable
         {
             if (File.Exists(path)) File.Delete(path);
         }
-        catch { /* файл занят — экспорт всё равно перезапишет его */ }
+        catch { /* файл занят - экспорт всё равно перезапишет его */ }
     }
 
     public void Dispose()

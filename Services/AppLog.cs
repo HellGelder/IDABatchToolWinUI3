@@ -34,7 +34,7 @@ public static class AppLog
                     Directory.CreateDirectory(dir);
                     Directories.Add(dir);
                 }
-                catch { /* папка недоступна — пишем в оставшиеся */ }
+                catch { /* папка недоступна - пишем в оставшиеся */ }
             }
             _initialized = true;
             WriteLocked("INFO", $"=== IDABatchToolWinUI {AppVersion()} start ===", null);
@@ -97,7 +97,7 @@ public static class AppLog
                 RotateIfNeeded(path);
                 File.AppendAllText(path, text + Environment.NewLine, new UTF8Encoding(false));
             }
-            catch { /* эта папка недоступна — остальные продолжают работать */ }
+            catch { /* эта папка недоступна - остальные продолжают работать */ }
         }
     }
 

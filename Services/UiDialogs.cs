@@ -107,7 +107,7 @@ public static class UiDialogs
         }
         catch (Exception ex)
         {
-            // Обработчик кнопки — async void: исключение здесь уронило бы процесс.
+            // Обработчик кнопки - async void: исключение здесь уронило бы процесс.
             await WarnAsync("Ошибка выбора папки", ex.Message);
         }
     }
@@ -159,7 +159,7 @@ public static class UiDialogs
     /// <summary>
     /// Кастомный диалог с произвольным набором кнопок (аналог QMessageBox.addButton).
     /// Возвращает Index выбранной кнопки (-1 = закрыто/отменено).
-    /// Если ShowAsync падает (например, окно закрыто) — задача завершается
+    /// Если ShowAsync падает (например, окно закрыто) - задача завершается
     /// исключением, а не висит вечно, как прежний fire-and-forget вариант.
     /// </summary>
     public static async Task<int> AskButtonsAsync(string title, string message,
@@ -199,7 +199,7 @@ public static class UiDialogs
                 stack.Children.Add(btn);
             }
 
-            // Если пользователь закрыл диалог крестиком — вернуть -1
+            // Если пользователь закрыл диалог крестиком - вернуть -1
             dialog.Closing += (_, _) => tcs.TrySetResult(-1);
 
             // Ожидаем ShowAsync: при ошибке исключение уйдёт вызывающему через tcs,

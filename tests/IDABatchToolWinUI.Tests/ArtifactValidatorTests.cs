@@ -11,7 +11,7 @@ public sealed class ArtifactValidatorTests : IDisposable
     private const string ValidDiff =
         """{"primary":"a.i64","secondary":"b.i64","similarity":0.5,"matched_functions":[],"error":null}""";
 
-    // Каталог тестовых файлов — рядом с тестовой сборкой: %TEMP% в этом
+    // Каталог тестовых файлов - рядом с тестовой сборкой: %TEMP% в этом
     // окружении может быть закрыт для процесса тестов.
     private readonly string _dir = Path.Combine(
         AppContext.BaseDirectory, "test-tmp", Guid.NewGuid().ToString("N"));
@@ -95,7 +95,7 @@ public sealed class ArtifactValidatorTests : IDisposable
     [Fact]
     public void DiaphoraOnlyDiffJson_WithoutPrimary_Passes()
     {
-        // Diaphora-only режим создаёт JSON без primary/secondary — для отчёта
+        // Diaphora-only режим создаёт JSON без primary/secondary - для отчёта
         // это допустимо, если есть similarity и matched_functions.
         var path = Write("diaphora.diff.json",
             """{"similarity":0.0,"matched_functions":[],"error":null}""");

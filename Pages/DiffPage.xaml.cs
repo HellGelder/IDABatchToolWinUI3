@@ -9,7 +9,7 @@ using Microsoft.UI.Xaml.Media;
 namespace IDABatchToolWinUI.Pages;
 
 /// <summary>
-/// Страница «Сравнение» (BinDiff + Diaphora) — аналог DiffPage из исполнения 1.
+/// Страница «Сравнение» (BinDiff + Diaphora) - аналог DiffPage из исполнения 1.
 /// </summary>
 public sealed partial class DiffPage : Page
 {
@@ -25,8 +25,8 @@ public sealed partial class DiffPage : Page
     // ── Батчинг UI-обновлений диффа ──
     // Колбэки из фоновых потоков только пишут состояние под замком; UI-поток
     // выносит накопленное одним обновлением по таймеру (FlushGitUiUpdates).
-    // Прежний вариант — RunOnUi на каждый файл + O(n)-конкатенация строки
-    // журнала — топил UI-поток: окно «зависало», карточки не обновлялись.
+    // Прежний вариант - RunOnUi на каждый файл + O(n)-конкатенация строки
+    // журнала - топил UI-поток: окно «зависало», карточки не обновлялись.
     private readonly object _gitUiGate = new();
     private readonly Queue<string> _gitPendingLog = new();
     private string?[] _gitPendingModule = Array.Empty<string?>();
@@ -44,12 +44,12 @@ public sealed partial class DiffPage : Page
         InitializeComponent();
         _store = store;
 
-        // Подсказка BinDiff: TeachingTip — не FrameworkElement, x:Bind к Target
-        // ненадёжен — Target назначаем из кода. Клик подключён атрибутом Click
+        // Подсказка BinDiff: TeachingTip - не FrameworkElement, x:Bind к Target
+        // ненадёжен - Target назначаем из кода. Клик подключён атрибутом Click
         // в XAML ровно один раз (обработчик тоглит IsOpen).
         BindiffTip.Target = BindiffInfoButton;
 
-        // Подписки — один раз в конструкторе, чтобы при повторном показе
+        // Подписки - один раз в конструкторе, чтобы при повторном показе
         // (кэш навигации) обработчики не дублировались.
         BrowseLeftButton.Click += (_, _) => UiDialogs.PickFolderAsync(LeftDirTextBox).SafeFireAndForget("Diff.BrowseLeft");
         BrowseRightButton.Click += (_, _) => UiDialogs.PickFolderAsync(RightDirTextBox).SafeFireAndForget("Diff.BrowseRight");
@@ -61,7 +61,7 @@ public sealed partial class DiffPage : Page
         LeftDirTextBox.TextChanged += (_, _) => AnalyzeDirectories();
         RightDirTextBox.TextChanged += (_, _) => AnalyzeDirectories();
 
-        // Рекурсивный скан двух директорий — в фоне; TextChanged дебаунсится.
+        // Рекурсивный скан двух директорий - в фоне; TextChanged дебаунсится.
         _analyzeTimer = DispatcherQueue.CreateTimer();
         _analyzeTimer.Interval = TimeSpan.FromMilliseconds(400);
         _analyzeTimer.IsRepeating = false;
@@ -242,7 +242,7 @@ public sealed partial class DiffPage : Page
         bool useDp = engine is "diaphora" or "both";
         foreach (var r in rows)
         {
-            r.PidText = "—";
+            r.PidText = "-";
             if (!_diffInProgress)
             {
                 r.BindiffStatus = useBd ? "waiting" : "no_analysis";
@@ -372,9 +372,9 @@ public sealed partial class DiffPage : Page
         MapStatusLabel.Text = "Прогресс: запуск...";
         DiffErrorTextBox.Text = "";
 
-        // Этапы прогона — под выбранный движок; счётчик шагов не ведём
+        // Этапы прогона - под выбранный движок; счётчик шагов не ведём
         ResetStages(engine);
-        CurrentFileLabel.Text = "Файл: —";
+        CurrentFileLabel.Text = "Файл: -";
 
         // Сброс статусов колонок: выбранные -> waiting для задействованных движков
         var allRows = PairsListView.ItemsSource as List<PairRowViewModel>;
@@ -393,7 +393,7 @@ public sealed partial class DiffPage : Page
         {
             OnStageChanged(stage, phase);
             if (phase == "started" || phase == "done")
-                AppendLog($"[Этап] {stage} — {(phase == "started" ? "начало" : "завершён")}");
+                AppendLog($"[Этап] {stage} - {(phase == "started" ? "начало" : "завершён")}");
         });
         w.StageFile += (stage, cur, tot, file) => RunOnUi(() =>
         {
@@ -406,7 +406,7 @@ public sealed partial class DiffPage : Page
             var row = (PairsListView.ItemsSource as List<PairRowViewModel>)
                 ?.FirstOrDefault(r => r.RelKey == relKey);
             if (row == null) return;
-            row.PidText = pid > 0 ? pid.ToString() : "—";
+            row.PidText = pid > 0 ? pid.ToString() : "-";
         });
         w.PairStatus += (relKey, engine, status) => RunOnUi(() =>
         {
@@ -416,7 +416,7 @@ public sealed partial class DiffPage : Page
             if (engine == "bindiff") row.BindiffStatus = status;
             else row.DiaphoraStatus = status;
             if (status is "done" or "error")
-                AppendLog($"[{engine}] {relKey} — {(status == "done" ? "успешно" : "ошибка")}");
+                AppendLog($"[{engine}] {relKey} - {(status == "done" ? "успешно" : "ошибка")}");
         });
         w.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
         w.Finished += (ok, total) => RunOnUi(() => OnDiffFinishedAsync(ok, total));
@@ -481,18 +481,18 @@ public sealed partial class DiffPage : Page
         CancelDiffButton.IsEnabled = false;
         DiffProgressRing.IsActive = false;
         DiffProgressRing.Visibility = Visibility.Collapsed;
-        // Итог — в строке текущего файла: MapStatusLabel перезапишет AnalyzeDirectories()
+        // Итог - в строке текущего файла: MapStatusLabel перезапишет AnalyzeDirectories()
         var failedCount = Math.Max(0, total - successCount);
         CurrentFileLabel.Text = failedCount > 0
             ? $"Сравнение завершено: успешно {successCount} из {total}, ошибок: {failedCount}"
             : $"Сравнение завершено: успешно {successCount} из {total} пар";
         if (failedCount > 0)
-            AppendError($"Сравнение: пар с ошибками — {failedCount} из {total}");
+            AppendError($"Сравнение: пар с ошибками - {failedCount} из {total}");
 
         AnalyzeDirectories();
 
         // Диспоузим воркер до диалога: диалог может провисеть надолго, а воркер
-        // уже не нужен (Dispose отменяет его CTS — прогон завершён).
+        // уже не нужен (Dispose отменяет его CTS - прогон завершён).
         _worker?.Dispose();
         _worker = null;
 
@@ -578,7 +578,7 @@ public sealed partial class DiffPage : Page
         }
         finally
         {
-            // Раньше локальный воркер не диспозился вовсе — процесс моста мог остаться.
+            // Раньше локальный воркер не диспозился вовсе - процесс моста мог остаться.
             worker.Dispose();
         }
     }
@@ -642,8 +642,8 @@ public sealed partial class DiffPage : Page
             await UiDialogs.WarnAsync("Ошибка", "Папка результата не найдена.");
             return;
         }
-        // Размер диффа задаёт чекбокс «Полный дифф»: отмечен — все строки файлов,
-        // снят — стандартный контекст 3 строки (поля с числом строк больше нет)
+        // Размер диффа задаёт чекбокс «Полный дифф»: отмечен - все строки файлов,
+        // снят - стандартный контекст 3 строки (поля с числом строк больше нет)
         var fullDiff = GitFullDiffCheckBox.IsChecked == true;
         var context = fullDiff ? DirectoriesDiffService.FullContext : DirectoriesDiffService.DefaultContext;
 
@@ -658,9 +658,9 @@ public sealed partial class DiffPage : Page
 
         try
         {
-            // Состояние UI-элементов читаем ТОЛЬКО на UI-потоке — до запуска фоновой
+            // Состояние UI-элементов читаем ТОЛЬКО на UI-потоке - до запуска фоновой
             // задачи: обращение к чекбоксу внутри Task.Run даёт COMException
-            // (RPC_E_WRONG_THREAD) с пустым Message — «ОШИБКА: » без причины.
+            // (RPC_E_WRONG_THREAD) с пустым Message - «ОШИБКА: » без причины.
             var skipBinary = GitSourcesOnlyCheckBox.IsChecked == true;
             var modeFlag = GitModulesCheckBox.IsChecked; // null = авто
 
@@ -696,7 +696,7 @@ public sealed partial class DiffPage : Page
                 if (stats.HasErrors)
                     await UiDialogs.WarnAsync("Готово с ошибками",
                         $"Дифф создан, но при обработке {stats.Errors} файл(ов) возникли ошибки. " +
-                        "Подробности — в журнале.");
+                        "Подробности - в журнале.");
             }
         }
         catch (OperationCanceledException)
@@ -707,10 +707,10 @@ public sealed partial class DiffPage : Page
         catch (Exception ex)
         {
             GitStatusText.Text = "Ошибка";
-            // Пустой Message у COMException (RPC_E_WRONG_THREAD и т.п.) — без типа
+            // Пустой Message у COMException (RPC_E_WRONG_THREAD и т.п.) - без типа
             // и HResult причина в журнале выглядела как «ОШИБКА: » и пустая строка
             AppendGitLog($"ОШИБКА: {ex.GetType().Name}: {ex.Message} (HResult 0x{ex.HResult:X8})");
-            await UiDialogs.WarnAsync("Ошибка", $"{ex.GetType().Name}: {ex.Message}\n\nПодробности — в логе на странице.");
+            await UiDialogs.WarnAsync("Ошибка", $"{ex.GetType().Name}: {ex.Message}\n\nПодробности - в логе на странице.");
         }
         finally
         {
@@ -748,7 +748,7 @@ public sealed partial class DiffPage : Page
         _gitUiTimer.Stop();
         lock (_gitUiGate)
         {
-            // Итоговый статус уже выставлен явно — промежуточный не применяем
+            // Итоговый статус уже выставлен явно - промежуточный не применяем
             _gitDone = 0;
             _gitTotal = 0;
             _gitPendingStatus = null;
@@ -815,7 +815,7 @@ public sealed partial class DiffPage : Page
         }
     }
 
-    /// <summary>Пакетный журнал: одна конкатенация на пакет; хвост ограничен —
+    /// <summary>Пакетный журнал: одна конкатенация на пакет; хвост ограничен -
     /// полный журнал живёт в changes.diff.log (плоский режим) и журналах модулей.</summary>
     private void AppendGitLogBatch(IReadOnlyList<string> lines)
         => UiLog.Append(GitLogTextBox, string.Join(Environment.NewLine, lines));
@@ -865,7 +865,7 @@ public sealed partial class DiffPage : Page
             return;
         }
 
-        // Карточки потоков: по одной на воркер; обновления — через батч-таймер
+        // Карточки потоков: по одной на воркер; обновления - через батч-таймер
         var workers = Math.Min(4, modules.Count);
         _threadCards = Enumerable.Range(1, workers).Select(i => new ThreadCardViewModel(i)).ToList();
         GitThreadsItems.ItemsSource = _threadCards;
@@ -908,7 +908,7 @@ public sealed partial class DiffPage : Page
 
         var changedCount = result.Outcomes.Count(o => o.Kind != "unchanged");
         GitStatusText.Text = $"Готово: модулей {result.TotalModules}, с изменениями {changedCount} " +
-                             $"(потоков {result.Workers}) — отчёт: «Сгенерировать HTML-отчёт»";
+                             $"(потоков {result.Workers}) - отчёт: «Сгенерировать HTML-отчёт»";
 
         var entries = result.Outcomes.Select(o => new ModuleManifestEntry(
             o.Module, o.Kind,
@@ -930,11 +930,11 @@ public sealed partial class DiffPage : Page
         if (entries == null || entries.Count == 0)
         {
             await UiDialogs.WarnAsync("Манифест недоступен",
-                "modules.json не найден или пуст — повторите модульное сравнение.");
+                "modules.json не найден или пуст - повторите модульное сравнение.");
             return;
         }
 
-        // UI-свойства — до фоновых задач (см. комментарий в GitStart_Click)
+        // UI-свойства - до фоновых задач (см. комментарий в GitStart_Click)
         var oldDir = GitOldDirTextBox.Text.Trim();
         var newDir = GitNewDirTextBox.Text.Trim();
         var withDiff = entries.Where(e => e.HasDiff).ToList();
@@ -949,7 +949,7 @@ public sealed partial class DiffPage : Page
                 i++;
                 GitStatusText.Text = $"Отчёт {i}/{withDiff.Count}: {entry.Module}";
                 var diffPath = Path.Combine(moduleDir, entry.Module, "changes.diff");
-                // обратная ссылка — относительная: отчёт переносим вместе с папкой
+                // обратная ссылка - относительная: отчёт переносим вместе с папкой
                 await Task.Run(() => GitDiffReportService.Generate(diffPath, oldDir, newDir,
                     backToIndexUrl: "../" + GitDiffReportService.IndexFileName));
             }
