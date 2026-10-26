@@ -2,10 +2,14 @@
 
   <PropertyGroup>
     <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
-    <!-- xUnit v3: тесты — обычное консольное приложение, без testhost.
-         В этом окружении testhost падает на OpenProcess(parent) с access denied,
-         а MTP-раннер работает напрямую: запуск через dotnet run по проекту. -->
+    <!-- xUnit v3: тесты — обычное консольное приложение, без testhost (в среде
+         агента testhost падает на OpenProcess(parent), MTP-раннер работает напрямую).
+         TestingPlatformDotnetTestSupport включает `dotnet test` (MTP вместо VSTest).
+         В среде агента ZCode dotnet test не работает: NamedPipeClientStream до
+         MSBuild-узла получает UnauthorizedAccessException (та же политика, что и
+         у testhost) - там канонический запуск: dotnet run по проекту или exe. -->
     <OutputType>Exe</OutputType>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>

@@ -2,7 +2,9 @@
 ==============================================
 Формат записи: версия / дата / что изменилось.
 Версия в свойствах exe должна совпадать с последней записью
-(IDABatchToolWinUI.csproj: Version / FileVersion, make-portable.ps1: лончер).
+(Directory.Build.props: Version / FileVersion - единый источник;
+Package.appxmanifest и app.manifest синхронно; make-portable.ps1
+и тест VersionConsistencyTests ловят расхождение).
 
 1.0.0.20 / 2026-10-26
   Изменено:

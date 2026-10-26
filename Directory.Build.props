@@ -1,0 +1,19 @@
+<Project>
+
+  <!--
+    Единый источник версии сборки (F2). Автоматически импортируется MSBuild
+    во все проекты (IDABatchToolWinUI и тесты) - версия задаётся ТОЛЬКО здесь.
+
+    Релиз: поднять версию в этом файле → синхронно поправить Version в
+    Package.appxmanifest и version в app.manifest (расхождение ловит
+    make-portable.ps1 и тест VersionConsistencyTests) → дописать version.txt.
+    Лончер и zip штампуются версией из этого файла автоматически.
+  -->
+  <PropertyGroup>
+    <Version>1.0.0.20</Version>
+    <FileVersion>1.0.0.20</FileVersion>
+    <AssemblyVersion>1.0.0.20</AssemblyVersion>
+    <InformationalVersion>1.0.0.20</InformationalVersion>
+  </PropertyGroup>
+
+</Project>

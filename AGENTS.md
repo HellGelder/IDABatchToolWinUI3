@@ -20,10 +20,16 @@ IDABatchToolWinUI — **исполнение 2**: GUI на C# / WinUI 3 (WinAppS
 ## Сборка и запуск
 
 - Файла `.sln` нет; из корня репо: `dotnet build -c Debug -v quiet` или `dotnet run`.
-- Релиз: поднять версию в 4 полях csproj (Version/FileVersion/AssemblyVersion/
-  InformationalVersion) → дописать `version.txt` → `make-portable.ps1`.
-  Перед скриптом закрыть запущенное приложение из `dist\portable` (лочит AppIcon.ico)
-  и убедиться в отсутствии `idat.exe`. Архив: `dist\IDABatchToolWinUI-<версия>.zip`.
+- Тесты (xUnit v3, MTP): из `tests\IDABatchToolWinUI.Tests` — `dotnet run` (или exe
+  из bin). `dotnet test` тоже включён (TestingPlatformDotnetTestSupport), но в среде
+  агента ZCode падает: NamedPipeClientStream до MSBuild-узла получает
+  UnauthorizedAccessException — там запускать только через `dotnet run`.
+- Релиз: поднять версию в `Directory.Build.props` (единый источник, 4 поля) →
+  синхронно `Version` в `Package.appxmanifest` и `version` в `app.manifest` →
+  дописать `version.txt`. Расхождение ловит `make-portable.ps1` (assert) и
+  тест `VersionConsistencyTests`. Перед скриптом закрыть запущенное приложение
+  из `dist\portable` (лочит AppIcon.ico) и убедиться в отсутствии `idat.exe`.
+  Архив: `dist\IDABatchToolWinUI-<версия>-<rid>.zip`.
 - Граф знаний: `make-portable.ps1` при полной сборке обновляет малый граф
   (`graphify-out/`: свой код без вендоренной diaphora; `-SkipGraph` — пропустить,
   отсутствие graphify — предупреждение). Полный граф с diaphora —

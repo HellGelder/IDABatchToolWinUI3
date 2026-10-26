@@ -13,7 +13,7 @@
         app\                вся publish-папка: exe приложения, все DLL,
                             _python\, scripts\, config.yaml, Assets\, ...
 
-    Дополнительно создаётся dist\IDABatchTool-portable-<rid>.zip.
+    Дополнительно создаётся dist\IDABatchToolWinUI-<версия>-<rid>.zip.
 
 .EXAMPLE
     .\make-portable.ps1                  # publish + раскладка + лончер + zip
@@ -37,10 +37,48 @@ param(
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 
-# Версия сборки - из csproj (FileVersion); ею же штампуется лончер.
-$csprojRaw = Get-Content "$root\IDABatchToolWinUI.csproj" -Raw
-$AppVersion = if ($csprojRaw -match '<FileVersion>([^<]+)</FileVersion>') { $Matches[1] } else { "1.0.0.0" }
-Write-Host "Версия сборки: $AppVersion"
+# ── 0. Версия - единый источник: Directory.Build.props ──────────────────────
+# При отсутствии версии раньше молча подставлялась 1.0.0.0 - теперь это ошибка.
+$propsPath = Join-Path $root "Directory.Build.props"
+if (-not (Test-Path $propsPath)) {
+    throw "Не найден Directory.Build.props - единый источник версии сборки."
+}
+$propsRaw = Get-Content $propsPath -Raw
+$AppVersion = if ($propsRaw -match '<FileVersion>([^<]+)</FileVersion>') { $Matches[1] } else { "" }
+if (-not $AppVersion) {
+    throw "В Directory.Build.props нет <FileVersion> - версия не определена."
+}
+Write-Host "Версия сборки: $AppVersion (Directory.Build.props)"
+
+# Assert консистентности: манифесты и журнал version.txt обязаны совпадать
+# с Directory.Build.props, иначе поставка выйдет с рассинхронизированной версией.
+$manifestChecks = @(
+    @{ Path = Join-Path $root "Package.appxmanifest"
+       Pattern = '(?m)^\s*Version="([^"]+)"\s*/>'
+       Name = "Package.appxmanifest (Identity Version)" },
+    @{ Path = Join-Path $root "app.manifest"
+       Pattern = '<assemblyIdentity version="([^"]+)"'
+       Name = "app.manifest (assemblyIdentity)" }
+)
+foreach ($c in $manifestChecks) {
+    if (-not (Test-Path $c.Path)) { throw "Не найден $($c.Path) - расхождение версии не проверить." }
+    $raw = Get-Content $c.Path -Raw
+    $v = if ($raw -match $c.Pattern) { $Matches[1] } else { "" }
+    if ($v -ne $AppVersion) {
+        throw ("Рассинхрон версии: {0} = '{1}', Directory.Build.props = '{2}'. " +
+               "Подними версию синхронно (см. комментарий в Directory.Build.props).") -f $c.Name, $v, $AppVersion
+    }
+}
+$versionTxtPath = Join-Path $root "version.txt"
+if (-not (Test-Path $versionTxtPath)) {
+    throw "Не найден version.txt - журнал сборок обязателен в поставке."
+}
+$vtRaw = Get-Content $versionTxtPath -Raw
+$vtVersion = if ($vtRaw -match '(?m)^(\d+\.\d+\.\d+\.\d+)\s*/\s*\d{4}-\d{2}-\d{2}') { $Matches[1] } else { "" }
+if ($vtVersion -ne $AppVersion) {
+    throw ("Рассинхрон версии: последняя запись version.txt = '{0}', Directory.Build.props = '{1}'. " +
+           "Допиши запись в version.txt (формат - в шапке файла).") -f $vtVersion, $AppVersion
+}
 
 # ── 1. Publish ──────────────────────────────────────────────────────────────
 if (-not $NoPublish) {
@@ -174,12 +212,14 @@ if ($LASTEXITCODE -ne 0) { throw "Компиляция лончера не уд�
 Remove-Item $launcherCs -ErrorAction SilentlyContinue
 Write-Host "Лончер собран: $launcherExe"
 
-# ── 5. Zip: IDABatchToolWinUI-<версия>.zip ──────────────────────────────────
+# ── 5. Zip: IDABatchToolWinUI-<версия>-<rid>.zip ────────────────────────────
 if (-not $NoZip) {
-    $zip = Join-Path $dist "IDABatchToolWinUI-$AppVersion.zip"
+    $zip = Join-Path $dist "IDABatchToolWinUI-$AppVersion-$Rid.zip"
     if (Test-Path $zip) { Remove-Item $zip -Force }
-    # старые архивы с прежним именем убираем, чтобы не путаться
+    # архивы прежних схем имён убираем, чтобы не путаться
     Get-ChildItem $dist -Filter "IDABatchTool-portable-*.zip" -ErrorAction SilentlyContinue |
+        Remove-Item -Force
+    Get-ChildItem $dist -Filter "IDABatchToolWinUI-$AppVersion.zip" -ErrorAction SilentlyContinue |
         Remove-Item -Force
     Compress-Archive -Path (Join-Path $staging "*") -DestinationPath $zip -CompressionLevel Optimal
     Write-Host "Архив: $zip ($('{0:N1}' -f ((Get-Item $zip).Length / 1MB)) МБ)"
