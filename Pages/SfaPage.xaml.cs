@@ -24,6 +24,10 @@ public sealed partial class SfaPage : Page
     private HtmlGenWorker? _docsWorker;
     private List<FileItem> _cachedFiles = new();
     private bool _exportAllAfterAnalysis;
+    // Наличие JSON-экспорта в папке: считается в фоне (см. StartJsonProbe),
+    // на UI-потоке только читается.
+    private bool _hasExportJson;
+    private int _jsonProbeGeneration;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _refreshTimer;
     private int _refreshGeneration;
 
@@ -131,6 +135,7 @@ public SfaPage(IConfigStore store)
             SfaTreemap.SetData(new List<FileItem>());
             SfaGenerateHtmlButton.IsEnabled = false;
             SfaPlatformInfoBar.IsOpen = false;
+            StartJsonProbe();
             return;
         }
 
@@ -139,6 +144,7 @@ public SfaPage(IConfigStore store)
 
         SfaTreemap.SetData(_cachedFiles);
         UpdateGenerateHtmlButton();
+        StartJsonProbe();
     }
 
     /// <summary>
@@ -149,16 +155,39 @@ public SfaPage(IConfigStore store)
     /// как фаза документации стартовала.
     /// </summary>
     private void UpdateGenerateHtmlButton()
-        => SfaGenerateHtmlButton.IsEnabled = !IsBusy && HasHtmlSources();
+        => SfaGenerateHtmlButton.IsEnabled = !IsBusy && (HasAnalyzedArtifacts() || _hasExportJson);
 
-    /// <summary>Есть ли исходные данные для отчёта: готовые базы или JSON-экспорт.</summary>
-    private bool HasHtmlSources()
+    /// <summary>Готовые базы по уже просканированному списку - без обращения к диску.</summary>
+    private bool HasAnalyzedArtifacts()
+        => _cachedFiles.Any(f => ArtifactValidator.HasValidArtifacts(f.Path));
+
+    /// <summary>
+    /// Наличие JSON-экспорта выясняется в фоне: рекурсивный обход папки на
+    /// UI-потоке подвешивал страницу на больших и сетевых каталогах, из-за чего
+    /// диалог о завершении генерации не успевал появиться.
+    /// </summary>
+    private void StartJsonProbe()
     {
-        if (_cachedFiles.Any(f => ArtifactValidator.HasValidArtifacts(f.Path))) return true;
+        var generation = ++_jsonProbeGeneration;
         var inputDir = SfaInputDirTextBox.Text.Trim();
-        return !string.IsNullOrEmpty(inputDir) && Directory.Exists(inputDir)
-            && ExecutableFinder.SafeEnumerateFiles(inputDir)
-                .Any(f => f.EndsWith(".export.json", StringComparison.OrdinalIgnoreCase));
+        _ = Task.Run(() =>
+        {
+            bool has = false;
+            try
+            {
+                has = !string.IsNullOrEmpty(inputDir) && Directory.Exists(inputDir)
+                    && ExecutableFinder.SafeEnumerateFiles(inputDir)
+                        .Any(f => f.EndsWith(".export.json", StringComparison.OrdinalIgnoreCase));
+            }
+            catch { /* папка недоступна - считаем, что JSON нет */ }
+
+            RunOnUi(() =>
+            {
+                if (generation != _jsonProbeGeneration) return;
+                _hasExportJson = has;
+                UpdateGenerateHtmlButton();
+            });
+        });
     }
 
     // ──────────────────────────────────────────────
@@ -355,12 +384,16 @@ public SfaPage(IConfigStore store)
             SfaProcessStatusText.Text = "Нет готовых баз для экспорта";
         }
 
-        var inputDir = SfaInputDirTextBox.Text.Trim();
-        var anyJson = !string.IsNullOrEmpty(inputDir) && Directory.Exists(inputDir) &&
-            ExecutableFinder.SafeEnumerateFiles(inputDir).Any(f => f.EndsWith(".export.json", StringComparison.OrdinalIgnoreCase));
+        // JSON-экспорт: успешный экспорт гарантирует его по каждому файлу;
+        // остальное - по уже известным путям и фоновому зонду. Рекурсивный
+        // обход папки здесь не нужен и раньше подвешивал страницу.
+        var anyJson = succeeded > 0
+            || _cachedFiles.Any(f => File.Exists(ArtifactValidator.ExpectedExportJsonPath(f.Path)))
+            || _hasExportJson;
         _worker?.Dispose();
         _worker = null;
         RefreshFileList();
+        StartJsonProbe();
 
         // Поиск документации MS Learn - фаза кнопки «Запустить анализ СФ»
         // (после анализа и экспорта), чтобы генерация отчёта шла по кэшу
@@ -625,24 +658,51 @@ public SfaPage(IConfigStore store)
     private async Task OnHtmlFinishedAsync(HtmlGenResult result)
     {
         _htmlInProgress = false;
+        var cancelled = _htmlCancelled;
         SfaStartButton.IsEnabled = true;
         SfaCancelButton.IsEnabled = false;
-        UpdateGenerateHtmlButton();
         SfaProcessProgress.Value = SfaProcessProgress.Maximum;
         SetSfaProgressRunning(false);
-        SfaProcessStatusText.Text = _htmlCancelled ? "Генерация отменена" : "Готово";
+        SfaProcessStatusText.Text = cancelled ? "Генерация отменена" : "Готово";
         _htmlWorker?.Dispose();
         _htmlWorker = null;
+        StartJsonProbe();
+        UpdateGenerateHtmlButton();
 
-        if (_htmlCancelled) return;
+        if (cancelled) return;
 
-        if (result.IndexPath != null || result.ReportsDir != null)
-            await UiDialogs.InfoAsync("Готово",
-                $"Отчётов: {result.GeneratedCount} из {result.TotalFiles}\n" +
-                $"Системных функций: {result.TotalSystemFunctions}" +
-                $" (без документации: {result.SystemNotFound})\n" +
-                $"Всего импортов: {result.TotalImports}\n\n" +
-                $"Отчёты: {result.ReportsDir}\nИндекс: {result.IndexPath}");
+        var reportsDir = result.ReportsDir;
+        if (string.IsNullOrEmpty(reportsDir))
+            reportsDir = Path.Combine(SfaInputDirTextBox.Text.Trim(), AppConstants.SfaReportsDirName);
+        var indexPath = string.IsNullOrEmpty(result.IndexPath)
+            ? Path.Combine(reportsDir, "index.html")
+            : result.IndexPath;
+
+        // Итог всегда попадает в журнал страницы: даже если модальный диалог
+        // показать не удалось, результат и счётчики не теряются.
+        AppendLog($"HTML-отчёты СФ готовы: отчётов {result.GeneratedCount}/{result.TotalFiles}, " +
+                  $"системных функций {result.TotalSystemFunctions}, без документации {result.SystemNotFound}, " +
+                  $"импортов {result.TotalImports}. Индекс: {indexPath}");
+
+        var choice = await UiDialogs.AskButtonsAsync("HTML-отчёты СФ готовы",
+            $"Отчётов: {result.GeneratedCount} из {result.TotalFiles}\n" +
+            $"Системных функций: {result.TotalSystemFunctions}" +
+            $" (без документации: {result.SystemNotFound})\n" +
+            $"Всего импортов: {result.TotalImports}\n\n" +
+            $"Индекс: {indexPath}\nПапка: {reportsDir}",
+            new[] { "Открыть папку", "Открыть индекс", "ОК" },
+            defaultIndex: 0);
+
+        if (choice == 0 && Directory.Exists(reportsDir))
+        {
+            Windows.System.Launcher.LaunchFolderPathAsync(reportsDir)
+                .AsTask().SafeFireAndForget("Sfa.LaunchReports");
+        }
+        else if (choice == 1 && File.Exists(indexPath))
+        {
+            Windows.System.Launcher.LaunchUriAsync(new Uri(indexPath))
+                .AsTask().SafeFireAndForget("Sfa.LaunchIndex");
+        }
     }
 
     /// <summary>Читает список json_path из index-БД для перегенерации из кэша.</summary>

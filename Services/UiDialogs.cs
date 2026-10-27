@@ -15,8 +15,9 @@ public static class UiDialogs
     public static XamlRoot? XamlRoot => MainWindow?.Content?.XamlRoot;
 
     // Одновременно может быть показан только один модальный ContentDialog:
-    // второй ShowAsync в WinUI бросает исключение. Вместо исключения второй
-    // вызов сразу получает «отмену» (и пишется в журнал).
+    // второй ShowAsync в WinUI бросает исключение. Второй вызов не отбрасывается
+    // молча - он ждёт освобождения слота диалога (короткое ожидание), иначе
+    // сообщение о завершении операции (например, генерации отчётов) терялось.
     private static readonly object DialogGate = new();
     private static bool _dialogOpen;
 
@@ -30,9 +31,39 @@ public static class UiDialogs
         }
     }
 
+    /// <summary>Слот диалога с коротким ожиданием: предыдущий ContentDialog
+    /// может закрываться асинхронно, и ShowAsync нового сразу после закрытия
+    /// отклоняется WinUI. Ожидание даёт слою закрыться или освободиться.</summary>
+    private static async Task<bool> BeginDialogAsync(int attempts = 20, int delayMs = 100)
+    {
+        for (int i = 0; i < attempts; i++)
+        {
+            if (TryBeginDialog()) return true;
+            await Task.Delay(delayMs);
+        }
+        return false;
+    }
+
     private static void EndDialog()
     {
         lock (DialogGate) _dialogOpen = false;
+    }
+
+    /// <summary>Показ с повтором: WinUI допускает один ContentDialog на XamlRoot,
+    /// а ShowAsync сразу после закрытия предыдущего может быть отклонён
+    /// (попап ещё не уничтожен). Один повтор через паузу вместо потери диалога.</summary>
+    private static async Task<ContentDialogResult> ShowWithRetryAsync(ContentDialog dialog)
+    {
+        try
+        {
+            return await dialog.ShowAsync();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Диалог «{dialog.Title}» не показан с первой попытки: {ex.Message}. Повтор.");
+            await Task.Delay(200);
+            return await dialog.ShowAsync();
+        }
     }
 
     private static ContentDialog MakeDialog(string title, string content)
@@ -52,7 +83,7 @@ public static class UiDialogs
 
     public static async Task InfoAsync(string title, string message)
     {
-        if (!TryBeginDialog())
+        if (!await BeginDialogAsync())
         {
             AppLog.Warn($"Диалог «{title}» не показан: уже открыт другой диалог.");
             return;
@@ -60,14 +91,14 @@ public static class UiDialogs
         try
         {
             var dlg = MakeDialog(title, message);
-            try { await dlg.ShowAsync(); } catch { /* окно могло закрыться */ }
+            try { await ShowWithRetryAsync(dlg); } catch { /* окно могло закрыться */ }
         }
         finally { EndDialog(); }
     }
 
     public static async Task WarnAsync(string title, string message)
     {
-        if (!TryBeginDialog())
+        if (!await BeginDialogAsync())
         {
             AppLog.Warn($"Диалог «{title}» не показан: уже открыт другой диалог.");
             return;
@@ -75,7 +106,7 @@ public static class UiDialogs
         try
         {
             var dlg = MakeDialog(title, message);
-            try { await dlg.ShowAsync(); } catch { /* окно могло закрыться */ }
+            try { await ShowWithRetryAsync(dlg); } catch { /* окно могло закрыться */ }
         }
         finally { EndDialog(); }
     }
@@ -167,7 +198,7 @@ public static class UiDialogs
     public static async Task<int> AskButtonsAsync(string title, string message,
         IReadOnlyList<string> buttons, int defaultIndex = 0)
     {
-        if (!TryBeginDialog())
+        if (!await BeginDialogAsync())
         {
             AppLog.Warn($"Диалог «{title}» не показан: уже открыт другой диалог; возвращена отмена.");
             return -1;
@@ -206,8 +237,9 @@ public static class UiDialogs
             dialog.Closing += (_, _) => tcs.TrySetResult(-1);
 
             // Ожидаем ShowAsync: при ошибке исключение уйдёт вызывающему через tcs,
-            // а не оставит его ждать вечно.
-            try { await dialog.ShowAsync(); }
+            // а не оставит его ждать вечно. Повтор - если попап предыдущего
+            // диалога ещё не уничтожен (WinUI допускает один ContentDialog).
+            try { await ShowWithRetryAsync(dialog); }
             catch (Exception ex) { tcs.TrySetException(ex); }
 
             var result = await tcs.Task;

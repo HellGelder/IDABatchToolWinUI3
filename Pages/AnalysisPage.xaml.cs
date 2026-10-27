@@ -20,6 +20,9 @@ public sealed partial class AnalysisPage : Page
     private HtmlGenWorker? _htmlWorker;
     private List<FileItem> _cachedFiles = new();
     private bool _exportAllAfterAnalysis;
+    // Наличие JSON-экспорта: считается в фоне (StartJsonProbe), на UI только читается.
+    private bool _hasExportJson;
+    private int _jsonProbeGeneration;
     private TaskManagerWindow? _taskManagerWindow;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _refreshTimer;
     private int _refreshGeneration;
@@ -140,6 +143,7 @@ public sealed partial class AnalysisPage : Page
             Treemap.SetData(new List<FileItem>());
             GenerateHtmlButton.IsEnabled = false;
             PlatformInfoBar.IsOpen = false;
+            StartJsonProbe();
             return;
         }
 
@@ -148,6 +152,7 @@ public sealed partial class AnalysisPage : Page
 
         Treemap.SetData(_cachedFiles);
         UpdateGenerateHtmlButton();
+        StartJsonProbe();
     }
 
     /// <summary>
@@ -158,14 +163,34 @@ public sealed partial class AnalysisPage : Page
     /// срабатывает уже после старта экспорта.
     /// </summary>
     private void UpdateGenerateHtmlButton()
-        => GenerateHtmlButton.IsEnabled = !IsBusy && HasExportJson();
+        => GenerateHtmlButton.IsEnabled = !IsBusy && _hasExportJson;
 
-    private bool HasExportJson()
+    /// <summary>
+    /// Наличие JSON-экспорта выясняется в фоне: рекурсивный обход папки на
+    /// UI-потоке подвешивал страницу на больших и сетевых каталогах.
+    /// </summary>
+    private void StartJsonProbe()
     {
+        var generation = ++_jsonProbeGeneration;
         var inputDir = InputDirTextBox.Text.Trim();
-        return !string.IsNullOrEmpty(inputDir) && Directory.Exists(inputDir)
-            && ExecutableFinder.SafeEnumerateFiles(inputDir)
-                .Any(f => f.EndsWith(".export.json", StringComparison.OrdinalIgnoreCase));
+        _ = Task.Run(() =>
+        {
+            bool has = false;
+            try
+            {
+                has = !string.IsNullOrEmpty(inputDir) && Directory.Exists(inputDir)
+                    && ExecutableFinder.SafeEnumerateFiles(inputDir)
+                        .Any(f => f.EndsWith(".export.json", StringComparison.OrdinalIgnoreCase));
+            }
+            catch { /* папка недоступна - считаем, что JSON нет */ }
+
+            RunOnUi(() =>
+            {
+                if (generation != _jsonProbeGeneration) return;
+                _hasExportJson = has;
+                UpdateGenerateHtmlButton();
+            });
+        });
     }
 
     // ──────────────────────────────────────────────
@@ -367,11 +392,10 @@ public sealed partial class AnalysisPage : Page
             ProcessStatusText.Text = "Нет готовых баз для экспорта";
         }
 
-        var inputDir = InputDirTextBox.Text.Trim();
-        if (!string.IsNullOrEmpty(inputDir) && Directory.Exists(inputDir))
-        {
-            UpdateGenerateHtmlButton();
-        }
+        UpdateGenerateHtmlButton();
+        // Наличие JSON пересчитывается в фоне: обход папки на UI-потоке
+        // подвешивал страницу на больших каталогах.
+        StartJsonProbe();
         _worker?.Dispose();
         _worker = null;
         RefreshFileList();
@@ -519,6 +543,9 @@ public sealed partial class AnalysisPage : Page
         ProcessStatusText.Text = "Готово";
         _htmlWorker?.Dispose();
         _htmlWorker = null;
+        // JSON могли удалить по флагу «удалять JSON» - доступность кнопки
+        // пересчитывается в фоне после генерации.
+        StartJsonProbe();
 
         CleanupAfterReport();
 

@@ -30,7 +30,10 @@ public static class InputScanner
         // Раньше поиск шёл по расширениям текущей платформы, поэтому папка,
         // например, только с .so-файлами давала пустой список и детект не выполнялся.
         var extensions = PlatformInfo.AllExtensions();
-        var found = ExecutableFinder.FindExecutables(inputDir, extensions);
+        // Рекурсивный обход папки и проверки артефактов - в пуле потоков: на
+        // больших и сетевых каталогах синхронный обход подвешивал UI
+        // (пересканирование запускается на каждый ввод пути).
+        var found = await Task.Run(() => ExecutableFinder.FindExecutables(inputDir, extensions));
 
         // Архивы: распаковываем рядом и ищем внутри
         foreach (var ext in ArchiveHandler.ArchiveExtensions)
@@ -44,7 +47,8 @@ public static class InputScanner
                 var extracted = await ArchiveHandler.ExtractArchiveAsync(archive);
                 if (extracted != null && Directory.Exists(extracted))
                 {
-                    found.AddRange(ExecutableFinder.FindExecutables(extracted, extensions));
+                    var inner = await Task.Run(() => ExecutableFinder.FindExecutables(extracted, extensions));
+                    found.AddRange(inner);
                 }
                 else if (ext == ".dmg")
                 {
@@ -53,7 +57,8 @@ public static class InputScanner
             }
         }
 
-        return found.Distinct().Select(MakeItem).ToList();
+        // Проверка артефактов по каждому файлу (FileInfo + валидация базы) - тоже в фоне.
+        return await Task.Run(() => found.Distinct().Select(MakeItem).ToList());
     }
 
     private static FileItem MakeItem(string path)
