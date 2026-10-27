@@ -22,6 +22,11 @@ public sealed class HtmlGenResult
     public int SearchedCount { get; set; }
     public int FoundCount { get; set; }
     public int CachedTotal { get; set; }
+    // Сводные счётчики отчётов СФ (kind = sfa) - для диалога о завершении.
+    public int TotalSystemFunctions { get; set; }
+    public int TotalSystemModules { get; set; }
+    public int SystemNotFound { get; set; }
+    public int TotalImports { get; set; }
 }
 
 /// <summary>
@@ -37,6 +42,15 @@ public sealed class HtmlGenWorker : IDisposable
 
     private Process? _proc;
     private StreamWriter? _stdin;
+
+    // Прореживание прогресса: мост печатает PROGRESS на каждую импортируемую
+    // функцию и на каждый найденный документ - на больших модулях это тысячи
+    // строк, и очередь UI-потока забивалась обновлениями (окно «замирало»,
+    // диалог о завершении не успевал показаться).
+    private const int ProgressMinIntervalMs = 250;
+    private readonly Stopwatch _progressClock = Stopwatch.StartNew();
+    private long _lastProgressAtMs = -ProgressMinIntervalMs;
+    private (int Cur, int Total, string Msg)? _pendingProgress;
 
     public string Kind { get; }          // analysis | sfa | diff
     public bool DeleteJson { get; }
@@ -59,7 +73,8 @@ public sealed class HtmlGenWorker : IDisposable
         // но контракт Finished должен соблюдаться всегда.
         try
         {
-            await RunCoreAsync(inputDir, reportsDir, jsonDir, leftDir, rightDir, manpagesDb, jsonPaths);
+            await RunCoreAsync(inputDir, reportsDir, jsonDir, leftDir, rightDir, manpagesDb, jsonPaths)
+                .ConfigureAwait(false);
         }
         catch (Exception e)
         {
@@ -152,14 +167,17 @@ public sealed class HtmlGenWorker : IDisposable
 
             // Ждём полного завершения моста: большие наборы могут генерироваться
             // долго. Прерывание - только по явной отмене (Cancel/Dispose).
-            await _proc.WaitForExitAsync();
-            await Task.WhenAll(stdoutTask, stderrTask);
+            // ConfigureAwait(false): разбор stdout не должен выполняться на
+            // UI-потоке - иначе тысячи PROGRESS-строк держат интерфейс занятым.
+            await _proc.WaitForExitAsync().ConfigureAwait(false);
+            await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false);
+            FlushProgress();
             ProcessRegistry.Unregister(_proc.Id);
 
             if (_proc.ExitCode != 0 && result.GeneratedCount == 0)
             {
                 string err = "";
-                try { err = (await stderrTask).Trim(); } catch { /* канал закрыт */ }
+                try { err = (await stderrTask.ConfigureAwait(false)).Trim(); } catch { /* канал закрыт */ }
                 if (!string.IsNullOrEmpty(err)) ErrorOccurred?.Invoke(err);
             }
             Finished?.Invoke(result);
@@ -176,7 +194,7 @@ public sealed class HtmlGenWorker : IDisposable
     private async Task ReadStdoutAsync(Process proc, HtmlGenResult result)
     {
         string? line;
-        while ((line = await proc.StandardOutput.ReadLineAsync()) != null)
+        while ((line = await proc.StandardOutput.ReadLineAsync().ConfigureAwait(false)) != null)
         {
             if (line.StartsWith("PROGRESS ", StringComparison.Ordinal))
             {
@@ -186,7 +204,7 @@ public sealed class HtmlGenWorker : IDisposable
                 {
                     var msg = parts.Length >= 3 ? parts[2] : "";
                     result.TotalFiles = total;
-                    ProgressUpdated?.Invoke(cur, total, msg);
+                    ReportProgress(cur, total, msg);
                 }
             }
             else if (line.StartsWith("ERROR ", StringComparison.Ordinal))
@@ -194,6 +212,32 @@ public sealed class HtmlGenWorker : IDisposable
             else if (line.StartsWith("RESULT ", StringComparison.Ordinal))
                 ParseResult(line.Substring(7), result);
         }
+    }
+
+    /// <summary>Прогресс с прореживанием: не чаще ProgressMinIntervalMs, чтобы
+    /// поток событий не забивал UI; промежуточные значения схлопываются,
+    /// последнее показанное сообщение всегда актуальное (см. FlushProgress).</summary>
+    private void ReportProgress(int cur, int total, string msg)
+    {
+        var now = _progressClock.ElapsedMilliseconds;
+        if (now - _lastProgressAtMs < ProgressMinIntervalMs)
+        {
+            _pendingProgress = (cur, total, msg);
+            return;
+        }
+        _lastProgressAtMs = now;
+        _pendingProgress = null;
+        ProgressUpdated?.Invoke(cur, total, msg);
+    }
+
+    /// <summary>Отдаёт последнее отложенное сообщение прогресса перед Finished:
+    /// без этого UI остаётся на предыдущем (уже устаревшем) шаге.</summary>
+    private void FlushProgress()
+    {
+        if (_pendingProgress is not { } pending) return;
+        _pendingProgress = null;
+        _lastProgressAtMs = _progressClock.ElapsedMilliseconds;
+        ProgressUpdated?.Invoke(pending.Cur, pending.Total, pending.Msg);
     }
 
     private void ParseResult(string json, HtmlGenResult r)
@@ -215,6 +259,14 @@ public sealed class HtmlGenWorker : IDisposable
                 r.FoundCount = fd.GetInt32();
             if (root.TryGetProperty("cached_total", out var cd) && cd.ValueKind == JsonValueKind.Number)
                 r.CachedTotal = cd.GetInt32();
+            if (root.TryGetProperty("total_system_functions", out var tsf) && tsf.ValueKind == JsonValueKind.Number)
+                r.TotalSystemFunctions = tsf.GetInt32();
+            if (root.TryGetProperty("total_system_modules", out var tsm) && tsm.ValueKind == JsonValueKind.Number)
+                r.TotalSystemModules = tsm.GetInt32();
+            if (root.TryGetProperty("total_system_notfound", out var tsn) && tsn.ValueKind == JsonValueKind.Number)
+                r.SystemNotFound = tsn.GetInt32();
+            if (root.TryGetProperty("total_imports", out var ti) && ti.ValueKind == JsonValueKind.Number)
+                r.TotalImports = ti.GetInt32();
         }
         catch { /* неудачный JSON - игнорируем */ }
     }

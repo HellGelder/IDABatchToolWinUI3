@@ -78,6 +78,84 @@ public sealed class MonitorTests
         Assert.False(AnalysisMonitor.IsSessionActive);
     }
 
+    /// <summary>Сессия завершилась без отмены, но файл так и не получил событие
+    /// завершения: строка не должна оставаться в состоянии «Анализируется».</summary>
+    [Fact]
+    public void EndSession_NotCancelled_MarksUnfinishedRunningAsFailed()
+    {
+        AnalysisMonitor.BeginSession(new[] { @"C:\in\a.exe", @"C:\in\b.exe" }, 1);
+        AnalysisMonitor.MarkRunning(@"C:\in\a.exe", "analysis");
+
+        AnalysisMonitor.EndSession(cancelled: false);
+
+        var snap = AnalysisMonitor.Snapshot();
+        Assert.Equal(MonitorFileStatus.Failed, snap[0].Status);
+        Assert.Equal("", snap[0].Phase);
+        Assert.Equal(MonitorFileStatus.Cancelled, snap[1].Status);
+    }
+
+    /// <summary>Терминальный статус сбрасывает фазу и снимок живого процесса:
+    /// иначе в таблице остаются «Анализ» и последние CPU/память завершённого idat.</summary>
+    [Fact]
+    public void MarkCompleted_ClearsPhaseAndRuntimeStats()
+    {
+        AnalysisMonitor.BeginSession(new[] { @"C:\in\a.exe" }, 1);
+        AnalysisMonitor.MarkRunning(@"C:\in\a.exe", "analysis");
+        AnalysisMonitor.SetProcessInfo(@"C:\in\a.exe", pid: 4321, threadId: 1);
+        AnalysisMonitor.UpdateRuntimeStats(4321, "00:00:05", "9.9 МБ", "5");
+        AnalysisMonitor.SetPulse(@"C:\in\a.exe", "жив");
+
+        AnalysisMonitor.MarkCompleted(@"C:\in\a.exe", ok: true);
+
+        var entry = AnalysisMonitor.Snapshot()[0];
+        Assert.Equal(MonitorFileStatus.Done, entry.Status);
+        Assert.Equal("", entry.Phase);
+        Assert.Equal("", entry.Pulse);
+        Assert.Equal("-", entry.CpuTime);
+        Assert.Equal("-", entry.MemoryMb);
+        Assert.Equal("-", entry.OsThreads);
+    }
+
+    /// <summary>Имена из воркера и из сканирования могут отличаться регистром
+    /// (Windows регистронезависим) - событие всё равно находит запись.</summary>
+    [Fact]
+    public void Events_MatchEntryByNameIgnoringCase()
+    {
+        AnalysisMonitor.BeginSession(new[] { @"C:\in\Module.exe" }, 1);
+
+        AnalysisMonitor.MarkRunning("module.EXE", "analysis");
+        Assert.Equal(MonitorFileStatus.Running, AnalysisMonitor.Snapshot()[0].Status);
+
+        AnalysisMonitor.MarkCompleted("MODULE.exe", ok: true);
+        Assert.Equal(MonitorFileStatus.Done, AnalysisMonitor.Snapshot()[0].Status);
+    }
+
+    [Fact]
+    public void ChangedAndSessionEnded_AreRaised()
+    {
+        int changed = 0;
+        bool? endedCancelled = null;
+        void OnChanged() => changed++;
+        void OnEnded(bool cancelled) => endedCancelled = cancelled;
+
+        AnalysisMonitor.Changed += OnChanged;
+        AnalysisMonitor.SessionEnded += OnEnded;
+        try
+        {
+            AnalysisMonitor.BeginSession(new[] { @"C:\in\a.exe" }, 1);
+            AnalysisMonitor.MarkRunning(@"C:\in\a.exe", "analysis");
+            AnalysisMonitor.EndSession(cancelled: true);
+
+            Assert.True(changed >= 3, $"Changed должно подниматься на каждую мутацию, получено {changed}");
+            Assert.True(endedCancelled);
+        }
+        finally
+        {
+            AnalysisMonitor.Changed -= OnChanged;
+            AnalysisMonitor.SessionEnded -= OnEnded;
+        }
+    }
+
     [Fact]
     public void ParallelUpdates_AreThreadSafe()
     {

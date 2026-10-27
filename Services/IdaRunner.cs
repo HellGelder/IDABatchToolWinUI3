@@ -70,9 +70,21 @@ public sealed class IdaRunner : IDisposable
             var file = f;
             tasks.Add(Task.Run(async () =>
             {
+                bool ok = false;
                 try
                 {
-                    var ok = await RunScriptOnBaseAsync(file, scriptPath, scriptArgs, ct);
+                    ok = await RunScriptOnBaseAsync(file, scriptPath, scriptArgs, ct);
+                }
+                catch (OperationCanceledException) { ok = false; }
+                catch (Exception e)
+                {
+                    // Терминальный статус обязателен и при исключении: иначе
+                    // строка диспетчера навсегда остаётся «Анализируется».
+                    ErrorCallback?.Invoke($"Экспорт {Path.GetFileName(file)}: {e.Message}");
+                    ok = false;
+                }
+                finally
+                {
                     lock (results)
                     {
                         results[file] = ok;
@@ -87,8 +99,8 @@ public sealed class IdaRunner : IDisposable
                         ProgressCallback?.Invoke(name, completed, total);
                         FileDoneCallback?.Invoke(name, ok);
                     }
+                    sem.Release();
                 }
-                finally { sem.Release(); }
             }, CancellationToken.None));
         }
         try { await Task.WhenAll(tasks); } catch { /* отмена/ошибки уже учтены */ }
@@ -119,9 +131,21 @@ public sealed class IdaRunner : IDisposable
             await sem.WaitAsync(CancellationToken.None);
             tasks.Add(Task.Run(async () =>
             {
+                bool ok = false;
                 try
                 {
-                    bool ok = await AnalyzeFileAsync(f, outputDir, ct);
+                    ok = await AnalyzeFileAsync(f, outputDir, ct);
+                }
+                catch (OperationCanceledException) { ok = false; }
+                catch (Exception e)
+                {
+                    // Терминальный статус обязателен и при исключении: иначе
+                    // строка диспетчера навсегда остаётся «Анализируется».
+                    ErrorCallback?.Invoke($"Анализ {Path.GetFileName(f)}: {e.Message}");
+                    ok = false;
+                }
+                finally
+                {
                     lock (results)
                     {
                         results[f] = ok;
@@ -129,8 +153,8 @@ public sealed class IdaRunner : IDisposable
                         ProgressCallback?.Invoke(Path.GetFileName(f), completed, total);
                         FileDoneCallback?.Invoke(Path.GetFileName(f), ok);
                     }
+                    sem.Release();
                 }
-                finally { sem.Release(); }
             }, CancellationToken.None));
         }
         try { await Task.WhenAll(tasks); } catch { /* отмена */ }

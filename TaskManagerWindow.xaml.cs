@@ -46,20 +46,62 @@ public sealed class TaskThreadCard
 public sealed partial class TaskManagerWindow : Window
 {
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _timer;
+    private bool _closed;
+    private bool _refreshScheduled;
 
     public TaskManagerWindow()
     {
         InitializeComponent();
 
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1080, 640));
+        // Окно создаётся после смены темы - сразу получает актуальную и
+        // подписывается на дальнейшие переключения (ThemeHelper.Apply).
+        ThemeHelper.Register(this);
 
+        // Опрос дважды в секунду: таблица должна успевать за событиями воркера,
+        // секундный шаг оставлял последнюю строку отстающей на глаз.
         _timer = DispatcherQueue.CreateTimer();
-        _timer.Interval = TimeSpan.FromSeconds(1);
+        _timer.Interval = TimeSpan.FromMilliseconds(500);
         _timer.Tick += (_, _) => Refresh();
-        Closed += (_, _) => _timer.Stop();
+
+        // События монитора: обновление не ждёт тика таймера, а конец сессии
+        // гарантирует финальный пересчёт уже после всех событий завершения.
+        AnalysisMonitor.Changed += OnMonitorChanged;
+        AnalysisMonitor.SessionEnded += OnMonitorSessionEnded;
+
+        Closed += (_, _) =>
+        {
+            _closed = true;
+            _timer.Stop();
+            AnalysisMonitor.Changed -= OnMonitorChanged;
+            AnalysisMonitor.SessionEnded -= OnMonitorSessionEnded;
+        };
 
         Refresh();
         _timer.Start();
+    }
+
+    private void OnMonitorChanged() => ScheduleRefresh();
+
+    /// <summary>Конец сессии: финальное обновление ставится в очередь с низким
+    /// приоритетом, чтобы отработать после ещё не выполненных обработчиков
+    /// статусов (они приходят в UI-поток раньше, но стоят в очереди выше).</summary>
+    private void OnMonitorSessionEnded(bool cancelled) => ScheduleRefresh();
+
+    /// <summary>Обновление по событию, без накопления повторов: несколько
+    /// событий подряд схлопываются в один пересчёт.</summary>
+    private void ScheduleRefresh()
+    {
+        if (_closed || _refreshScheduled) return;
+        _refreshScheduled = true;
+        var queued = DispatcherQueue.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () =>
+            {
+                _refreshScheduled = false;
+                if (!_closed) Refresh();
+            });
+        if (!queued) _refreshScheduled = false;
     }
 
     /// <summary>Порядок групп строк: анализируемые сверху, затем ожидающие, завершённые в конце.</summary>
@@ -90,6 +132,8 @@ public sealed partial class TaskManagerWindow : Window
 
     private void Refresh()
     {
+        if (_closed) return;
+
         var entries = AnalysisMonitor.Snapshot();
 
         // Снимки живых процессов активных файлов пишет сам монитор (по PID):

@@ -324,6 +324,7 @@ public sealed partial class SettingsPage : Page
             Content = message,
             CloseButtonText = "ОК",
         };
+        ThemeHelper.ApplyToDialog(dlg);
         if (UiDialogs.XamlRoot != null) dlg.XamlRoot = UiDialogs.XamlRoot;
         try { await dlg.ShowAsync(); } catch { /* окно закрыто пользователем */ }
     }

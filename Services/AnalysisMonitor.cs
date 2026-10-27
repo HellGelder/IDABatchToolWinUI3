@@ -68,6 +68,15 @@ public static class AnalysisMonitor
     private static bool _sessionActive;
     private static int _maxWorkers;
 
+    /// <summary>Состояние очереди изменилось (статус, фаза, PID, пульс).
+    /// Окно диспетчера обновляется по событию, не дожидаясь тика таймера.
+    /// Событие поднимается вне лока и после мутации.</summary>
+    public static event Action? Changed;
+
+    /// <summary>Сессия закончилась; аргумент - была ли она отменена. Окно
+    /// диспетчера делает по нему финальное обновление таблицы.</summary>
+    public static event Action<bool>? SessionEnded;
+
     public static bool IsSessionActive => _sessionActive;
 
     /// <summary>Число рабочих потоков сессии (ползунок «Одновременно IDA»).</summary>
@@ -88,6 +97,7 @@ public static class AnalysisMonitor
             _maxWorkers = Math.Max(1, maxWorkers);
             _sessionActive = true;
         }
+        RaiseChanged();
     }
 
     /// <summary>Файл начал обрабатываться (колбэк FileStart).</summary>
@@ -102,6 +112,7 @@ public static class AnalysisMonitor
                 e.StartedAt ??= DateTime.Now;
             }
         }
+        RaiseChanged();
     }
 
     /// <summary>Процесс IDA запущен: запоминаем PID и тред воркера.</summary>
@@ -115,6 +126,7 @@ public static class AnalysisMonitor
                 e.ThreadId = threadId;
             }
         }
+        RaiseChanged();
     }
 
     /// <summary>Пульс процесса: время, CPU, артефакты, давность активности.</summary>
@@ -125,9 +137,12 @@ public static class AnalysisMonitor
             foreach (var e in FindAllLocked(id))
                 e.Pulse = text;
         }
+        RaiseChanged();
     }
 
-    /// <summary>Файл обработан (успешно или с ошибкой).</summary>
+    /// <summary>Файл обработан (успешно или с ошибкой). Терминальный статус:
+    /// фаза и снимок живого процесса сбрасываются, иначе в таблице остаются
+    /// «Анализ» и последние CPU/память уже завершённого процесса.</summary>
     public static void MarkCompleted(string id, bool ok)
     {
         lock (_entries)
@@ -136,9 +151,12 @@ public static class AnalysisMonitor
             {
                 e.Status = ok ? MonitorFileStatus.Done : MonitorFileStatus.Failed;
                 e.EndedAt = DateTime.Now;
+                e.Phase = "";
                 e.Pulse = "";
+                ClearStats(e);
             }
         }
+        RaiseChanged();
     }
 
     /// <summary>Снимок состояния живого процесса: пишет окно диспетчера при
@@ -172,14 +190,25 @@ public static class AnalysisMonitor
         }
     }
 
-    /// <summary>Конец сессии: необработанные файлы помечаются отменёнными.</summary>
-    public static void EndSession()
+    /// <summary>Конец сессии. Незавершённые файлы получают терминальный статус:
+    /// «Отменён» при отмене, иначе «Ошибка» (файл, у которого не пришло
+    /// событие завершения, фактически не обработан - строка не должна
+    /// оставаться в состоянии «Анализируется» после конца анализа).</summary>
+    public static void EndSession(bool cancelled = true)
     {
         lock (_entries)
         {
             foreach (var e in _entries)
             {
-                if (e.Status is MonitorFileStatus.Pending or MonitorFileStatus.Running)
+                if (e.Status == MonitorFileStatus.Running)
+                {
+                    e.Status = cancelled ? MonitorFileStatus.Cancelled : MonitorFileStatus.Failed;
+                    e.EndedAt = DateTime.Now;
+                    e.Phase = "";
+                    e.Pulse = "";
+                    ClearStats(e);
+                }
+                else if (e.Status == MonitorFileStatus.Pending)
                 {
                     e.Status = MonitorFileStatus.Cancelled;
                     e.EndedAt = DateTime.Now;
@@ -187,6 +216,28 @@ public static class AnalysisMonitor
             }
             _sessionActive = false;
         }
+        RaiseChanged();
+        RaiseSessionEnded(cancelled);
+    }
+
+    /// <summary>Снимок процесса сбрасывается (процесс завершился).</summary>
+    private static void ClearStats(MonitorEntry e)
+    {
+        e.CpuTime = "-";
+        e.MemoryMb = "-";
+        e.OsThreads = "-";
+    }
+
+    private static void RaiseChanged()
+    {
+        try { Changed?.Invoke(); }
+        catch { /* подписчик не должен ломать состояние монитора */ }
+    }
+
+    private static void RaiseSessionEnded(bool cancelled)
+    {
+        try { SessionEnded?.Invoke(cancelled); }
+        catch { /* подписчик не должен ломать состояние монитора */ }
     }
 
     /// <summary>Независимые копии текущих строк для отображения.</summary>
@@ -213,12 +264,18 @@ public static class AnalysisMonitor
 
     /// <summary>Точное совпадение ключа, иначе - совпадение по нормализованному
     /// имени (события воркера несут только имя; одноимённые файлы обновляются все).
+    /// Сравнение без учёта регистра: файловая система Windows регистронезависима,
+    /// имена из воркера и из сканирования могут отличаться регистром.
     /// Вызывается под локом.</summary>
     private static List<MonitorEntry> FindAllLocked(string id)
     {
-        var exact = _entries.Where(e => e.Key == id).ToList();
+        var exact = _entries
+            .Where(e => string.Equals(e.Key, id, StringComparison.OrdinalIgnoreCase))
+            .ToList();
         if (exact.Count > 0) return exact;
         var key = NormalizeName(id);
-        return _entries.Where(e => e.FileName == key).ToList();
+        return _entries
+            .Where(e => string.Equals(e.FileName, key, StringComparison.OrdinalIgnoreCase))
+            .ToList();
     }
 }

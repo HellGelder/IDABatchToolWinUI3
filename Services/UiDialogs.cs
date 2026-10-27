@@ -44,6 +44,8 @@ public static class UiDialogs
             CloseButtonText = "OK",
             DefaultButton = ContentDialogButton.Close,
         };
+        // ContentDialog не наследует RequestedTheme корня окна - задаём явно.
+        ThemeHelper.ApplyToDialog(dialog);
         if (XamlRoot != null) dialog.XamlRoot = XamlRoot;
         return dialog;
     }
@@ -177,6 +179,7 @@ public static class UiDialogs
 
             var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
             var dialog = new ContentDialog { Title = title, Content = stack, DefaultButton = ContentDialogButton.Primary };
+            ThemeHelper.ApplyToDialog(dialog);
             if (XamlRoot != null) dialog.XamlRoot = XamlRoot;
 
             for (int i = 0; i < buttons.Count; i++)

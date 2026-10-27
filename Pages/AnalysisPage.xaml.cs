@@ -14,6 +14,7 @@ public sealed partial class AnalysisPage : Page
 {
     private readonly IConfigStore _store;
     private bool _analysisInProgress;
+    private bool _analysisCancelled;
     private bool _htmlInProgress;
     private AnalysisWorker? _worker;
     private HtmlGenWorker? _htmlWorker;
@@ -146,7 +147,25 @@ public sealed partial class AnalysisPage : Page
         UpdatePlatformBar(PlatformInfo.DetectPlatform(_cachedFiles.Select(f => f.Path)));
 
         Treemap.SetData(_cachedFiles);
-        GenerateHtmlButton.IsEnabled = _cachedFiles.Any(f => ArtifactValidator.HasValidArtifacts(f.Path));
+        UpdateGenerateHtmlButton();
+    }
+
+    /// <summary>
+    /// Кнопка HTML-отчёта: доступна только когда не идёт ни одна фаза и в папке
+    /// есть JSON-экспорт (отчёт «Общего анализа» строится только по нему).
+    /// Без проверки занятости фоновое пересканирование папки включало кнопку
+    /// прямо во время автоматического экспорта: дебаунс RefreshFileList
+    /// срабатывает уже после старта экспорта.
+    /// </summary>
+    private void UpdateGenerateHtmlButton()
+        => GenerateHtmlButton.IsEnabled = !IsBusy && HasExportJson();
+
+    private bool HasExportJson()
+    {
+        var inputDir = InputDirTextBox.Text.Trim();
+        return !string.IsNullOrEmpty(inputDir) && Directory.Exists(inputDir)
+            && ExecutableFinder.SafeEnumerateFiles(inputDir)
+                .Any(f => f.EndsWith(".export.json", StringComparison.OrdinalIgnoreCase));
     }
 
     // ──────────────────────────────────────────────
@@ -229,10 +248,11 @@ public sealed partial class AnalysisPage : Page
         }
 
         _analysisInProgress = true;
+        _analysisCancelled = false;
         StartAnalysisButton.IsEnabled = false;
         DetailsButton.IsEnabled = true;
         CancelButton.IsEnabled = true;
-        GenerateHtmlButton.IsEnabled = false;
+        UpdateGenerateHtmlButton();
         ProcessStatusText.Text = exportOnly ? "Фаза: экспорт в JSON..." : "Фаза: анализ файлов...";
         SetProgressRunning(true);   // running-индикатор
         ErrorLogTextBox.Text = "";
@@ -325,7 +345,10 @@ public sealed partial class AnalysisPage : Page
         SetProgressRunning(false);  // вернуть в простой
         AppNotifier.Notify("Анализ завершён",
             $"Успешно: {succeeded}/{total}.");
-        AnalysisMonitor.EndSession();
+        // Отмена отличается от ошибки: незавершённые файлы помечаются
+        // «Отменён», а не «Ошибка» (иначе отмена выглядит как сбой анализа).
+        AnalysisMonitor.EndSession(cancelled: _analysisCancelled);
+        _analysisCancelled = false;
 
         if (_exportAllAfterAnalysis && succeeded > 0)
         {
@@ -347,8 +370,7 @@ public sealed partial class AnalysisPage : Page
         var inputDir = InputDirTextBox.Text.Trim();
         if (!string.IsNullOrEmpty(inputDir) && Directory.Exists(inputDir))
         {
-            var anyJson = ExecutableFinder.SafeEnumerateFiles(inputDir).Any(f => f.EndsWith(".export.json", StringComparison.OrdinalIgnoreCase));
-            GenerateHtmlButton.IsEnabled = anyJson;
+            UpdateGenerateHtmlButton();
         }
         _worker?.Dispose();
         _worker = null;
@@ -367,6 +389,13 @@ public sealed partial class AnalysisPage : Page
         ProcessStatusText.Text = "Фаза: экспорт в JSON...";
         ProcessProgress.Value = 0;
         DetailsButton.IsEnabled = true;
+        // Экспорт - отдельная фаза той же работы: страница остаётся занятой,
+        // кнопка HTML-отчёта выключена до её завершения.
+        _analysisInProgress = true;
+        _analysisCancelled = false;
+        StartAnalysisButton.IsEnabled = false;
+        CancelButton.IsEnabled = true;
+        UpdateGenerateHtmlButton();
         // Новая сессия в мини-диспетчере: имена баз без суффикса .i64
         AnalysisMonitor.BeginSession(idbFiles, (int)MaxIdaSlider.Value);
         var worker = new AnalysisWorker(idbFiles, idatPath, (int)MaxIdaSlider.Value, null,
@@ -379,6 +408,7 @@ public sealed partial class AnalysisPage : Page
 
     private void Cancel_Click(object sender, RoutedEventArgs e)
     {
+        _analysisCancelled = true;
         _worker?.Cancel();
         _htmlWorker?.Cancel();
         ProcessStatusText.Text = "Отмена...";
@@ -457,7 +487,7 @@ public sealed partial class AnalysisPage : Page
         _htmlInProgress = true;
         StartAnalysisButton.IsEnabled = false;
         CancelButton.IsEnabled = true;
-        GenerateHtmlButton.IsEnabled = false;
+        UpdateGenerateHtmlButton();
         SetProgressRunning(true);   // running-индикатор
         ProcessStatusText.Text = "Генерация HTML-отчётов...";
         ErrorLogTextBox.Text = "";
@@ -484,7 +514,7 @@ public sealed partial class AnalysisPage : Page
         _htmlInProgress = false;
         StartAnalysisButton.IsEnabled = true;
         CancelButton.IsEnabled = false;
-        GenerateHtmlButton.IsEnabled = true;
+        UpdateGenerateHtmlButton();
         SetProgressRunning(false);  // вернуть в простой
         ProcessStatusText.Text = "Готово";
         _htmlWorker?.Dispose();

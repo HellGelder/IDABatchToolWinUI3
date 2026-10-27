@@ -10,10 +10,10 @@
     Лончер и zip штампуются версией из этого файла автоматически.
   -->
   <PropertyGroup>
-    <Version>1.0.0.21</Version>
-    <FileVersion>1.0.0.21</FileVersion>
-    <AssemblyVersion>1.0.0.21</AssemblyVersion>
-    <InformationalVersion>1.0.0.21</InformationalVersion>
+    <Version>1.0.0.23</Version>
+    <FileVersion>1.0.0.23</FileVersion>
+    <AssemblyVersion>1.0.0.23</AssemblyVersion>
+    <InformationalVersion>1.0.0.23</InformationalVersion>
   </PropertyGroup>
 
 </Project>

@@ -95,6 +95,7 @@ public static class PythonEnvironmentUi
         stack.Children.Add(continueButton);
 
         var dialog = new ContentDialog { Title = "Программное окружение", Content = stack };
+        ThemeHelper.ApplyToDialog(dialog);
         if (UiDialogs.XamlRoot != null) dialog.XamlRoot = UiDialogs.XamlRoot;
         // Во время установки диалог закрыть нельзя (Esc/крестик не сработают);
         // закрытие вне установки (Esc или «Продолжить») завершает ожидание.

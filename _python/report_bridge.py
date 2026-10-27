@@ -12,6 +12,7 @@
     RESULT <json>
 """
 import argparse
+import http.client
 import json
 import os
 import re
@@ -20,6 +21,7 @@ import sqlite3
 import subprocess
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -703,6 +705,33 @@ def _extract_dll(results):
 
 _MCP_ENDPOINT = "https://learn.microsoft.com/api/mcp"
 _MCP_REQUEST_TIMEOUT = 30  # сек, на один запрос (не на запуск процесса)
+# Установка соединения отдельно и коротко: в рабочей сети отдельные SYN к
+# learn.microsoft.com отбиваются только через ~21 с (ConnectionRefused/RST),
+# и ожидание этого таймаута дороже, чем переподключиться на новом сокете.
+_MCP_CONNECT_TIMEOUT = 5
+
+
+class _McpConnection(http.client.HTTPSConnection):
+    """HTTPS к learn.microsoft.com с коротким таймаутом установки соединения.
+
+    http.client применяет один timeout и к connect, и к чтению ответа. Здесь
+    connect (TCP + TLS-рукопожатие) ограничен _MCP_CONNECT_TIMEOUT, а после
+    установки сокету возвращается полный таймаут запроса: поиск может быть
+    медленнее пяти секунд, установка соединения - нет.
+    """
+
+    def connect(self):
+        original = self.timeout
+        self.timeout = _MCP_CONNECT_TIMEOUT if not original else min(original, _MCP_CONNECT_TIMEOUT)
+        try:
+            super().connect()
+        finally:
+            self.timeout = original
+            if self.sock is not None:
+                try:
+                    self.sock.settimeout(original)
+                except OSError:
+                    pass
 
 
 def _mcp_session_cache_path():
@@ -789,27 +818,146 @@ class McpDocClient:
     def __init__(self):
         self._session_id = ""
         self._tool = ""
-        self._lock = threading.Lock()
+        # Блокировки узкие: под ними только состояние сессии и счётчик id, а не
+        # сетевой вызов. Прежний вариант держал общий lock всё время HTTP-запроса,
+        # из-за чего 4 потока пула поиска работали строго по очереди.
+        self._state_lock = threading.Lock()
+        self._handshake_lock = threading.Lock()
+        self._local = threading.local()
         self._rpc_id = 0
 
-    def _headers(self, with_session):
+    # ── соединение: keep-alive на поток пула ────────────────────────────
+    def _conn(self):
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = _McpConnection("learn.microsoft.com", timeout=_MCP_REQUEST_TIMEOUT)
+            self._local.conn = conn
+        return conn
+
+    def _drop_conn(self):
+        conn = getattr(self._local, "conn", None)
+        self._local.conn = None
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    def _headers(self, session_id):
         h = {
             "content-type": "application/json",
             "accept": "application/json, text/event-stream",
             "protocol-version": "2025-06-18",
         }
-        if with_session and self._session_id:
-            h["mcp-session-id"] = self._session_id
+        if session_id:
+            h["mcp-session-id"] = session_id
         return h
 
-    def _post(self, payload, with_session=True):
-        req = urllib.request.Request(
-            _MCP_ENDPOINT, data=json.dumps(payload).encode("utf-8"),
-            headers=self._headers(with_session), method="POST")
-        with urllib.request.urlopen(req, timeout=_MCP_REQUEST_TIMEOUT) as resp:
-            body = resp.read().decode("utf-8", "replace")
-            sid = resp.headers.get("mcp-session-id") or ""
-        return resp.status, sid, body
+    def _post(self, payload, session_id=""):
+        """POST к MCP по keep-alive соединению текущего потока.
+
+        TLS-рукопожатие на каждый запрос стоило дороже самого поиска, поэтому
+        соединение переиспользуется (своё на поток: http.client не потокобезопасен).
+        При сетевом сбое соединение сбрасывается и запрос повторяется на свежем
+        (до трёх попыток): установка соединения ограничена коротким таймаутом,
+        так что повтор дешевле ожидания отбитого SYN.
+        """
+        body_bytes = json.dumps(payload).encode("utf-8")
+        headers = self._headers(session_id)
+        for attempt in range(3):
+            try:
+                conn = self._conn()
+                conn.request("POST", "/api/mcp", body=body_bytes, headers=headers)
+                resp = conn.getresponse()
+                body = resp.read().decode("utf-8", "replace")
+                return resp.status, resp.getheader("mcp-session-id") or "", body
+            except (http.client.HTTPException, OSError):
+                self._drop_conn()
+                if attempt == 2:
+                    raise
+                time.sleep(0.2 * (attempt + 1))
+        raise RuntimeError("unreachable")
+
+    def _ensure_session(self):
+        """(session_id, tool) из кэша learn-cli - один раз на клиент."""
+        with self._state_lock:
+            if not self._session_id or not self._tool:
+                sid, tool = _mcp_load_cached_session()
+                if sid and not self._session_id:
+                    self._session_id = sid
+                if not self._tool:
+                    self._tool = tool or "microsoft_docs_search"
+            return self._session_id, self._tool
+
+    def _remember_session(self, sid, tool):
+        if not sid:
+            return
+        with self._state_lock:
+            if sid == self._session_id:
+                return
+            self._session_id = sid
+        _mcp_save_cached_session(sid, tool)
+
+    def search(self, query):
+        """Поиск документации; возвращает список {title, url, markdown} -
+        тот же формат, что _parse_npx_results (и исполнение 1).
+
+        Потокобезопасен и параллелен: сетевой вызов идёт без замков, под
+        замком только чтение/обновление идентификатора сессии.
+        """
+        session_id, tool = self._ensure_session()
+        return self._search_once(query, session_id, tool)
+
+    def _search_once(self, query, session_id, tool):
+        payload = {"jsonrpc": "2.0", "id": self._next_id(), "method": "tools/call",
+                   "params": {"name": tool, "arguments": {"query": query}}}
+        status, new_sid, body = self._post(payload, session_id)
+        # 400/404 - сессия умерла; пустой ответ при успехе - тоже признак
+        # протухшей сессии: в обоих случаях полный handshake и повтор.
+        if status in (400, 404) or (status < 400 and not body.strip()):
+            return self._reconnect_search(query)
+        if status >= 400:
+            raise RuntimeError(f"MCP HTTP {status}")
+        self._remember_session(new_sid, tool)
+        return self._parse_payload(self._sse_text(body))
+
+    def _next_id(self):
+        """Уникальный id JSON-RPC-запроса внутри клиента (потокобезопасно)."""
+        with self._state_lock:
+            self._rpc_id += 1
+            return self._rpc_id
+
+    def _reconnect_search(self, query):
+        """Полный handshake и повтор поиска (кэш сессии протух).
+
+        Рукопожатие сериализовано: при одновременном протухании сессии его
+        делает один поток, остальные выполняют поиск уже с новой сессией.
+        """
+        with self._handshake_lock:
+            self._drop_conn()
+            init_payload = {
+                "jsonrpc": "2.0", "id": 1, "method": "initialize",
+                "params": {"protocolVersion": "2025-06-18",
+                           "capabilities": {},
+                           "clientInfo": {"name": "learn-cli", "version": "1.0.0"}}}
+            try:
+                _, sid, _ = self._post(init_payload, "")
+            except Exception:
+                sid = ""
+            if sid:
+                with self._state_lock:
+                    self._session_id = sid
+                    tool = self._tool or "microsoft_docs_search"
+                _mcp_save_cached_session(sid, tool)
+            session_id, tool = self._ensure_session()
+
+        payload = {"jsonrpc": "2.0", "id": self._next_id(), "method": "tools/call",
+                   "params": {"name": tool, "arguments": {"query": query}}}
+        status, new_sid, body = self._post(payload, session_id)
+        if status >= 400:
+            raise RuntimeError(f"MCP HTTP {status}")
+        self._remember_session(new_sid, tool)
+        return self._parse_payload(self._sse_text(body))
 
     @staticmethod
     def _sse_text(body):
@@ -827,64 +975,6 @@ class McpDocClient:
                 if content and content[0].get("type") == "text":
                     return content[0].get("text", "")
         return ""
-
-    def search(self, query):
-        """Поиск документации; возвращает список {title, url, markdown} -
-        тот же формат, что _parse_npx_results (и исполнение 1)."""
-        with self._lock:
-            if not self._session_id or not self._tool:
-                self._session_id, self._tool = _mcp_load_cached_session()
-            if not self._tool:
-                self._tool = "microsoft_docs_search"
-            return self._search_once(query)
-
-    def _search_once(self, query):
-        payload = {"jsonrpc": "2.0", "id": self._next_id(), "method": "tools/call",
-                   "params": {"name": self._tool, "arguments": {"query": query}}}
-        try:
-            _, sid, body = self._post(payload)
-        except urllib.error.HTTPError as e:
-            # сессия умерла - полный handshake и повтор
-            if e.code in (400, 404):
-                return self._reconnect_search(query)
-            raise
-        if sid:
-            if sid != self._session_id:
-                self._session_id = sid
-                _mcp_save_cached_session(sid, self._tool)
-        return self._parse_payload(self._sse_text(body))
-
-    def _next_id(self):
-        """Уникальный id JSON-RPC-запроса внутри клиента."""
-        self._rpc_id += 1
-        return self._rpc_id
-
-    def _reconnect_search(self, query):
-        """Полный handshake и повтор поиска (кэш сессии протух)."""
-        import http.client as _hc
-        conn = _hc.HTTPSConnection("learn.microsoft.com", timeout=_MCP_REQUEST_TIMEOUT)
-        try:
-            conn.request("POST", "/api/mcp",
-                         body=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",
-                                          "params": {"protocolVersion": "2025-06-18",
-                                                     "capabilities": {},
-                                                     "clientInfo": {"name": "learn-cli", "version": "1.0.0"}}}),
-                         headers={"content-type": "application/json",
-                                  "accept": "application/json, text/event-stream"})
-            resp = conn.getresponse()
-            resp.read()
-            self._session_id = resp.getheader("mcp-session-id") or ""
-            if self._session_id:
-                _mcp_save_cached_session(self._session_id, self._tool or "microsoft_docs_search")
-        finally:
-            conn.close()
-        payload = {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-                   "params": {"name": self._tool or "microsoft_docs_search",
-                              "arguments": {"query": query}}}
-        _, sid, body = self._post(payload)
-        if sid:
-            self._session_id = sid
-        return self._parse_payload(self._sse_text(body))
 
     @staticmethod
     def _parse_payload(text):
@@ -908,13 +998,18 @@ class McpDocClient:
         return results
 
 
-_MCP_CLIENT = None  # общий клиент (потокобезопасен: _search_once атомарен по lock)
+_MCP_CLIENT = None  # общий клиент: потокобезопасен, запросы идут параллельно
+_MCP_CLIENT_LOCK = threading.Lock()
 
 
 def _get_mcp_client():
+    """Общий клиент MCP. Создаётся один раз: пул поиска состоит из нескольких
+    потоков, и без лока они могли создать два клиента с разными сессиями."""
     global _MCP_CLIENT
     if _MCP_CLIENT is None:
-        _MCP_CLIENT = McpDocClient()
+        with _MCP_CLIENT_LOCK:
+            if _MCP_CLIENT is None:
+                _MCP_CLIENT = McpDocClient()
     return _MCP_CLIENT
 
 

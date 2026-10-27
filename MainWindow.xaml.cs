@@ -131,6 +131,7 @@ public sealed partial class MainWindow : Window
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = xamlRoot,
         };
+        ThemeHelper.ApplyToDialog(dialog);
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 

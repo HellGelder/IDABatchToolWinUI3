@@ -138,7 +138,27 @@ public SfaPage(IConfigStore store)
         UpdatePlatformBar(PlatformInfo.DetectPlatform(_cachedFiles.Select(f => f.Path)));
 
         SfaTreemap.SetData(_cachedFiles);
-        SfaGenerateHtmlButton.IsEnabled = _cachedFiles.Any(f => ArtifactValidator.HasValidArtifacts(f.Path));
+        UpdateGenerateHtmlButton();
+    }
+
+    /// <summary>
+    /// Кнопка HTML-отчёта: доступна только когда завершены все фазы анализа
+    /// (включая поиск документации) и есть по чему строить отчёт. Без проверки
+    /// занятости фоновая пересканирование папки включало кнопку прямо во время
+    /// поиска документации: дебаунс RefreshFileList срабатывает уже после того,
+    /// как фаза документации стартовала.
+    /// </summary>
+    private void UpdateGenerateHtmlButton()
+        => SfaGenerateHtmlButton.IsEnabled = !IsBusy && HasHtmlSources();
+
+    /// <summary>Есть ли исходные данные для отчёта: готовые базы или JSON-экспорт.</summary>
+    private bool HasHtmlSources()
+    {
+        if (_cachedFiles.Any(f => ArtifactValidator.HasValidArtifacts(f.Path))) return true;
+        var inputDir = SfaInputDirTextBox.Text.Trim();
+        return !string.IsNullOrEmpty(inputDir) && Directory.Exists(inputDir)
+            && ExecutableFinder.SafeEnumerateFiles(inputDir)
+                .Any(f => f.EndsWith(".export.json", StringComparison.OrdinalIgnoreCase));
     }
 
     // ──────────────────────────────────────────────
@@ -250,7 +270,7 @@ public SfaPage(IConfigStore store)
         _analysisCancelled = false;
         SfaStartButton.IsEnabled = false;
         SfaCancelButton.IsEnabled = true;
-        SfaGenerateHtmlButton.IsEnabled = false;
+        UpdateGenerateHtmlButton();
         SfaProcessStatusText.Text = exportOnly ? "Фаза: экспорт в JSON..." : "Фаза: анализ файлов...";
         SfaProcessProgress.Value = 0;
         SetSfaProgressRunning(true);
@@ -338,7 +358,6 @@ public SfaPage(IConfigStore store)
         var inputDir = SfaInputDirTextBox.Text.Trim();
         var anyJson = !string.IsNullOrEmpty(inputDir) && Directory.Exists(inputDir) &&
             ExecutableFinder.SafeEnumerateFiles(inputDir).Any(f => f.EndsWith(".export.json", StringComparison.OrdinalIgnoreCase));
-        SfaGenerateHtmlButton.IsEnabled = anyJson;
         _worker?.Dispose();
         _worker = null;
         RefreshFileList();
@@ -349,10 +368,17 @@ public SfaPage(IConfigStore store)
         if (_analysisCancelled)
         {
             _analysisCancelled = false;
+            UpdateGenerateHtmlButton();
             return;
         }
         if (anyJson && _detectedPlatform == "Windows")
+        {
+            // Кнопка остаётся выключенной до конца поиска документации:
+            // StartDocsSearchAsync выставит IsBusy и включит её в OnDocsFinished.
             StartDocsSearchAsync().SafeFireAndForget("Sfa.DocsSearch");
+            return;
+        }
+        UpdateGenerateHtmlButton();
     }
 
     /// <summary>Поиск документации MS Learn по всем export.json - выполняется
@@ -371,7 +397,7 @@ public SfaPage(IConfigStore store)
         _docsCancelled = false;
         SfaStartButton.IsEnabled = false;
         SfaCancelButton.IsEnabled = true;
-        SfaGenerateHtmlButton.IsEnabled = false;
+        UpdateGenerateHtmlButton();
         SfaProcessProgress.Value = 0;
         SfaProcessProgress.Maximum = 1;
         SetSfaProgressRunning(true);
@@ -402,7 +428,7 @@ public SfaPage(IConfigStore store)
         _docsInProgress = false;
         SfaStartButton.IsEnabled = true;
         SfaCancelButton.IsEnabled = false;
-        SfaGenerateHtmlButton.IsEnabled = true;
+        UpdateGenerateHtmlButton();
         SfaProcessProgress.Value = SfaProcessProgress.Maximum;
         SetSfaProgressRunning(false);
         SfaProcessStatusText.Text = _docsCancelled
@@ -418,6 +444,13 @@ public SfaPage(IConfigStore store)
         var idatPath = ToolLocator.GetIdaExecutable(_store.Current);
         var script = Path.Combine(AppConstants.ScriptsDir, "export_data.py");
         if (!File.Exists(script)) { AppendError($"Скрипт экспорта не найден: {script}"); return Task.CompletedTask; }
+        // Экспорт - такая же фаза анализа: пока он идёт, страница занята и
+        // кнопка HTML-отчёта должна оставаться выключенной.
+        _analysisInProgress = true;
+        _analysisCancelled = false;
+        SfaStartButton.IsEnabled = false;
+        SfaCancelButton.IsEnabled = true;
+        UpdateGenerateHtmlButton();
         SfaProcessStatusText.Text = "Фаза: экспорт в JSON...";
         SfaProcessProgress.Value = 0;
         var worker = new AnalysisWorker(idbFiles, idatPath, (int)SfaMaxIdaSlider.Value, null,
@@ -540,7 +573,7 @@ public SfaPage(IConfigStore store)
         _htmlCancelled = false;
         SfaStartButton.IsEnabled = false;
         SfaCancelButton.IsEnabled = true;   // отмена доступна и во время генерации
-        SfaGenerateHtmlButton.IsEnabled = false;
+        UpdateGenerateHtmlButton();
         SfaProcessProgress.Value = 0;
         SfaProcessProgress.Maximum = Math.Max(jsonFiles.Length, 1);
         SetSfaProgressRunning(true);
@@ -594,7 +627,7 @@ public SfaPage(IConfigStore store)
         _htmlInProgress = false;
         SfaStartButton.IsEnabled = true;
         SfaCancelButton.IsEnabled = false;
-        SfaGenerateHtmlButton.IsEnabled = true;
+        UpdateGenerateHtmlButton();
         SfaProcessProgress.Value = SfaProcessProgress.Maximum;
         SetSfaProgressRunning(false);
         SfaProcessStatusText.Text = _htmlCancelled ? "Генерация отменена" : "Готово";
@@ -605,7 +638,11 @@ public SfaPage(IConfigStore store)
 
         if (result.IndexPath != null || result.ReportsDir != null)
             await UiDialogs.InfoAsync("Готово",
-                $"Отчёты СФ сохранены в {result.ReportsDir}\nИндекс: {result.IndexPath}");
+                $"Отчётов: {result.GeneratedCount} из {result.TotalFiles}\n" +
+                $"Системных функций: {result.TotalSystemFunctions}" +
+                $" (без документации: {result.SystemNotFound})\n" +
+                $"Всего импортов: {result.TotalImports}\n\n" +
+                $"Отчёты: {result.ReportsDir}\nИндекс: {result.IndexPath}");
     }
 
     /// <summary>Читает список json_path из index-БД для перегенерации из кэша.</summary>
