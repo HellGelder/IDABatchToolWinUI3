@@ -98,7 +98,7 @@ dotnet publish -c Release -r win-x64
 
 ### Готовая переносимая сборка (make-portable.ps1)
 
-Скрипт собирает поставку с чистым корнем: publish → перекладка всего содержимого в `app\` → компиляция лончера → `bindiff.exe` в корень → zip.
+Скрипт собирает поставку с чистым корнем: publish → перекладка всего содержимого в `app\` → компиляция лончера → `bindiff.exe` в корень → zip. Поставка кладётся **вне репозитория** — `..\dist` (папкой выше): папка репозитория помечена зоной Internet (побочный эффект скачивания файлов внутрь проекта), и создаваемое в ней наследует эту зону, из-за чего неподписанный exe при запуске показывает окно «Не удаётся проверить издателя» (SmartScreen). В чистой папке поставка остаётся без зоны.
 
 ```powershell
 .\make-portable.ps1                # полный цикл: dist\portable\ + dist\IDABatchToolWinUI-<версия>.zip
@@ -116,6 +116,7 @@ dotnet publish -c Release -r win-x64
 portable/
 ├── IDABatchTool.exe               # лончер (~10 КБ): запускает app\IDABatchToolWinUI.exe
 ├── bindiff.exe                    # BinDiff CLI в корне поставки
+├── unblock-portable.ps1           # снятие Mark of the Web со всех файлов (против SmartScreen)
 └── app\                           # вся publish-папка: exe, все DLL, _python\, scripts\, config.yaml, Assets\
 ```
 
@@ -333,7 +334,7 @@ IDABatchToolWinUI/
 ├── Models/                      # FileItem, DiffPair, PairRowViewModel
 ├── Controls/                    # TreemapControl
 ├── _python/                     # report_bridge.py, manpages_build.py, classifier/, templates/, vendor/
-├── docs/                        # встроенная документация: manpages.db, LICENSE корпусов
+├── docs/                        # встроенная документация: manpages.db, MANPAGES-SOURCES.txt
 └── scripts/                     # export_data.py, diaphora/, build-manpages.ps1, extract_corpus.py
 ```
 
@@ -357,6 +358,7 @@ IDABatchToolWinUI/
 
 # Известные особенности и ограничения
 
+- **Окно SmartScreen «Не удаётся проверить издателя» / «Windows защитила ваш компьютер» при запуске поставки** — срабатывает на неподписанных exe с зоной Internet (Mark of the Web). Профилактика в сборке: кэш корпусов man-pages вынесен в `%LOCALAPPDATA%\IDABatchTool\manpages-corpus` (скачивание внутрь репозитория помечало папку, и всё новое содержимое, включая dist, наследовало зону), скачанные архивы сразу разблокируются `Unblock-File`, dist собирается вне репозитория. Лончер запускает приложение через CreateProcess (`UseShellExecute=false`) — проверка зоны на внутреннем запуске не вызывается. В корень поставки кладётся `unblock-portable.ps1`: запуск после распаковки снимает метку рекурсивно; вручную: свойства exe → «Разблокировать» либо «Подробнее» → «Выполнить в любом случае». Радикальное решение — подписать exe сертификатом (самоподписанного достаточно при доверии к нему на целевой машине).
 - **`PublishReadyToRun` и `PublishTrimmed` отключены** (csproj, 2026-10-05): R2R-образы и триммер ломают рефлексивный механизм заворачивания управляемых объектов в WinRT-интерфейсы (`WinRT.TypeExtensions.GetAbiToProjectionVftblPtr` → `NullReferenceException` → нативный краш `0xc000027b` в `Microsoft.UI.Xaml.dll`). Симптомы на собранной поставке: пустая таблица пар на вкладке «Сравнение» и падение окна при развороте на весь экран. Подтверждено экспериментально (publish без R2R работает, с R2R - падает); R2R даёт лишь ускорение старта, поэтому отключение безопасно. Если включать обратно - обязательно перепроверять все экраны на собранной поставке, а не в Debug.
 - **`app-crash.log`** - необработанные исключения XAML (в журнале событий Windows они выглядят как немой нативный краш) дублируются в этот лог рядом с exe: тип, сообщение и стек. Полезно при диагностике проблем на машинах пользователей.
 - **Пикеры файлов/папок** - только `Microsoft.Windows.Storage.Pickers` (Windows App SDK 2.4, конструктор с `WindowId`); legacy‑пикеры с `FileTypeFilter` в этой версии вызывают `E_FAIL`.

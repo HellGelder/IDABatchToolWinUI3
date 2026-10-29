@@ -15,6 +15,13 @@
 
     Дополнительно создаётся dist\IDABatchToolWinUI-<версия>-<rid>.zip.
 
+    Дистрибутив собирается ВНЕ репозитория (..\dist - папкой выше): папка
+    репозитория помечена зоной Internet (побочный эффект скачивания файлов
+    внутрь проекта, см. scripts\build-manpages.ps1), и всё создаваемое в ней
+    наследует эту зону - запуск неподписанного exe из такой папки показывает
+    окно «Не удаётся проверить издателя». В чистой папке поставка остаётся
+    без зоны.
+
 .EXAMPLE
     .\make-portable.ps1                  # publish + раскладка + лончер + zip
 .EXAMPLE
@@ -103,9 +110,12 @@ if (-not (Test-Path (Join-Path $publishDir "IDABatchToolWinUI.exe"))) {
 }
 
 # ── 2. Раскладка: всё содержимое publish -> dist\portable\app\ ─────────────
-$dist    = Join-Path $root "dist"
+# dist - папкой ВЫШЕ репозитория (см. комментарий в .DESCRIPTION): внутри
+# репозитория новые файлы наследуют зону Internet и дают окно SmartScreen.
+$dist    = Join-Path (Split-Path $root -Parent) "dist"
 $staging = Join-Path $dist "portable"
 $appDir  = Join-Path $staging "app"
+Write-Host ("Поставка собирается вне репозитория: " + $dist)
 
 if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
 New-Item -ItemType Directory -Path $appDir -Force | Out-Null
@@ -122,7 +132,7 @@ else {
 }
 
 # ── 3.5. Документация поставки: readme, журнал версий, автоустановка Python ─
-foreach ($doc in @("README.txt", "version.txt", "install-prereqs.ps1")) {
+foreach ($doc in @("README.txt", "version.txt", "install-prereqs.ps1", "unblock-portable.ps1")) {
     $src = Join-Path $root $doc
     if (Test-Path $src) { Copy-Item $src (Join-Path $staging $doc) -Force }
     else { Write-Warning "$doc не найден в проекте - в поставку не попал" }
@@ -192,7 +202,10 @@ static class Launcher
         {
             FileName = appExe,
             WorkingDirectory = Path.GetDirectoryName(appExe),
-            UseShellExecute = true,
+            // CreateProcess, а не ShellExecute: ShellExecute запускает проверку
+            // зоны Attachment Manager, и для неподписанного exe Windows показывает
+            // окно «Не удаётся проверить издателя» - CreateProcess её не вызывает.
+            UseShellExecute = false,
         };
         // ProcessStartInfo.ArgumentList недоступен в .NET Framework 4.8 -
         // передаём аргументы строкой с простым кавычиванием.

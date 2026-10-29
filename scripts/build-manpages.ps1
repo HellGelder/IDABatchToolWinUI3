@@ -14,8 +14,6 @@
 
     Результат:
       docs\manpages.db            - БД (схема 2: pages/function_index с lang)
-      docs\man-pages-LICENSES\    - тексты лицензий корпуса man-pages
-      docs\LICENSE-man-pages-ru.txt - атрибуция переводов (GPL-3.0)
       docs\MANPAGES-SOURCES.txt   - версии, источники, дата сборки
 
     Рендерер: pandoc. Если его нет - установка:
@@ -38,7 +36,13 @@ $EnVersion = "6.18"     # man-pages (kernel.org)
 $RuUrl = "https://geo.mirror.pkgbuild.com/extra/os/x86_64/man-pages-ru-$RuVersion-$RuPkgRev-any.pkg.tar.zst"
 $EnUrl = "https://www.kernel.org/pub/linux/docs/man-pages/man-pages-$EnVersion.tar.xz"
 
-$cache   = Join-Path $root "obj\manpages-corpus"
+# Кэш корпусов - ВНЕ репозитория: файлы, скачанные Invoke-WebRequest, получают
+# метку «интернет» (Zone.Identifier), а на томах Windows 11 с новой реализацией
+# MOTW метка распространяется на папку, и всё новое содержимое внутри (включая
+# dist) наследует зону Internet - отсюда окно «Не удаётся проверить издателя»
+# при запуске неподписанного exe. Кэш в %LOCALAPPDATA% и Unblock-File сразу
+# после скачивания этого не допускают.
+$cache   = Join-Path $env:LOCALAPPDATA "IDABatchTool\manpages-corpus"
 $docsDir = Join-Path $root "docs"
 $dbPath  = Join-Path $docsDir "manpages.db"
 New-Item -ItemType Directory -Force -Path $cache, $docsDir | Out-Null
@@ -65,6 +69,7 @@ if (-not $python) { throw "python не найден в PATH (нужен 3.14+ д
 if (-not (Test-Path $ruPkg)) {
     Write-Host "Скачивание man-pages-ru $RuVersion (Arch)…"
     Invoke-WebRequest -Uri $RuUrl -OutFile $ruPkg -UseBasicParsing
+    Unblock-File -LiteralPath $ruPkg -ErrorAction SilentlyContinue
 }
 if (-not (Test-Path (Join-Path $ruDir "man1"))) {
     Write-Host "Распаковка man-pages-ru…"
@@ -75,6 +80,7 @@ if (-not (Test-Path (Join-Path $ruDir "man1"))) {
 if (-not (Test-Path $enPkg)) {
     Write-Host "Скачивание man-pages $EnVersion (kernel.org)…"
     Invoke-WebRequest -Uri $EnUrl -OutFile $enPkg -UseBasicParsing
+    Unblock-File -LiteralPath $enPkg -ErrorAction SilentlyContinue
 }
 if (-not (Test-Path (Join-Path $enDir "man1"))) {
     Write-Host "Распаковка man-pages…"
@@ -96,41 +102,7 @@ else {
     if ($LASTEXITCODE -ne 0) { throw "Сборка manpages.db не удалась" }
 }
 
-# ── 3. Лицензии и атрибуция (GPL обязывает сохранять лицензию) ─────────────
-$licDir = Join-Path $docsDir "man-pages-LICENSES"
-if (-not (Test-Path $licDir)) {
-    $licCache = Join-Path $cache "en-licenses"
-    if (-not (Get-ChildItem $licCache -Filter "*.txt" -ErrorAction SilentlyContinue)) {
-        # prefix срезается extract_corpus.py: тексты ложатся в корень licCache
-        & $python (Join-Path $PSScriptRoot "extract_corpus.py") $enPkg $licCache `
-            "man-pages-$EnVersion/LICENSES" --all
-        if ($LASTEXITCODE -ne 0) { throw "Распаковка LICENSES не удалась" }
-    }
-    if (Get-ChildItem $licCache -Filter "*.txt" -ErrorAction SilentlyContinue) {
-        New-Item -ItemType Directory -Force -Path $licDir | Out-Null
-        Copy-Item (Join-Path $licCache "*.txt") $licDir -Force
-    }
-    else {
-        Write-Warning "LICENSES в корпусе man-pages не найдены"
-    }
-}
-
-$ruLicense = @"
-man-pages-ru - русские переводы man-страниц (корпус встроенной документации)
-=============================================================================
-
-Источник: проект manpages-l10n (https://salsa.debian.org/manpages-l10n-team/manpages-l10n),
-пакет man-pages-ru $RuVersion (репозиторий extra Arch Linux).
-Страницы сгенерированы po4a из man-pages $EnVersion; авторы переводов
-перечислены в секции «ПЕРЕВОД» каждой страницы.
-
-Лицензия переводов - GNU General Public License версии 3 или более поздней
-(GPL-3.0-or-later), см. https://www.gnu.org/licenses/gpl-3.0.html.
-
-База распространяется как часть поставки IDABatchTool на условиях GPL-3.0.
-"@
-Set-Content -Path (Join-Path $docsDir "LICENSE-man-pages-ru.txt") -Value $ruLicense -Encoding UTF8
-
+# ── 3. Источники корпусов ──────────────────────────────────────────────────
 $sources = @"
 Встроенная документация man-pages - источники
 ==============================================
@@ -152,4 +124,4 @@ pages(page_name, section, lang), function_index(func_name, ...).
 "@
 Set-Content -Path (Join-Path $docsDir "MANPAGES-SOURCES.txt") -Value $sources -Encoding UTF8
 
-Write-Host "Готово: $dbPath + лицензии в docs\"
+Write-Host "Готово: $dbPath (источники в docs\MANPAGES-SOURCES.txt)"

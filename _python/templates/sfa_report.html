@@ -193,7 +193,6 @@
         Документация: man-pages-ru (manpages-l10n) {{ manpages_meta.get('ru_version', '') or 'н/д' }},
         man-pages {{ manpages_meta.get('en_version', '') or 'н/д' }}{{ '; рендер: ' + manpages_meta.get('renderer', '') if manpages_meta.get('renderer') else '' }}.
         Русские страницы показываются при наличии в корпусе переводов, остальные - английские (помечены «en»).
-        Корпуса распространяются на условиях лицензий GNU GPL; файлы LICENSE - рядом с базой документации (app\docs).
     </p>
     {% endif %}
     <script>
