@@ -61,21 +61,29 @@ for _stream in (sys.stdout, sys.stderr):
         except Exception:
             pass
 
+# Ключ страницы - (page_name, section): одноимённые страницы есть и в man2, и
+# в man3, при ключе только по имени они затирали друг друга (2204 страницы
+# импортировались, 2194 сохранялись). Пересоздаём таблицы при импорте: это
+# полная перестройка базы, старые схемы (с ключом по имени) и хвосты прошлых
+# прогонов иначе остались бы.
 _SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS pages (
-    page_name TEXT PRIMARY KEY,
+DROP TABLE IF EXISTS pages;
+DROP TABLE IF EXISTS function_index;
+CREATE TABLE pages (
+    page_name TEXT NOT NULL,
     section TEXT NOT NULL DEFAULT '',
     title TEXT NOT NULL DEFAULT '',
     library TEXT NOT NULL DEFAULT '',
     summary TEXT NOT NULL DEFAULT '',
-    markdown TEXT NOT NULL DEFAULT ''
+    markdown TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (page_name, section)
 );
-CREATE TABLE IF NOT EXISTS function_index (
+CREATE TABLE function_index (
     func_name TEXT PRIMARY KEY,
     page_name TEXT NOT NULL,
     section TEXT NOT NULL DEFAULT ''
 );
-CREATE INDEX IF NOT EXISTS idx_fi_page ON function_index(page_name);
+CREATE INDEX idx_fi_page ON function_index(page_name, section);
 CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL DEFAULT ''
@@ -102,6 +110,38 @@ def done(msg):
         print(f"DONE {msg}", flush=True)
     except Exception:
         pass
+
+
+_ROFF_ESCAPES = (
+    (r"\-", "-"),
+    (r"\(aq", "'"),
+    (r"\(dq", '"'),
+    (r"\(oq", "`"),
+    (r"\(cq", "'"),
+    (r"\(em", "—"),
+    (r"\(en", "–"),
+    (r"\(bu", "•"),
+    (r"\~", " "),
+    (r"\&", ""),
+    (r"\%", ""),
+    (r"\|", ""),
+    (r"\^", ""),
+    ("\\ ", " "),
+    (r"\e", "\\"),
+)
+
+
+def _unescape_roff(text):
+    """Снимает типовые roff-экранирования из разобранного текста.
+
+    Без этого строка NAME выглядит как ``accept, accept4 \\- accept a
+    connection on a socket``: дефис экранирован, разделитель ``" - "`` не
+    находится, имя функции не извлекается, и в индекс не попадает ни одна
+    функция (база получалась с 0 функций).
+    """
+    for esc, rep in _ROFF_ESCAPES:
+        text = text.replace(esc, rep)
+    return text
 
 
 def _parse_roff_text(text):
@@ -162,7 +202,7 @@ def _parse_roff_text(text):
             continue
         result.append(l)
         prev_empty = empty
-    return "\n".join(result).strip()
+    return _unescape_roff("\n".join(result).strip())
 
 
 def _extract_sections(markdown_text):
@@ -181,12 +221,17 @@ def _extract_sections(markdown_text):
 
 
 def _title_from_name(name_text):
-    """Из секции NAME: 'foo, bar - описание' возвращает (список имён, описание)."""
+    """Из секции NAME: 'foo, bar - описание' возвращает (список имён, описание).
+
+    NAME может занимать несколько строк (``printf, fprintf, …,`` на первой,
+    ``vsnprintf - formatted output conversion`` на второй) - строки склеиваются,
+    иначе имена со второй строки терялись.
+    """
     if not name_text:
         return [], ""
-    first_line = name_text.splitlines()[0] if name_text else ""
-    if " - " in first_line:
-        head, desc = first_line.split(" - ", 1)
+    joined = " ".join(line.strip() for line in name_text.splitlines() if line.strip())
+    if " - " in joined:
+        head, desc = joined.split(" - ", 1)
         names = [n.strip() for n in head.split(",") if n.strip()]
         return names, desc.strip()
     return [], ""

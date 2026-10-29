@@ -262,20 +262,38 @@ public static class AnalysisMonitor
         return name;
     }
 
-    /// <summary>Точное совпадение ключа, иначе - совпадение по нормализованному
-    /// имени (события воркера несут только имя; одноимённые файлы обновляются все).
+    /// <summary>Ключ сопоставления пути: без суффикса базы (.i64/.idb), нижний
+    /// регистр. События анализа приходят с исходным путём, события экспорта - с
+    /// путём базы (``file.i64``); оба должны попадать в одну запись.</summary>
+    private static string MatchKey(string path)
+    {
+        var p = (path ?? "").Trim().Trim('"');
+        foreach (var suffix in new[] { ".i64", ".idb" })
+        {
+            if (p.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                p = p[..^suffix.Length];
+                break;
+            }
+        }
+        return p.ToLowerInvariant();
+    }
+
+    /// <summary>Совпадение по пути (ключу), иначе - по нормализованному имени.
     /// Сравнение без учёта регистра: файловая система Windows регистронезависима,
     /// имена из воркера и из сканирования могут отличаться регистром.
+    /// Фолбэк по имени нужен для вызовов без пути (тесты, внешние подписчики).
     /// Вызывается под локом.</summary>
     private static List<MonitorEntry> FindAllLocked(string id)
     {
+        var key = MatchKey(id);
         var exact = _entries
-            .Where(e => string.Equals(e.Key, id, StringComparison.OrdinalIgnoreCase))
+            .Where(e => MatchKey(e.Key) == key)
             .ToList();
         if (exact.Count > 0) return exact;
-        var key = NormalizeName(id);
+        var name = NormalizeName(id);
         return _entries
-            .Where(e => string.Equals(e.FileName, key, StringComparison.OrdinalIgnoreCase))
+            .Where(e => string.Equals(e.FileName, name, StringComparison.OrdinalIgnoreCase))
             .ToList();
     }
 }

@@ -59,6 +59,18 @@
             font-weight: 600; font-size: 13px; white-space: nowrap;
             color: var(--text);
         }
+        /* Тег модуля: «импортирована» (только зависимость), «собственный»
+           (файл лежит в исследуемой папке) или «системная» (собственный
+           файл, который словарь относит к библиотекам ОС). */
+        .mod-tag {
+            display: inline-block; margin-left: 6px; padding: 1px 6px;
+            border-radius: 8px; font-weight: 500; font-size: 10px;
+            vertical-align: middle; white-space: nowrap;
+            border: 1px solid var(--separator); color: var(--text-secondary);
+        }
+        .mod-tag-imported { border-color: #4a90d9; color: #4a90d9; }
+        .mod-tag-own { border-color: #9a7bd0; color: #9a7bd0; }
+        .mod-tag-system { border-color: #2e9e6b; color: #2e9e6b; }
         .mod-desc {
             text-align: left; color: var(--text-secondary);
             font-size: 12px; line-height: 1.4;
@@ -183,8 +195,18 @@
             if (cat.modules && cat.modules.length) {
                 html += '<div class="grouped-list" style="margin-top:4px;">';
                 cat.modules.forEach(function(mod) {
+                    var tag = '';
+                    if (mod.tag === 'импортирована') {
+                        tag = '<span class="mod-tag mod-tag-imported">импортирована</span>';
+                    } else if (mod.tag === 'собственный') {
+                        tag = '<span class="mod-tag mod-tag-own">собственный</span>';
+                    } else if (mod.tag === 'внутренняя') {
+                        tag = '<span class="mod-tag mod-tag-own">внутренняя</span>';
+                    } else if (mod.tag === 'системная') {
+                        tag = '<span class="mod-tag mod-tag-system">системная</span>';
+                    }
                     html += '<div class="mod-entry">' +
-                            '<span class="mod-name">' + escapeHtml(mod.name) + '</span>' +
+                            '<span class="mod-name">' + escapeHtml(mod.name) + tag + '</span>' +
                             '<span class="mod-desc">' + escapeHtml(mod.desc) + '</span>' +
                             '</div>';
                 });

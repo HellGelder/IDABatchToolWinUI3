@@ -43,6 +43,24 @@ public sealed class MonitorTests
     }
 
     [Fact]
+    public void ExportEvent_WithBaseSuffix_MatchesSourceFileEntry()
+    {
+        // События анализа приходят с путём исходника, события экспорта - с путём
+        // базы (.i64). Оба должны попадать в одну запись, иначе в диспетчере
+        // появляются «выполняющиеся» файлы сверх числа потоков.
+        AnalysisMonitor.BeginSession(new[] { @"C:\in\a.exe" }, 1);
+
+        AnalysisMonitor.MarkRunning(@"C:\in\a.exe", "analysis");
+        AnalysisMonitor.MarkCompleted(@"C:\in\a.exe", ok: true);
+        AnalysisMonitor.MarkRunning(@"C:\in\a.exe.i64", "export");
+
+        var snap = AnalysisMonitor.Snapshot();
+        Assert.Single(snap);
+        Assert.Equal(MonitorFileStatus.Running, snap[0].Status);
+        Assert.Equal("export", snap[0].Phase);
+    }
+
+    [Fact]
     public void RuntimeStats_UpdatedByPid()
     {
         AnalysisMonitor.BeginSession(new[] { @"C:\in\a.exe", @"C:\in\b.exe" }, 2);

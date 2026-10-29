@@ -60,9 +60,9 @@
     "semantic_hash": "473443bb2cb8fef4c927a76708b43548"
   },
   "Pages/AnalysisPage.xaml.cs": {
-    "mtime": 1793086553.552457,
-    "seen": 1793262223.2401798,
-    "ast_hash": "ac351e7f665a43aff97e62a5e5e1b204",
+    "mtime": 1793278609.8166733,
+    "seen": 1793279019.063654,
+    "ast_hash": "2840929ddb9341771f12322fd2c8cbdc",
     "semantic_hash": ""
   },
   "Pages/DiffPage.xaml": {
@@ -96,9 +96,9 @@
     "semantic_hash": "c0c48391b68cff62553ffff40a2bbc25"
   },
   "Pages/SfaPage.xaml.cs": {
-    "mtime": 1793086897.7389343,
-    "seen": 1793262223.2402868,
-    "ast_hash": "fdc15b9dac2d21254105283696ac3a0c",
+    "mtime": 1793278724.3484702,
+    "seen": 1793279019.0636714,
+    "ast_hash": "3ebd922b57a9e54793209f71d4537762",
     "semantic_hash": ""
   },
   "Properties/launchSettings.json": {
@@ -108,16 +108,16 @@
     "semantic_hash": "6a994141c628802eb556bb534a4d803a"
   },
   "Services/AnalysisMonitor.cs": {
-    "mtime": 1793083865.3225498,
-    "seen": 1793084315.579293,
-    "ast_hash": "d733e612ca4fe6979c8a7d6c8e8bd271",
+    "mtime": 1793273016.9718149,
+    "seen": 1793279019.06368,
+    "ast_hash": "8e805c7277587f32e736536ccaff3b83",
     "semantic_hash": ""
   },
   "Services/AppConstants.cs": {
-    "mtime": 1793025951.3812678,
-    "seen": 1793026571.8381546,
-    "ast_hash": "f65ffed799aa68a24021e258e699de3d",
-    "semantic_hash": "f65ffed799aa68a24021e258e699de3d"
+    "mtime": 1793276353.7651708,
+    "seen": 1793279019.0636823,
+    "ast_hash": "0480027b2900711ffc4eb3befbf9ffcf",
+    "semantic_hash": ""
   },
   "Services/AppNotifier.cs": {
     "mtime": 1793025951.3848984,
@@ -144,10 +144,10 @@
     "semantic_hash": "4601faf075381e36255c3b95b9e75c77"
   },
   "Services/ExecutableFinder.cs": {
-    "mtime": 1793025951.4019034,
-    "seen": 1793026571.8382642,
-    "ast_hash": "c8ab4f7e5e00dbf7f273de7086016b0f",
-    "semantic_hash": "c8ab4f7e5e00dbf7f273de7086016b0f"
+    "mtime": 1793277046.2610946,
+    "seen": 1793279019.0637069,
+    "ast_hash": "2f69c03529a3ec50ee053f976090c8f0",
+    "semantic_hash": ""
   },
   "Services/GitDiffReportService.cs": {
     "mtime": 1793025951.4039207,
@@ -156,9 +156,9 @@
     "semantic_hash": "d15b3329f0840a824db85cebe8a6f6e5"
   },
   "Services/IdaRunner.cs": {
-    "mtime": 1793083902.3112023,
-    "seen": 1793084315.579329,
-    "ast_hash": "dda7601c887224f19b3777a6e98ba987",
+    "mtime": 1793273010.3079777,
+    "seen": 1793279019.063712,
+    "ast_hash": "652ffbf6aba66c5be3e04c6912afb186",
     "semantic_hash": ""
   },
   "Services/PythonEnvironment.cs": {
@@ -186,9 +186,9 @@
     "semantic_hash": ""
   },
   "TaskManagerWindow.xaml.cs": {
-    "mtime": 1793083881.70338,
-    "seen": 1793084315.579377,
-    "ast_hash": "1480819eddd631b8be127914cbb07b16",
+    "mtime": 1793273025.8231642,
+    "seen": 1793279019.0637565,
+    "ast_hash": "971ab6b86fcf363e92a5cd713c1569be",
     "semantic_hash": ""
   },
   "Workers/AnalysisWorker.cs": {
@@ -246,10 +246,10 @@
     "semantic_hash": "67c83d7f5a4f0b8f8eb2e51127190fcf"
   },
   "_python/classifier/naming.py": {
-    "mtime": 1793025951.6048703,
-    "seen": 1793026571.8384225,
-    "ast_hash": "222ae6ebafdb56455444025220977f35",
-    "semantic_hash": "222ae6ebafdb56455444025220977f35"
+    "mtime": 1793272939.7237482,
+    "seen": 1793279019.0637846,
+    "ast_hash": "07f788d90e6cf2dd8c9800345c67aeb2",
+    "semantic_hash": ""
   },
   "_python/classifier/platform_classifier.py": {
     "mtime": 1793022490.4832103,
@@ -258,10 +258,10 @@
     "semantic_hash": "fce28ac38c2b2debee81df0fa23085f3"
   },
   "_python/classifier/system_modules.py": {
-    "mtime": 1793025951.6096494,
-    "seen": 1793026571.838446,
-    "ast_hash": "aa781d1a2105a975fb0d44697d95f07a",
-    "semantic_hash": "aa781d1a2105a975fb0d44697d95f07a"
+    "mtime": 1793275702.777544,
+    "seen": 1793279019.06379,
+    "ast_hash": "cc5db0fddc82badb13b25c69c5f6f96e",
+    "semantic_hash": ""
   },
   "_python/classifier/third_party.py": {
     "mtime": 1793025951.6289005,
@@ -288,15 +288,15 @@
     "semantic_hash": "d8f7162847b132d9b73644b8dd897585"
   },
   "_python/manpages_bridge.py": {
-    "mtime": 1793262015.5740829,
-    "seen": 1793262223.2406924,
-    "ast_hash": "864b20b1d4af56a9d27c48b96f0822ed",
+    "mtime": 1793270439.2731426,
+    "seen": 1793279019.063804,
+    "ast_hash": "b3dd41343e3b7af2ceaf55a98058e78e",
     "semantic_hash": ""
   },
   "_python/report_bridge.py": {
-    "mtime": 1793262004.4674919,
-    "seen": 1793262223.2406967,
-    "ast_hash": "d63511a37420e82fd4b6a74f4fa5e863",
+    "mtime": 1793276429.1066008,
+    "seen": 1793279019.0638063,
+    "ast_hash": "0507ac591b941c16f5e16c5c75b6775c",
     "semantic_hash": ""
   },
   "install-prereqs.ps1": {
@@ -330,9 +330,9 @@
     "semantic_hash": ""
   },
   "README.txt": {
-    "mtime": 1793025951.294886,
-    "seen": 1793080699.1418788,
-    "ast_hash": "d5a4ccb34a65681d3768b05ed14b33ca",
+    "mtime": 1793270574.297192,
+    "seen": 1793279019.0638597,
+    "ast_hash": "154d06dd11b4687eb48c0c04e0f6a644",
     "semantic_hash": ""
   },
   "_python/templates/_datatables.html": {
@@ -366,9 +366,9 @@
     "semantic_hash": ""
   },
   "_python/templates/index.html": {
-    "mtime": 1793025951.8088906,
-    "seen": 1793080699.1419027,
-    "ast_hash": "30db9c5bbc542231577cde99084830dc",
+    "mtime": 1793275730.0142946,
+    "seen": 1793279019.0638766,
+    "ast_hash": "bc461607a6ea4538697fa738d14b6ed5",
     "semantic_hash": ""
   },
   "_python/templates/report.html": {
@@ -396,9 +396,9 @@
     "semantic_hash": ""
   },
   "version.txt": {
-    "mtime": 1793262087.4687529,
-    "seen": 1793262223.240893,
-    "ast_hash": "ec5b023bf0760748bedfa476a630e4d4",
+    "mtime": 1793278871.2890122,
+    "seen": 1793279019.063891,
+    "ast_hash": "d93eb21fc3577389fe483204c8d7977d",
     "semantic_hash": ""
   },
   "sfb-logo.png": {
@@ -504,10 +504,10 @@
     "semantic_hash": "e32354988d0af487fa9b0b8821af083f"
   },
   "Services/ArtifactCleanup.cs": {
-    "mtime": 1793025951.387928,
-    "seen": 1793026571.838191,
-    "ast_hash": "e25080726415366df79c9249d76dd593",
-    "semantic_hash": "e25080726415366df79c9249d76dd593"
+    "mtime": 1793278684.303555,
+    "seen": 1793279019.063693,
+    "ast_hash": "f612f0365bb2aa19b7f89dfaf9a8dde5",
+    "semantic_hash": ""
   },
   "Services/ArtifactValidator.cs": {
     "mtime": 1793025951.389924,
@@ -588,10 +588,10 @@
     "semantic_hash": "29a4bb4879036e6f25df24e969c6a529"
   },
   "tests/IDABatchToolWinUI.Tests/ArtifactCleanupTests.cs": {
-    "mtime": 1793022491.0752146,
-    "seen": 1793026571.8385565,
-    "ast_hash": "f6a56ff15895ecea47823a79469ac27f",
-    "semantic_hash": "f6a56ff15895ecea47823a79469ac27f"
+    "mtime": 1793278744.1330495,
+    "seen": 1793279019.0638208,
+    "ast_hash": "0d6586afe2d11e39bc803ad3773a91d8",
+    "semantic_hash": ""
   },
   "tests/IDABatchToolWinUI.Tests/ArtifactValidatorTests.cs": {
     "mtime": 1793025951.4409516,
@@ -630,9 +630,9 @@
     "semantic_hash": "dba491a7c1ffd86afb803259a71e2fda"
   },
   "tests/IDABatchToolWinUI.Tests/MonitorTests.cs": {
-    "mtime": 1793083919.0124445,
-    "seen": 1793084315.5794685,
-    "ast_hash": "a984af0618dcf1144aca27b4d785d909",
+    "mtime": 1793273132.5816605,
+    "seen": 1793279019.063843,
+    "ast_hash": "eb07cf72cdba32dbdc0fed44f3d47fc3",
     "semantic_hash": ""
   },
   "tests/IDABatchToolWinUI.Tests/OutcomeTrackerTests.cs": {
@@ -651,6 +651,12 @@
     "mtime": 1793080323.6556306,
     "seen": 1793080699.1418667,
     "ast_hash": "8eb3cc25ef2984db1ebd8aebf5447582",
+    "semantic_hash": ""
+  },
+  "tests/IDABatchToolWinUI.Tests/ExecutableFinderTests.cs": {
+    "mtime": 1793277053.5152931,
+    "seen": 1793279019.0638318,
+    "ast_hash": "dbb44856345fca5dc512d7505ab8609d",
     "semantic_hash": ""
   }
 }

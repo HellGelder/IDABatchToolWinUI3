@@ -43,6 +43,33 @@ public sealed class ArtifactCleanupTests : IDisposable
     }
 
     [Fact]
+    public void KnownArtifacts_IncludeExportScriptLog()
+    {
+        var source = Touch("7z.exe");
+
+        var paths = ArtifactCleanup.GetKnownArtifacts(source, includeLogs: true, includeIdaTemps: false);
+
+        // Лог фазы экспорта (IdaRunner -L) обязан попадать в очистку,
+        // иначе он остаётся рядом с базой после каждого прогона.
+        Assert.Contains(Path.Combine(_dir, "7z.exe_script.log"), paths);
+    }
+
+    [Fact]
+    public void DeleteKnownArtifacts_RemovesExportScriptLog()
+    {
+        var source = Touch("7z.exe");
+        Touch("7z.exe.i64");
+        Touch("7z.exe_script.log");
+        Touch("keep_script.log");
+
+        var deleted = ArtifactCleanup.DeleteKnownArtifacts(source, includeLogs: true, includeIdaTemps: false);
+
+        Assert.Equal(1, deleted);
+        Assert.False(File.Exists(Path.Combine(_dir, "7z.exe_script.log")));
+        Assert.True(File.Exists(Path.Combine(_dir, "keep_script.log")));
+    }
+
+    [Fact]
     public void DeleteKnownArtifacts_KeepsForeignFiles()
     {
         var source = Touch("7z.exe");

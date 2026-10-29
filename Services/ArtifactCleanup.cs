@@ -22,6 +22,8 @@ public static class ArtifactCleanup
         {
             paths.Add(Path.Combine(dir, stem + ".log"));
             paths.Add(Path.Combine(dir, stem + ".asm"));
+            // Лог фазы экспорта: IdaRunner пишет его рядом с базой через -L.
+            paths.Add(Path.Combine(dir, stem + "_script.log"));
         }
 
         if (includeIdaTemps)

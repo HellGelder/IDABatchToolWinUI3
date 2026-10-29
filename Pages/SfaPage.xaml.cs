@@ -394,6 +394,9 @@ public SfaPage(IConfigStore store)
         _worker = null;
         RefreshFileList();
         StartJsonProbe();
+        // Очистка по флагам сразу после прогона: лог экспорта (_script.log)
+        // и лог анализа жили до генерации HTML или навсегда.
+        CleanupAfterRun();
 
         // Поиск документации MS Learn - фаза кнопки «Запустить анализ СФ»
         // (после анализа и экспорта), чтобы генерация отчёта шла по кэшу
@@ -524,6 +527,22 @@ public SfaPage(IConfigStore store)
     {
         AppLog.Error(message);
         AppendLog(message);
+    }
+
+    /// <summary>
+    /// Очистка артефактов прогона по флагам пользователя: .asm/.log
+    /// (включая *_script.log фазы экспорта) и временные файлы IDA.
+    /// </summary>
+    private void CleanupAfterRun()
+    {
+        var includeLogs = SfaCleanupCheck.IsChecked == true;
+        var includeTemps = SfaTempCleanupCheck.IsChecked == true;
+        if (!includeLogs && !includeTemps) return;
+
+        // Удаляем только артефакты конкретных обработанных файлов, а не все
+        // *.log/*.asm рекурсивно: в папке могут лежать пользовательские файлы.
+        foreach (var item in _cachedFiles)
+            ArtifactCleanup.DeleteKnownArtifacts(item.Path, includeLogs, includeTemps);
     }
 
     /// <summary>Журнал выполнения: дублирует в «Лог выполнения» любые события

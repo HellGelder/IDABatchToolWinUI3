@@ -80,11 +80,21 @@ def _strip_path_and_lower(name: str) -> str:
 
 
 # Варианты имён с сохранением платформенного маркера. Безверсионная форма
-# обязана сохранять ``.so`` / ``.dylib``: иначе ``libz.so.1`` (Linux) и
-# ``libz.1.dylib`` (macOS) дали бы общий ключ ``libz`` и Linux-импорт
-# ошибочно считался бы системным при анализе macOS.
+# сохраняет ``.so`` / ``.dylib``: иначе ``libz.so.1`` (Linux) и ``libz.1.dylib``
+# (macOS) дали бы общий ключ ``libz`` и Linux-импорт ошибочно считался бы
+# системным при анализе macOS. Короткая форма без маркера добавляется
+# отдельно (см. _SO_BARE_RE) только для Linux-имён вида ``libX.so.N``.
 _SO_FLAVOR_RE = re.compile(
     r"^(?P<base>.+?\.so)(?:\.\d+)*$",  # libz.so.1.2.11 -> libz.so
+    re.IGNORECASE,
+)
+# Короткая форма без маркера: libpthread.so.0 -> libpthread. Нужна для
+# сопоставления с man-страницами: секция LIBRARY называет библиотеку без
+# суффикса версии («libpthread»), и по такому имени она должна находиться в
+# словаре. Платформенное смешивание исключено: набор ключей строится только по
+# словарям одной платформы (см. system_modules._system_keys).
+_SO_BARE_RE = re.compile(
+    r"^(?P<base>.+?)\.so(?:\.\d+)*$",
     re.IGNORECASE,
 )
 _DYLIB_FLAVOR_RE = re.compile(
@@ -98,10 +108,11 @@ def module_name_aliases(module_name: str) -> tuple[str, ...]:
     """Возвращает варианты ключа модуля для сопоставления со словарями.
 
     Первый элемент - канонический ключ ``normalize_module_name``. При
-    наличии версии добавляется форма с сохранённым платформенным маркером
-    (``libz.so.1.2.11`` → ``libz.so``, ``libz.1.2.dylib`` → ``libz.dylib``).
+    наличии версии добавляются форма с сохранённым платформенным маркером
+    (``libz.so.1.2.11`` → ``libz.so``, ``libz.1.2.dylib`` → ``libz.dylib``)
+    и короткая форма без маркера (``libpthread.so.0`` → ``libpthread``).
     Это позволяет находить системную библиотеку при несовпадении точной
-    версии, не смешивая библиотеки разных платформ.
+    версии и по имени из man-страницы, не смешивая библиотеки платформ.
     """
     key = normalize_module_name(module_name)
     if not key:
@@ -113,6 +124,12 @@ def module_name_aliases(module_name: str) -> tuple[str, ...]:
     so_match = _SO_FLAVOR_RE.match(full)
     if so_match:
         alias = so_match.group("base")
+        if alias and alias not in aliases:
+            aliases.append(alias)
+
+    bare_match = _SO_BARE_RE.match(full)
+    if bare_match:
+        alias = bare_match.group("base")
         if alias and alias not in aliases:
             aliases.append(alias)
 

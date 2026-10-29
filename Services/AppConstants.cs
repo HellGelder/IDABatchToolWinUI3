@@ -162,8 +162,8 @@ public static class PlatformInfo
         var counts = new Dictionary<string, int> { ["Windows"] = 0, ["Linux / Android"] = 0, ["macOS / iOS"] = 0 };
         foreach (var p in paths)
         {
-            var ext = Path.GetExtension(p).ToLowerInvariant();
-            if (ext == "")
+            var name = Path.GetFileName(p).ToLowerInvariant();
+            if (!name.Contains('.'))
             {
                 var sig = ClassifyBySignature(p);
                 if (sig != null) counts[sig]++;
@@ -171,7 +171,8 @@ public static class PlatformInfo
             }
             foreach (var (key, d) in Platforms)
             {
-                if (d.Exts.Contains(ext)) { counts[key]++; break; }
+                // Версионные soname («libcrypto.so.1.1») - тоже платформа Linux.
+                if (ExecutableFinder.HasKnownExtension(name, d.Exts)) { counts[key]++; break; }
             }
         }
         var best = counts.OrderByDescending(kv => kv.Value).First().Key;

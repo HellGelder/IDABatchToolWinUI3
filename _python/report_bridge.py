@@ -224,6 +224,7 @@ def normalize_display_name(module_name):
 
 from classifier.platform_classifier import classify_module as _classifier_describe
 from classifier.categories import get_module_category_and_description
+from classifier.system_modules import get_system_module_name as _classifier_system_name
 from classifier.system_modules import is_sfa_module as _classifier_is_sfa
 from classifier.system_modules import is_system_module as _classifier_is_system
 from classifier.system_modules import normalize_platform as _normalize_platform
@@ -333,6 +334,36 @@ def _build_internal_set(input_dir):
     except OSError:
         pass
     return internal
+
+
+def _collect_own_system_libs(input_dir, platform):
+    """Собственные системные библиотеки: файлы исследуемой директории
+    категории «Системные библиотеки ОС».
+
+    Счётчик «Системных библиотек» сводки СФ - по уникальным импортированным
+    библиотекам ОС плюс собственные библиотеки ОС (та же категория, что и
+    группа «Системные библиотеки ОС» в индексе общего анализа).
+    """
+    names = set()
+    root = Path(input_dir) if input_dir else None
+    if root is None or not root.is_dir():
+        return names
+    try:
+        for f in root.rglob('*'):
+            if not f.is_file():
+                continue
+            # Платформа неизвестна - библиотека ОС любой платформы
+            # (normalize_platform('') даёт Windows, поэтому явно по всем).
+            if platform:
+                known = _is_sfa_module(f.name, platform)
+            else:
+                known = any(_is_sfa_module(f.name, p) for p in
+                            ("Windows", "Linux / Android", "macOS / iOS"))
+            if known:
+                names.add(f.name)
+    except OSError:
+        pass
+    return names
 
 
 # Метки и цвета категорий зависимостей в индивидуальных отчётах -
@@ -528,28 +559,62 @@ def _sorted_category_groups(categories):
 
 def generate_analysis_index(reports_dir, input_dir, report_links, global_modules,
                             ida_info, internal_set=None, total_files=0,
-                            total_size_bytes=0, error_count=0, generation_time=""):
+                            total_size_bytes=0, error_count=0, generation_time="",
+                            platform=""):
     """Сводный index.html для «Общего анализа»: категория со словесным описанием
-    и описание у каждого модуля (как в исполнении 1, generator.generate_index)."""
+    и описание у каждого модуля (как в исполнении 1, generator.generate_index).
+
+    Раскладка: каждый модуль попадает ровно в одну категорию классификатора
+    (импортированный - с тегом «импортирована», собственный - «собственный»).
+    Собственная библиотека дополнительно показывается в «Внутренних модулях
+    проекта» (тег «системная», если словарь относит её к категории ОС).
+    «Системные» - только категория «Системные библиотеки ОС»: криптография
+    (libcrypto/libssl), сеть, графика и среды выполнения идут в свои
+    категории и в счётчик системных не попадают.
+    """
     categories = {}
-    for mod in global_modules:
-        if _is_internal_module(mod, internal_set):
-            cat = "Внутренние модули проекта"
-            desc = "Собственный модуль проекта (внутренняя библиотека)"
-            cat_desc = "Библиотеки и исполняемые файлы, находящиеся внутри исследуемой директории."
-        else:
-            cat, desc = _classify_module(mod)
-            cat_desc = _category_description(cat)
-        if cat not in categories:
-            categories[cat] = {"name": cat, "description": cat_desc, "count": 0, "modules": []}
-        info = categories[cat]
+
+    def _place(mod, cat, desc, cat_desc, tag):
+        info = categories.setdefault(
+            cat, {"name": cat, "description": cat_desc, "count": 0, "modules": []})
         info["count"] += 1
-        info["modules"].append({"name": mod, "desc": desc})
+        info["modules"].append({"name": mod, "desc": desc, "tag": tag})
+
+    # Собственные библиотеки ОС, которые никто не импортирует, в
+    # global_modules не попадают (нет ни одного DT_NEEDED на них). Добавляем
+    # их к общему списку, чтобы группа «Системные библиотеки ОС» индекса и
+    # счётчик «Системных библиотек» сводки СФ считались по одному множеству.
+    modules_all = set(global_modules)
+    if input_dir:
+        modules_all.update(_collect_own_system_libs(input_dir, platform))
+
+    for mod in sorted(modules_all, key=str.lower):
+        is_internal = _is_internal_module(mod, internal_set)
+        is_system = bool(_classifier_is_system(mod, platform)) if platform \
+            else bool(_classifier_is_system(mod))
+
+        if is_internal:
+            _place(mod,
+                   "Внутренние модули проекта",
+                   "Собственный модуль проекта (внутренняя библиотека)",
+                   "Библиотеки и исполняемые файлы из исследуемой директории.",
+                   "системная" if is_system else "")
+
+        cat, desc = _classify_module(mod)
+        # Свои модули вне словарей остаются только в «Внутренних модулях».
+        if is_internal and cat == "Неопознанные модули":
+            continue
+        _place(mod, cat, desc, _category_description(cat),
+               "собственный" if is_internal else "импортирована")
     grouped = _sorted_category_groups(categories)
 
     ctx = {
         "input_dir": input_dir,
-        "total_modules": len(report_links),
+        # Модулей - уникальные имена зависимостей (плюс собственные библиотеки
+        # ОС, добавленные выше), а не число отчётов (раньше сюда
+        # подставлялось len(report_links), и карточка «Модулей» показывала
+        # число файлов).
+        "total_modules": len(modules_all),
         "total_files": total_files,
         "total_size_bytes": total_size_bytes,
         "error_count": error_count,
@@ -1354,30 +1419,154 @@ def _manpages_open(candidates, log):
         log(f"[INFO] man-pages DB: {p} (функций: {count}, версия: {version})")
         return conn
     log("[WARN] БД man-pages не найдена (искали: "
-        + (", ".join(searched) or "пути не заданы")
-        + "). Документация Linux недоступна. Укажите путь в настройках "
-          "и выполните синхронизацию man-pages.")
+        + (", ".join(searched) or "пути не заданы") + ")")
     return None
+
+
+def _manpages_count(conn):
+    """Число функций в индексе БД man-pages (0 - база бесполезна)."""
+    if conn is None:
+        return 0
+    try:
+        return int(conn.execute("SELECT COUNT(*) FROM function_index").fetchone()[0])
+    except sqlite3.Error:
+        return 0
+
+
+def _manpages_preferred_path(candidates):
+    """Путь к базе man-pages: существующий файл, иначе первый создаваемый.
+
+    Кандидат-каталог превращается в ``<каталог>/manpages.db`` (так же, как в
+    настройках приложения: там путь к папке).
+    """
+    resolved = []
+    for raw in candidates:
+        if not raw:
+            continue
+        p = Path(raw)
+        if p.suffix.lower() != ".db":
+            p = p / "manpages.db"
+        resolved.append(p)
+        if p.is_file():
+            return p
+    for p in resolved:
+        if p.parent.is_dir():
+            return p
+    return None
+
+
+def _manpages_autosync(db_path, log, progress=None):
+    """Скачивает архив man-pages и импортирует его в ``db_path``.
+
+    Для Linux/Android база man-pages - единственный источник системности:
+    библиотека импорта в ELF-экспорте не определена (псевдо-модуль
+    ``.dynsym``), поэтому без базы анализ СФ показывает 0 системных функций.
+    Импорт выполняется тем же модулем, что и кнопка «Скачать и импортировать».
+
+    Returns:
+        True, если после импорта в базе есть функции.
+    """
+    try:
+        import manpages_bridge as mpb
+    except Exception as e:
+        log(f"[ERROR] Модуль импорта man-pages недоступен: {e}")
+        return False
+
+    # Не повторяем скачивание, если только что импортировали и получили 0:
+    # иначе каждый прогон заново тянет архив и висит на таймауте без сети.
+    try:
+        if db_path.is_file() and time.time() - db_path.stat().st_mtime < 3600:
+            log(f"[INFO] База man-pages пуста и только что пересоздана ({db_path}) - "
+                "повторный импорт пропущен")
+            return False
+    except OSError:
+        pass
+
+    version = getattr(mpb, "MANPAGES_VERSION", "")
+    url = getattr(mpb, "MANPAGES_ARCHIVE_URL", "")
+    if not url:
+        log("[ERROR] Не задан адрес архива man-pages")
+        return False
+    if progress is not None:
+        progress(f"Скачивание базы man-pages {version}…")
+    log(f"[INFO] БД man-pages пуста или отсутствует - скачивание {url}")
+    try:
+        with urllib.request.urlopen(url, timeout=120) as resp:
+            payload = resp.read()
+    except Exception as e:
+        log(f"[WARN] Не удалось скачать man-pages: {e}")
+        return False
+
+    log(f"[INFO] Архив man-pages получен ({len(payload) / 1024 / 1024:.1f} МБ), разбор…")
+    if progress is not None:
+        progress(f"Разбор man-pages {version}…")
+    try:
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        count = mpb.import_archive(db_path, payload)
+    except Exception as e:
+        log(f"[WARN] Импорт man-pages не удался ({db_path}): {e}")
+        return False
+
+    log(f"[INFO] man-pages импортированы: {db_path} (функций: {count})")
+    return count > 0
 
 
 def _manpages_get_page(conn, func_name):
     """Документация функции из БД man-pages в формате search_results."""
     for candidate in _manpages_candidates(func_name):
         try:
+            # Ключ страницы - (page_name, section): одноимённые страницы есть и
+            # в man2, и в man3, join только по имени выдал бы чужую секцию.
             row = conn.execute(
-                "SELECT p.page_name, p.section, p.title, p.markdown "
-                "FROM function_index f JOIN pages p ON p.page_name = f.page_name "
+                "SELECT p.page_name, p.section, p.title, p.markdown, p.library "
+                "FROM function_index f JOIN pages p "
+                "ON p.page_name = f.page_name AND p.section = f.section "
                 "WHERE f.func_name = ?", (candidate,)).fetchone()
         except sqlite3.Error:
             return None
         if row:
-            page_name, section, title, markdown = row
+            page_name, section, title, markdown, library = row
             url = f"https://man7.org/linux/man-pages/man{section}/{page_name}.{section}.html"
             header = f"**{title}** - man {section}" if title else f"man {section}"
             body = f"{header}\n\n{markdown}" if markdown else header
             return {"title": f"{page_name}({section})", "url": url,
-                    "markdown": body, "markdown_html": ""}
+                    "markdown": body, "markdown_html": "",
+                    "library": library or ""}
     return None
+
+
+# Слова в секции LIBRARY, похожие на имя библиотеки, но ими не являющиеся
+# («Standard C library (libc, -lc)»).
+_LIB_TOKEN_RE = re.compile(r"\blib[a-z][A-Za-z0-9_+.\-]*")
+_LIB_TOKEN_NOISE = frozenset({"library", "libraries"})
+
+
+def _manpage_library(library_text, platform):
+    """Библиотека функции по секции LIBRARY man-страницы.
+
+    В ELF-экспорте библиотека импорта не определена (у всех импортов
+    псевдо-модуль ``.dynsym``), поэтому единственный источник - man-страница:
+    она называет библиотеку коротко (``libc``, ``libpthread``), а
+    классификатор по алиасам приводит имя к записи словаря (``libc.so.6``).
+
+    Returns:
+        (имя для колонки «Библиотека»: каноническое, если библиотека есть в
+        системном словаре, иначе первое упоминание; признак системности по
+        словарю СФ - категория «Системные библиотеки ОС»).
+    """
+    tokens = []
+    # Библиотека указывается в скобках: «Standard C library (libc, -lc)».
+    for group in re.findall(r"\(([^)]*)\)", library_text or "") or [library_text or ""]:
+        for token in _LIB_TOKEN_RE.findall(group):
+            token = token.strip(".,;()")
+            if not token or token.lower() in _LIB_TOKEN_NOISE or token in tokens:
+                continue
+            tokens.append(token)
+    for token in tokens:
+        canon = _classifier_system_name(token, platform)
+        if canon:
+            return canon, bool(_classifier_is_sfa(canon, platform))
+    return (tokens[0] if tokens else ""), False
 
 
 def _sfa_index_open(index_db):
@@ -1576,11 +1765,16 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
         results = None
         found = False
         needs_doc = False
+        # Системность по библиотеке из man-страницы: словарь решает, является
+        # ли эта библиотека системной для СФ (категория «Системные библиотеки
+        # ОС»). Наличие документации само по себе системности не даёт.
+        lib_is_sfa = False
         if doc_cache is not None and doc_cache.has_function(func_name):
             results = doc_cache.get_results(func_name)
             cached_dll = doc_cache.get_dll_name(func_name)
             if cached_dll:
                 dll_name = cached_dll
+                lib_is_sfa = _classifier_is_sfa(cached_dll, platform)
             found = bool(results)
             log(f"[INFO] Using cached results for {func_name} (count: {len(results)})")
         elif use_manpages:
@@ -1589,7 +1783,11 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
                 if page:
                     results = [page]
                     found = True
-                    log(f"[INFO] man-pages: {func_name} → {page['title']}")
+                    lib_name, lib_is_sfa = _manpage_library(page.get("library", ""), platform)
+                    if lib_name:
+                        dll_name = lib_name
+                    log(f"[INFO] man-pages: {func_name} → {page['title']}"
+                        + (f" [{dll_name}]" if lib_name else ""))
                 else:
                     log(f"[INFO] man-pages: страница для {func_name} не найдена")
             else:
@@ -1635,6 +1833,7 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
             "results": results,
             "found": found,
             "needs_doc": needs_doc,
+            "lib_is_sfa": lib_is_sfa,
         })
 
     # ─── Фаза 2: параллельное ожидание поисков документации ───
@@ -1676,24 +1875,27 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
         dll_name = row["dll"]
         results = row["results"]
         found = row["found"]
+        lib_is_sfa = row["lib_is_sfa"]
         if row["needs_doc"]:
             results, dll_from_md = resolved.get(func_name, ([], ""))
             found = bool(results)
             if dll_from_md:
                 dll_name = dll_from_md
 
-        # Системность: известная системная библиотека либо псевдо-модуль,
-        # для которого нашлась документация.
+        # Системность: известная системная библиотека из импорта (Windows) либо
+        # библиотека из man-страницы, входящая в словарь системных (Linux/ELF).
+        # Наличие документации системности не даёт - решает только словарь.
         if row["module_is_system"]:
             is_system_call = True
         elif row["is_pseudo"]:
-            is_system_call = found
+            is_system_call = bool(lib_is_sfa)
         else:
             is_system_call = False
 
-        # Псевдо-модуль без документации в Windows-режиме в отчёт не попадает.
-        if not list_all_imports and row["is_pseudo"] and not found:
-            log(f"[INFO] {func_name}: не подтверждена как системная (нет документации)")
+        # Псевдо-модуль без системной библиотеки в Windows-режиме в отчёт не
+        # попадает (для Linux в отчёт идут все импорты с признаком системности).
+        if not list_all_imports and row["is_pseudo"] and not is_system_call:
+            log(f"[INFO] {func_name}: не системная функция (библиотека не в словаре системных)")
             skipped += 1
             continue
 
@@ -2231,7 +2433,8 @@ def run_generate(args):
             str(reports_dir), str(input_dir), report_links, global_modules,
             ida_info or {}, internal_set=internal_set, total_files=total_files,
             total_size_bytes=total_size, error_count=0,
-            generation_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            generation_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            platform=args.platform or "")
         emit_result({
             "reports_dir": str(reports_dir), "input_dir": str(input_dir),
             "index_path": str(index_path), "generated_count": len(report_links),
@@ -2288,11 +2491,29 @@ def run_generate(args):
             log.log(f"[WARN] Failed to open cache DB: {e}")
 
         # Путь к man-pages: из настроек, затем рядом с папкой отчётов и выше.
-        manpages_conn = _manpages_open(
-            [args.manpages_db,
-             reports_dir / "manpages.db",
-             reports_dir.parent / "manpages.db"],
-            log.log)
+        manpages_candidates = [args.manpages_db,
+                               reports_dir / "manpages.db",
+                               reports_dir.parent / "manpages.db"]
+        manpages_conn = _manpages_open(manpages_candidates, log.log)
+
+        # Linux/Android: без базы man-pages системность ELF-функций не
+        # определяется (в экспорте модуль импорта - псевдо-модуль .dynsym),
+        # поэтому отсутствующую или пустую базу скачиваем и импортируем сами.
+        if platform == "Linux / Android" and _manpages_count(manpages_conn) == 0:
+            if manpages_conn is not None:
+                try:
+                    manpages_conn.close()
+                except Exception:
+                    pass
+                manpages_conn = None
+            target = _manpages_preferred_path(manpages_candidates)
+            if target is not None and _manpages_autosync(
+                    # total=1: при total=0 UI-прогресс получает нулевой максимум
+                    target, log.log, lambda msg: emit_progress(0, 1, msg)):
+                manpages_conn = _manpages_open([target], log.log)
+            else:
+                log.log("[WARN] База man-pages недоступна - Linux-функции останутся "
+                        "без документации и не будут отмечены системными")
 
         sfa_index_conn = _sfa_index_open(sfa_index_db)
 
@@ -2456,8 +2677,11 @@ def run_generate(args):
             emit_error("Генерация отчётов СФ отменена пользователем.")
             return
 
-        # Счётчики сводного отчёта - по уникальным множествам; пустые
-        # дополняются из индекса (аналог фолбэка исполнения 1).
+        # Счётчики сводного отчёта - по уникальным множествам; собственные
+        # системные библиотеки проекта добавляются к импортированным (библиотеки
+        # ОС, лежащие в исследуемой директории). Пустые счётчики дополняются из
+        # индекса (аналог фолбэка исполнения 1).
+        gsl.update(_collect_own_system_libs(input_dir, platform))
         total_system_modules = len(gsl)
         total_system_functions = len(gsf)
         idx_modules, idx_functions = _sfa_index_totals(sfa_index_conn)

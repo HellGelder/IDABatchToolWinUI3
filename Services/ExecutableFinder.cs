@@ -16,6 +16,9 @@ public static class ExecutableFinder
             if (n < 4) return false;
             if (header[0] == (byte)'M' && header[1] == (byte)'Z') return true;
             if (header[0] == 0x7F && header[1] == (byte)'E' && header[2] == (byte)'L' && header[3] == (byte)'F') return true;
+            // Dalvik: dex-файлы (".dex" в списке расширений Linux/Android).
+            if (header[0] == (byte)'d' && header[1] == (byte)'e' && header[2] == (byte)'x' && header[3] == 0x0A) return true;
+            if (header[0] == (byte)'d' && header[1] == (byte)'e' && header[2] == (byte)'y' && header[3] == 0x0A) return true;
             var magic = BitConverter.ToUInt32(header);
             return magic is 0xFEEDFACE or 0xFEEDFACF or 0xCAFEBABE or 0xCEFAEDFE or 0xCFFAEDFE;
         }
@@ -26,41 +29,44 @@ public static class ExecutableFinder
     }
 
     /// <summary>
-    /// Рекурсивно находит исполняемые файлы. Файлы без расширения проверяются по сигнатуре.
-    /// Безопасно обходит недоступные подкаталоги (не падает, а пропускает их).
+    /// Соответствует ли имя файла одному из расширений, включая версионные
+    /// формы soname: «libcrypto.so.1.1» - это «.so» с версионным суффиксом.
+    /// ``Path.GetExtension`` даёт для него «.1.1», и такие библиотеки молча
+    /// выпадали из анализа.
     /// </summary>
-    public static List<string> FindExecutables(string rootDir, string[]? extensions, bool useSignatures = false)
+    public static bool HasKnownExtension(string fileName, string[] extensions)
     {
-        var extSet = extensions is { Length: > 0 } ? new HashSet<string>(extensions, StringComparer.OrdinalIgnoreCase) : null;
+        var name = Path.GetFileName(fileName).ToLowerInvariant();
+        foreach (var ext in extensions)
+        {
+            if (name.EndsWith(ext, StringComparison.Ordinal)) return true;
+            if (name.Contains(ext + ".", StringComparison.Ordinal)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Рекурсивно находит исполняемые файлы: имя должно содержать расширение
+    /// платформы (включая версионные soname), а содержимое - сигнатуру PE/ELF/
+    /// Mach-O/Dalvik. Текстовый файл с «исполняемым» именем (например,
+    /// libcrypto.so.1.1.CRG) в анализ не попадает. Файлы без расширения
+    /// проверяются только по сигнатуре. Безопасно обходит недоступные
+    /// подкаталоги (не падает, а пропускает их).
+    /// </summary>
+    public static List<string> FindExecutables(string rootDir, string[]? extensions)
+    {
+        var extList = extensions is { Length: > 0 } ? extensions : PlatformInfo.AllExtensions();
         var result = new List<string>();
         if (!Directory.Exists(rootDir)) return result;
 
         foreach (var entry in SafeEnumerateFiles(rootDir))
         {
-            var ext = Path.GetExtension(entry).ToLowerInvariant();
             try
             {
-                if (extSet != null)
-                {
-                    if (ext == "")
-                    {
-                        if (IsExecutable(entry)) result.Add(entry);
-                        continue;
-                    }
-                    if (extSet.Contains(ext))
-                    {
-                        if (useSignatures && !IsExecutable(entry)) continue;
-                        result.Add(entry);
-                    }
-                }
-                else if (useSignatures)
-                {
-                    if (IsExecutable(entry)) result.Add(entry);
-                }
-                else
-                {
-                    result.Add(entry);
-                }
+                var name = Path.GetFileName(entry).ToLowerInvariant();
+                if (name.Contains('.') && !HasKnownExtension(name, extList)) continue;
+                if (!IsExecutable(entry)) continue;
+                result.Add(entry);
             }
             catch { /* файл недоступен */ }
         }
@@ -92,7 +98,7 @@ public static class ExecutableFinder
     public static long ComputeExecutablesSize(string rootDir, string[]? extensions)
     {
         if (!Directory.Exists(rootDir)) return 0;
-        var extSet = extensions is { Length: > 0 } ? new HashSet<string>(extensions, StringComparer.OrdinalIgnoreCase) : null;
+        var extList = extensions is { Length: > 0 } ? extensions : null;
         long total = 0;
         foreach (var entry in SafeEnumerateFiles(rootDir))
         {
@@ -100,10 +106,10 @@ public static class ExecutableFinder
             var rel = Path.GetRelativePath(rootDir, entry);
             if (rel.Contains(AppConstants.SfaReportsDirName) || rel.Contains(AppConstants.ReportsDirName) ||
                 rel.Contains(AppConstants.AddDiffResultsDirName) || rel.Contains(AppConstants.DiffResultsDirName)) continue;
-            var ext = Path.GetExtension(entry).ToLowerInvariant();
             try
             {
-                if (extSet != null && ext != "" && !extSet.Contains(ext)) continue;
+                var name = Path.GetFileName(entry).ToLowerInvariant();
+                if (extList != null && name.Contains('.') && !HasKnownExtension(name, extList)) continue;
                 if (!IsExecutableImage(entry)) continue;
                 total += new FileInfo(entry).Length;
             }

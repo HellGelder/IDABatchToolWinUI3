@@ -1,6 +1,13 @@
 """Определение системных библиотек по собственным словарям проекта.
 
 Единственная точка принятия решения «является ли библиотека системной».
+Системными считаются только библиотеки категории «Системные библиотеки ОС»:
+базовые компоненты платформы (kernel32, user32, libc, libpthread, …).
+Криптография (libcrypto, advapi32), сеть (ws2_32, mpr), графика, работа с
+данными и среды выполнения (msvcrt, libgcc_s) - не системные: они относятся
+к своим категориям. Запись в объединённом словаре платформы сама по себе
+системности не даёт - она нужна для описаний и канонизации имён.
+
 Источник истины - словари классификатора:
 
 * Windows - ``WINDOWS_MODULES``;
@@ -35,31 +42,46 @@ _API_SET_PREFIXES: tuple[str, ...] = (
 
 def _collect_keys(dicts: Iterable[Mapping[str, str]]) -> frozenset[str]:
     """Собирает все варианты нормализованных ключей из словарей."""
-    keys: set[str] = set()
+    return frozenset(_collect_map(dicts))
+
+
+def _collect_map(dicts: Iterable[Mapping[str, str]]) -> dict[str, str]:
+    """Карта «вариант ключа → каноническое имя записи словаря».
+
+    Порядок словарей важен: первая запись выигрывает, поэтому варианты,
+    совпавшие с более приоритетным словарём, не перетираются.
+    """
+    result: dict[str, str] = {}
     for module_dict in dicts:
         for name in module_dict:
-            keys.update(module_name_aliases(name))
-    return frozenset(keys)
+            for alias in module_name_aliases(name):
+                result.setdefault(alias, name)
+    return result
 
 
 # Нормализованные ключи системных модулей по платформам - строятся лениво:
 # module_name_aliases по всем словарям на import-е оплачивался даже прогонами,
 # где is_system_module не вызывается ни разу.
-_SYSTEM_KEYS: dict[str, frozenset[str]] = {}
+_SYSTEM_MAP: dict[str, dict[str, str]] = {}
+
+
+def _system_map(platform: str) -> dict[str, str]:
+    """Карта «вариант ключа → имя записи словаря» для платформы (с кэшем)."""
+    mapping = _SYSTEM_MAP.get(platform)
+    if mapping is None:
+        if platform == "Windows":
+            mapping = _collect_map([WINDOWS_MODULES])
+        elif platform == "Linux / Android":
+            mapping = _collect_map([LINUX_MODULES, ANDROID_MODULES])
+        else:
+            mapping = _collect_map([MACOS_MODULES])
+        _SYSTEM_MAP[platform] = mapping
+    return mapping
 
 
 def _system_keys(platform: str) -> frozenset[str]:
     """Нормализованные ключи системных модулей платформы (с кэшем)."""
-    keys = _SYSTEM_KEYS.get(platform)
-    if keys is None:
-        if platform == "Windows":
-            keys = _collect_keys([WINDOWS_MODULES])
-        elif platform == "Linux / Android":
-            keys = _collect_keys([LINUX_MODULES, ANDROID_MODULES])
-        else:
-            keys = _collect_keys([MACOS_MODULES])
-        _SYSTEM_KEYS[platform] = keys
-    return keys
+    return frozenset(_system_map(platform))
 
 # Допустимые нестрогие обозначения платформы.
 _PLATFORM_ALIASES: dict[str, str] = {
@@ -89,8 +111,32 @@ def normalize_platform(platform: str) -> str:
     return _PLATFORM_ALIASES.get(platform.strip().lower(), platform)
 
 
+# Категория классификатора, по которой определяются системные библиотеки ОС:
+# «системные» - это именно базовые библиотеки операционной системы (kernel32,
+# user32, gdi32, libc, …). Криптография (libcrypto, advapi32), сеть (mpr,
+# ws2_32), графика, данные и среды выполнения (msvcrt, libgcc_s) системными
+# не считаются - они относятся к своим категориям и не входят в счётчики
+# системных библиотек ни в индексе, ни в анализе СФ.
+SYSTEM_OS_CATEGORY = "Системные библиотеки ОС"
+
+
+def _is_os_library(module_name: str, platform: str = "Windows") -> bool:
+    """Библиотека из перечня ОС (категория «Системные библиотеки ОС»)."""
+    canon = get_system_module_name(module_name, platform)
+    if not canon:
+        return False
+    from .categories import get_module_category
+
+    return get_module_category(canon) == SYSTEM_OS_CATEGORY
+
+
 def is_system_module(module_name: str, platform: str = "Windows") -> bool:
-    """Проверяет, относится ли модуль к системным библиотекам платформы.
+    """Относится ли модуль к системным библиотекам ОС (только категория ОС).
+
+    Проверяется перечень библиотек операционной системы, а не объединённый
+    словарь платформ: запись в LINUX_MODULES/WINDOWS_MODULES ещё не делает
+    библиотеку системной (libcrypto - криптография, libgcc_s - среда
+    выполнения, ws2_32 - сеть).
 
     Args:
         module_name: имя модуля из импорта (``kernel32.dll``, ``libc.so.6``,
@@ -100,55 +146,62 @@ def is_system_module(module_name: str, platform: str = "Windows") -> bool:
             по словарям всех платформ.
 
     Returns:
-        True, если модуль входит в системный словарь указанной платформы.
+        True, если модуль входит в категорию «Системные библиотеки ОС».
+    """
+    return _is_os_library(module_name, platform)
+
+
+def get_system_module_name(module_name: str, platform: str = "Windows") -> str:
+    """Каноническое имя системной библиотеки из словаря платформы.
+
+    Возвращает запись словаря (``libpthread.so.0``, ``kernel32.dll``), по
+    которой нашёлся вариант имени, либо пустую строку. Нужно, чтобы по
+    короткому имени из man-страницы (``libpthread``) получать полное имя для
+    категории, описания и отчёта.
     """
     if not module_name:
-        return False
+        return ""
     aliases = module_name_aliases(module_name)
     if not aliases:
-        return False
+        return ""
 
     platform = normalize_platform(platform)
-
-    if platform not in ("Windows", "Linux / Android", "macOS / iOS"):
-        # Неизвестная платформа - ищем по всем системным словарям.
-        win = _system_keys("Windows")
-        lin = _system_keys("Linux / Android")
-        mac = _system_keys("macOS / iOS")
-        if any(a in win for a in aliases):
-            return True
-        if any(a in lin for a in aliases):
-            return True
-        return any(a in mac for a in aliases)
 
     # API Sets относятся только к Windows и задаются префиксом.
     if platform == "Windows":
         primary = normalize_module_name(module_name)
         if any(primary.startswith(prefix) for prefix in _API_SET_PREFIXES):
-            return True
+            return module_name
 
-    return any(alias in _system_keys(platform) for alias in aliases)
+    if platform in ("Windows", "Linux / Android", "macOS / iOS"):
+        mapping = _system_map(platform)
+        for alias in aliases:
+            name = mapping.get(alias)
+            if name:
+                return name
+        return ""
+
+    # Неизвестная платформа - ищем по всем системным словарям.
+    for key in ("Windows", "Linux / Android", "macOS / iOS"):
+        mapping = _system_map(key)
+        for alias in aliases:
+            name = mapping.get(alias)
+            if name:
+                return name
+    return ""
 
 
-# Категория классификатора, по которой формируются отчёты СФ: «системные
-# библиотеки» в понимании СФ - это именно базовые библиотеки ОС (kernel32,
-# user32, gdi32, …). Криптографические (advapi32), сетевые (mpr) и runtime
-# (msvcrt) словари Windows тоже считаются системными, но относятся к другим
-# категориям - в СФ-отчёты они не включаются (иначе числа СФ-отчёта и
-# категории «Системные библиотеки ОС» в отчёте анализа ПО расходятся).
-SYSTEM_OS_CATEGORY = "Системные библиотеки ОС"
-
-
+# Категория классификатора, по которой формируются отчёты СФ, - та же
+# «Системные библиотеки ОС» (см. SYSTEM_OS_CATEGORY выше). is_sfa_module
+# оставлен как отдельное имя для читаемости вызывающего кода (СФ-отчёты):
+# критерий совпадает с is_system_module, чтобы «Системных библиотек» в СФ и
+# категория «Системные библиотеки ОС» в индексе не расходились.
 def is_sfa_module(module_name: str, platform: str = "Windows") -> bool:
-    """Модуль входит в отчёты СФ: системная библиотека платформы категории
-    «Системные библиотеки ОС»."""
-    if not is_system_module(module_name, platform):
-        return False
-    if normalize_platform(platform) != "Windows":
-        # Для не-Windows словари категорий уже сгруппированы по назначению:
-        # ядро/линковщик/glibc → «Системные библиотеки ОС», остальные
-        # системные словари - в своих категориях, критерий совпадает.
-        return True
-    from .categories import get_module_category
+    """Модуль входит в отчёты СФ: системная библиотека категории
+    «Системные библиотеки ОС» (критерий тот же, что у is_system_module).
 
-    return get_module_category(module_name) == SYSTEM_OS_CATEGORY
+    Криптография (libcrypto/libssl), сеть, графика и runtime (libgcc_s)
+    системными не считаются - иначе «Системных библиотек» в СФ расходится
+    с категорией «Системные библиотеки ОС» отчёта анализа ПО.
+    """
+    return _is_os_library(module_name, platform)

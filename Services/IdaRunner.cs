@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 
 namespace IDABatchToolWinUI.Services;
 
@@ -97,7 +97,10 @@ public sealed class IdaRunner : IDisposable
                             && !name.EndsWith(".idb", StringComparison.OrdinalIgnoreCase))
                             name += ".i64";
                         ProgressCallback?.Invoke(name, completed, total);
-                        FileDoneCallback?.Invoke(name, ok);
+                        // Полный путь: диспетчер задач сопоставляет событие с
+                        // записью по пути, иначе одинаковые имена файлов из
+                        // разных каталогов помечались одной записью/несколькими.
+                        FileDoneCallback?.Invoke(file, ok);
                     }
                     sem.Release();
                 }
@@ -151,7 +154,7 @@ public sealed class IdaRunner : IDisposable
                         results[f] = ok;
                         completed++;
                         ProgressCallback?.Invoke(Path.GetFileName(f), completed, total);
-                        FileDoneCallback?.Invoke(Path.GetFileName(f), ok);
+                        FileDoneCallback?.Invoke(f, ok);
                     }
                     sem.Release();
                 }
@@ -167,7 +170,7 @@ public sealed class IdaRunner : IDisposable
         if (!File.Exists(file)) return false;
 
         var startedUtc = DateTime.UtcNow;
-        FileStartCallback?.Invoke(Path.GetFileName(file));
+        FileStartCallback?.Invoke(file);
 
         var outDir = outputDir ?? Path.GetDirectoryName(file)!;
         Directory.CreateDirectory(outDir);
@@ -194,11 +197,11 @@ public sealed class IdaRunner : IDisposable
             TimeSpan.FromSeconds(10),
             TimeSpan.FromMinutes(30),
             AnalysisWatchPaths(idbPath, logPath));
-        pulse.Updated += s => PulseCallback?.Invoke(pulseName, s.Text);
+        pulse.Updated += s => PulseCallback?.Invoke(file, s.Text);
 
         var result = await ProcessRunner.RunAsync(
             psi, ct,
-            pid => ProcessStartedCallback?.Invoke(Path.GetFileName(file), pid, Environment.CurrentManagedThreadId),
+            pid => ProcessStartedCallback?.Invoke(file, pid, Environment.CurrentManagedThreadId),
             pulse);
 
         if (!result.Success)
@@ -258,7 +261,7 @@ public sealed class IdaRunner : IDisposable
         // иначе IDA может незаметно переанализировать файл вместо resume.
         if (!ArtifactValidator.IsBasePath(idbPath)) return false;
 
-        FileStartCallback?.Invoke(Path.GetFileName(idbPath));
+        FileStartCallback?.Invoke(idbPath);
 
         var outDir = Path.GetDirectoryName(idbPath)!;
         var logPath = Path.Combine(outDir, Path.GetFileNameWithoutExtension(idbPath) + "_script.log");
@@ -287,11 +290,11 @@ public sealed class IdaRunner : IDisposable
             TimeSpan.FromSeconds(10),
             TimeSpan.FromMinutes(30),
             ExportWatchPaths(idbPath, logPath));
-        pulse.Updated += s => PulseCallback?.Invoke(pulseName, s.Text);
+        pulse.Updated += s => PulseCallback?.Invoke(idbPath, s.Text);
 
         var result = await ProcessRunner.RunAsync(
             psi, ct,
-            pid => ProcessStartedCallback?.Invoke(Path.GetFileName(idbPath), pid, Environment.CurrentManagedThreadId),
+            pid => ProcessStartedCallback?.Invoke(idbPath, pid, Environment.CurrentManagedThreadId),
             pulse);
 
         if (!result.Success)

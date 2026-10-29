@@ -308,8 +308,10 @@ public sealed partial class AnalysisPage : Page
         });
         w.ProcessStarted += (name, pid, tid) => RunOnUi(() =>
         {
+            // События воркера несут полный путь (диспетчер сопоставляет запись
+            // по нему); в журнал и тремап идёт только имя файла.
             AnalysisMonitor.SetProcessInfo(name, pid, tid);
-            AppendLog($"Запущен процесс: {name} (PID {pid})");
+            AppendLog($"Запущен процесс: {Path.GetFileName(name)} (PID {pid})");
         });
         w.PulseUpdated += (name, text) => RunOnUi(() =>
         {
@@ -323,20 +325,20 @@ public sealed partial class AnalysisPage : Page
         });
         w.AnalysisFileStarted += name => RunOnUi(() =>
         {
-            SetFileStatusByName(name, AnalysisStatus.InProgress);
+            SetFileStatusByName(Path.GetFileName(name), AnalysisStatus.InProgress);
             AnalysisMonitor.MarkRunning(name, "analysis");
-            AppendLog($"[Анализ] Начало: {name}");
+            AppendLog($"[Анализ] Начало: {Path.GetFileName(name)}");
         });
         w.AnalysisFileCompleted += (name, ok) => RunOnUi(() =>
         {
-            SetFileStatusByName(name, ok ? AnalysisStatus.Success : AnalysisStatus.Error);
+            SetFileStatusByName(Path.GetFileName(name), ok ? AnalysisStatus.Success : AnalysisStatus.Error);
             AnalysisMonitor.MarkCompleted(name, ok);
-            AppendLog($"[Анализ] {name} - {(ok ? "успешно" : "ошибка")}");
+            AppendLog($"[Анализ] {Path.GetFileName(name)} - {(ok ? "успешно" : "ошибка")}");
         });
         w.ExportFileStarted += name => RunOnUi(() =>
         {
             AnalysisMonitor.MarkRunning(name, "export");
-            AppendLog($"[Экспорт] Начало: {name}");
+            AppendLog($"[Экспорт] Начало: {Path.GetFileName(name)}");
         });
         w.ExportProgress += (name, cur, total) => RunOnUi(() =>
         {
@@ -345,9 +347,9 @@ public sealed partial class AnalysisPage : Page
         w.ExportFileCompleted += (name, ok) => RunOnUi(() =>
         {
             // Финальный статус файла - по результату экспорта, а не по созданию базы.
-            SetFileStatusByName(name, ok ? AnalysisStatus.Success : AnalysisStatus.Error);
-            if (!ok) AppendError($"Ошибка экспорта для {name}");
-            else AppendLog($"[Экспорт] {name} - успешно");
+            SetFileStatusByName(Path.GetFileName(name), ok ? AnalysisStatus.Success : AnalysisStatus.Error);
+            if (!ok) AppendError($"Ошибка экспорта для {Path.GetFileName(name)}");
+            else AppendLog($"[Экспорт] {Path.GetFileName(name)} - успешно");
             AnalysisMonitor.MarkCompleted(name, ok);
         });
         w.ErrorOccurred += msg => RunOnUi(() => AppendError(msg));
@@ -396,6 +398,9 @@ public sealed partial class AnalysisPage : Page
         // Наличие JSON пересчитывается в фоне: обход папки на UI-потоке
         // подвешивал страницу на больших каталогах.
         StartJsonProbe();
+        // Очистка по флагам сразу после прогона: раньше она выполнялась
+        // только после генерации HTML, и логи/темпы жили до неё.
+        CleanupAfterRun();
         _worker?.Dispose();
         _worker = null;
         RefreshFileList();
@@ -547,7 +552,7 @@ public sealed partial class AnalysisPage : Page
         // пересчитывается в фоне после генерации.
         StartJsonProbe();
 
-        CleanupAfterReport();
+        CleanupAfterRun();
 
         var reportsDir = result.ReportsDir;
         if (string.IsNullOrEmpty(reportsDir)) reportsDir = Path.Combine(InputDirTextBox.Text.Trim(), AppConstants.IdaReportsDirName);
@@ -565,14 +570,13 @@ public sealed partial class AnalysisPage : Page
     }
 
     /// <summary>
-    /// Удаляет временные файлы (.asm, .log, .id0, .id1, .nam, .til)
-    /// в зависимости от флагов - аналог clean_directory из исполнения 1.
+    /// Очистка артефактов прогона по флагам пользователя: .asm/.log
+    /// (включая *_script.log фазы экспорта) и временные файлы IDA.
+    /// Вызывается и после анализа, и после HTML-генерации: экспорт-only
+    /// прогоны тоже должны чиститься, а не только полные.
     /// </summary>
-    private void CleanupAfterReport()
+    private void CleanupAfterRun()
     {
-        var inputDir = InputDirTextBox.Text.Trim();
-        if (string.IsNullOrEmpty(inputDir) || !Directory.Exists(inputDir)) return;
-
         var includeLogs = CleanupCheck.IsChecked == true;
         var includeTemps = TempCleanupCheck.IsChecked == true;
         if (!includeLogs && !includeTemps) return;

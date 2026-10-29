@@ -211,7 +211,11 @@ public sealed partial class TaskManagerWindow : Window
             .Where(x => x.Status == MonitorFileStatus.Running)
             .ToList();
 
-        var slotCount = Math.Max(busy.Count, AnalysisMonitor.MaxWorkers);
+        // Карточек ровно столько, сколько выбрано потоков IDA: карточка - это
+        // слот пула, а не отдельный процесс. Раньше стояло
+        // Math.Max(busy.Count, MaxWorkers), и любая лишняя запись в статусе
+        // «анализируется» добавляла карточку сверх выбранного числа потоков.
+        var slotCount = Math.Max(1, AnalysisMonitor.MaxWorkers);
         var cards = new List<TaskThreadCard>(slotCount);
         for (int i = 0; i < slotCount; i++)
         {
