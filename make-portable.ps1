@@ -256,6 +256,24 @@ if (-not $NoZip) {
     Write-Host "Архив: $zip ($('{0:N1}' -f ((Get-Item $zip).Length / 1MB)) МБ)"
 }
 
+# ── 5.5. Проверка зоны поставки (MOTW) ─────────────────────────────────────
+# Файлы поставки обязаны быть вне зоны Internet: ShellExecute неподписанного
+# exe из Internet-зоны показывает окно «Не удаётся проверить издателя».
+# Правило и предыстория - AGENTS.md, раздел «Зоны MOTW / SmartScreen».
+$zoneTargets = @((Join-Path $staging "IDABatchTool.exe"), (Join-Path $appDir "IDABatchToolWinUI.exe"))
+if (-not $NoZip) { $zoneTargets += $zip }
+foreach ($t in $zoneTargets) {
+    if (-not (Test-Path $t)) { throw "Проверка зоны: файл не найден: $t" }
+    $url = "file:///" + ($t -replace "\\", "/")
+    $zone = [System.Security.Policy.Zone]::CreateFromUrl($url).SecurityZone
+    if ($zone -ne [System.Security.SecurityZone]::MyComputer -and
+        $zone -ne [System.Security.SecurityZone]::NoZone) {
+        throw ("Файл в зоне '{0}': {1}. Папка сборки помечена зоной Internet - " +
+               "перенесите dist вне помеченной папки (см. AGENTS.md, «Зоны MOTW»).") -f $zone, $t
+    }
+}
+Write-Host "Зона поставки: чисто (MyComputer) - окно SmartScreen от зоны не появится"
+
 # ── 6. Граф знаний (graphify): малый граф, свой код без вендоренной diaphora ─
 # Полный граф (graphify-out-full, с diaphora) обновляется вручную - см. AGENTS.md.
 if ($NoPublish) {
