@@ -234,6 +234,7 @@ from classifier.manpages_taxonomy import (
     library_display as _mp_library_display,
     is_syscall_section as _mp_is_syscall_section,
     manpages_category as _mp_category,
+    category_name_ru as _mp_category_name_ru,
 )
 
 # Неизвестная платформа → проверка по всем словарям (как в исполнении 1).
@@ -614,6 +615,10 @@ def generate_analysis_index(reports_dir, input_dir, report_links, global_modules
         _place(mod, cat, desc, _category_description(cat),
                "собственный" if is_internal else "импортирована")
     grouped = _sorted_category_groups(categories)
+    # Категории man-pages («libc», «libm», ...) показываются русскими
+    # названиями (левая панель индекса); остальные группы уже русские.
+    for group in grouped:
+        group["name"] = _mp_category_name_ru(group["name"])
 
     ctx = {
         "input_dir": input_dir,
