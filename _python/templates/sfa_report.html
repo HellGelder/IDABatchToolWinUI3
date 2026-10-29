@@ -77,6 +77,12 @@
         .filter-btn:hover { border-color: var(--accent); color: var(--accent); }
         .filter-btn.active { border-color: var(--accent); background: var(--accent-tint); color: var(--accent); }
         .filter-btn .count { font-weight: 600; }
+
+        .cat-bar {
+            display: flex; gap: 8px; margin: -6px 0 16px; flex-wrap: wrap; align-items: center;
+        }
+        .cat-bar-label { font-size: 13px; color: var(--text-secondary); margin-right: 4px; }
+        .cat-cell { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
         .filter-clear {
             background: none; border: none; font-size: 12px; cursor: pointer;
             color: var(--text-tertiary); text-decoration: underline; padding: 4px 8px;
@@ -117,6 +123,19 @@
         {% endif %}
     </div>
 
+    {% if list_all_imports %}
+    {% set report_categories = system_calls | map(attribute='category') | select | unique | sort %}
+    {% if report_categories %}
+    <div class="cat-bar" id="cat-bar">
+        <span class="cat-bar-label">Категория:</span>
+        <button class="filter-btn cat-filter active" data-category="" id="cat-all">Все <span class="count">{{ system_calls|length }}</span></button>
+        {% for cat in report_categories %}
+        <button class="filter-btn cat-filter" data-category="{{ cat }}">{{ cat }} <span class="count">{{ system_calls | selectattr('category', 'equalto', cat) | list | length }}</span></button>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endif %}
+
     {% if not docs_available %}
     <p class="empty-state">
         {% if platform == "Linux / Android" %}
@@ -137,6 +156,7 @@
             <tr>
                 <th style="width:160px;">Библиотека</th>
                 <th style="width:220px;">Функция</th>
+                {% if list_all_imports %}<th style="width:160px;">Категория (man-pages)</th>{% endif %}
                 {% if list_all_imports %}<th style="width:200px;">Системность</th>{% endif %}
                 <th>Информация ({{ 'man-pages' if platform == 'Linux / Android' else 'Microsoft Learn' }})</th>
             </tr>
@@ -144,13 +164,16 @@
         <tbody id="sfa-tbody">
             {% for call in system_calls %}
             {% set row_class = ("" if call.is_system else "non-system") ~ (" not-found" if not call.found else "") %}
-            <tr class="{{ row_class }}" data-found="{{ 'true' if call.found else 'false' }}" data-system="{{ 'true' if call.is_system else 'false' }}">
+            <tr class="{{ row_class }}" data-found="{{ 'true' if call.found else 'false' }}" data-system="{{ 'true' if call.is_system else 'false' }}"{% if list_all_imports %} data-category="{{ call.category }}"{% endif %}>
                 <td class="dll-cell">{{ call.dll }}</td>
                 <td class="func-cell">{{ call.name }}</td>
                 {% if list_all_imports %}
+                <td class="cat-cell">{{ call.category if call.category else '—' }}</td>
+                {% endif %}
+                {% if list_all_imports %}
                 <td class="status-cell">
                     {% if call.is_system %}
-                    <span class="badge badge--success">Системная</span>
+                    <span class="badge badge--success">Системная (syscall{% if call.section %} · секция {{ call.section }}{% endif %})</span>
                     {% else %}
                     <span class="badge badge--neutral">Не определена как системная</span>
                     {% endif %}
@@ -202,24 +225,30 @@
             const filterNotfound = document.getElementById('filter-notfound');
             const filterSystem = document.getElementById('filter-system');
             const filterClear = document.getElementById('filter-clear');
+            const catButtons = Array.prototype.slice.call(document.querySelectorAll('.cat-filter'));
             const totalCount = document.getElementById('total-count');
             const buttons = [filterAll, filterFound, filterNotfound, filterSystem].filter(Boolean);
 
             const tableId = 'sfa-table';
             let filterName = 'all';
+            let catFilter = '';
 
             // Фильтр применяется на уровне DataTables (через ext.search), а не
             // скрытием строк: иначе пагинация показывает неверные страницы.
-            // Предикат читает атрибуты <tr>, выставленные шаблоном.
+            // Предикат читает атрибуты <tr>, выставленные шаблоном; статусный
+            // фильтр и фильтр категории комбинируются (И).
             const RESET = { all: null, found: 'true', notfound: 'false', system: 'true' };
             const ATTR = { found: 'data-found', notfound: 'data-found', system: 'data-system' };
 
             function predicate(settings, data, index) {
-                if (filterName === 'all') return true;
                 const api = new DataTable.Api(settings);
                 const node = api.row(index).node();
                 if (!node) return true;
-                return node.getAttribute(ATTR[filterName]) === RESET[filterName];
+                if (filterName !== 'all' &&
+                    node.getAttribute(ATTR[filterName]) !== RESET[filterName]) return false;
+                if (catFilter !== '' &&
+                    (node.getAttribute('data-category') || '') !== catFilter) return false;
+                return true;
             }
 
             DataTable.ext.search.push(predicate);
@@ -229,14 +258,26 @@
                 if (btn) btn.classList.add('active');
             }
 
-            function applyFilter(filter) {
-                filterName = filter;
+            function redraw() {
                 const dt = window.__DT && window.__DT[tableId];
                 if (dt) {
                     dt.draw();
                     totalCount.textContent = dt.rows({ filter: 'applied' }).count();
                 }
-                if (filterClear) filterClear.style.display = (filter === 'all') ? 'none' : '';
+            }
+
+            function applyFilter(filter) {
+                filterName = filter;
+                redraw();
+                if (filterClear) filterClear.style.display = (filter === 'all' && catFilter === '') ? 'none' : '';
+            }
+
+            function applyCategory(cat, btn) {
+                catFilter = cat;
+                catButtons.forEach(function(b) { b.classList.remove('active'); });
+                if (btn) btn.classList.add('active');
+                redraw();
+                if (filterClear) filterClear.style.display = (filterName === 'all' && catFilter === '') ? 'none' : '';
             }
 
             filterAll.addEventListener('click', function() { setActive(filterAll); applyFilter('all'); });
@@ -246,8 +287,15 @@
                 filterSystem.addEventListener('click', function() { setActive(filterSystem); applyFilter('system'); });
             }
             if (filterClear) {
-                filterClear.addEventListener('click', function() { setActive(filterAll); applyFilter('all'); });
+                filterClear.addEventListener('click', function() {
+                    setActive(filterAll);
+                    applyCategory('', document.getElementById('cat-all'));
+                    applyFilter('all');
+                });
             }
+            catButtons.forEach(function(btn) {
+                btn.addEventListener('click', function() { applyCategory(btn.getAttribute('data-category') || '', btn); });
+            });
         })();
     </script>
 </body>

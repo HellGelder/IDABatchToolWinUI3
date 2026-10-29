@@ -233,6 +233,7 @@ from classifier.manpages_taxonomy import (
     lang_rank as _mp_lang_rank,
     library_display as _mp_library_display,
     is_syscall_section as _mp_is_syscall_section,
+    manpages_category as _mp_category,
 )
 
 # Неизвестная платформа → проверка по всем словарям (как в исполнении 1).
@@ -1717,6 +1718,8 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
         # 2026-10-29). Bionic-функции вне man-pages документации системными
         # не отмечаются (v1).
         lib_is_sfa = False
+        mp_library = None
+        mp_section = ""
         if doc_cache is not None and doc_cache.has_function(func_name):
             results = doc_cache.get_results(func_name)
             cached_dll = doc_cache.get_dll_name(func_name)
@@ -1731,6 +1734,8 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
                 if page:
                     results = [page]
                     found = True
+                    mp_library = page["library"]
+                    mp_section = page["section"]
                     lib_name = _mp_library_display(page["library"], manpages_variant)
                     if lib_name:
                         dll_name = lib_name
@@ -1773,6 +1778,19 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
         else:
             log(f"[INFO] {func_name}: поиск документации недоступен")
 
+        # Категория функции для отчёта: man-страница задаёт категорию по
+        # библиотеке LIBRARY (libc, libm, ..., страницы без LIBRARY - fallback
+        # «Системные библиотеки ОС»); без man-страницы категория берётся по
+        # soname библиотеки импорта (например bionic liblog -> «Системные
+        # библиотеки Android»); псевдо-модуль .dynsym без документации
+        # остаётся без категории.
+        category = ""
+        if not is_pseudo_module and module and module != "-":
+            mod_cat, _ = get_module_category_and_description(module)
+            category = "" if mod_cat == "Неопознанные модули" else mod_cat
+        if mp_library is not None:
+            category = _mp_category(mp_library)
+
         rows.append({
             "func": func_name,
             "module": module,
@@ -1784,6 +1802,8 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
             "found": found,
             "needs_doc": needs_doc,
             "lib_is_sfa": lib_is_sfa,
+            "category": category,
+            "section": mp_section,
         })
 
     # ─── Фаза 2: параллельное ожидание поисков документации ───
@@ -1861,6 +1881,8 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
             "search_results": results or [],
             "found": found,
             "is_system": is_system_call,
+            "category": row.get("category", ""),
+            "section": row.get("section", ""),
         })
 
     log(f"[INFO] Generated {len(entries)} rows "
@@ -1928,7 +1950,14 @@ def _marked_js():
 def generate_sfa_index(reports_dir, input_dir, report_links, ida_info,
                        total_files, total_size_bytes, total_system_modules,
                        total_system_functions, total_system_notfound,
-                       total_imports, generation_time, platform):
+                       total_imports, generation_time, platform,
+                       modules=None):
+    # Модули (системные библиотеки) категорируются по таксономии man-pages
+    # (для Windows - по своим словарям): категория берётся по soname модуля.
+    module_rows = []
+    for m in sorted(modules or []):
+        cat, desc = get_module_category_and_description(m)
+        module_rows.append({"name": m, "category": cat, "description": desc})
     ctx = {
         "input_dir": input_dir,
         "platform": _platform_label(platform),
@@ -1940,6 +1969,7 @@ def generate_sfa_index(reports_dir, input_dir, report_links, ida_info,
         "total_system_notfound": total_system_notfound,
         "total_imports": total_imports,
         "reports": report_links,
+        "module_rows": module_rows,
     }
     index_path = os.path.join(reports_dir, "index.html")
     text = render_template("sfa_index.html", **ctx)
@@ -2243,9 +2273,10 @@ def build_sfa_index(index_db, json_files, platform):
                 # В СФ-индекс - только СФ-библиотеки (категория «Системные
                 # библиотеки ОС»): криптография, сеть и runtime вне СФ.
                 if _is_sfa_module(module, platform):
+                    mod_cat, _ = get_module_category_and_description(module)
                     conn.execute(
                         "INSERT OR IGNORE INTO system_modules (module_key, module_name, category) "
-                        "VALUES (?, ?, ?)", (module_key, module, ""))
+                        "VALUES (?, ?, ?)", (module_key, module, mod_cat))
                     if func_name not in seen:
                         seen.add(func_name)
                         conn.execute(
@@ -2662,6 +2693,7 @@ def run_generate(args):
             total_system_modules=total_system_modules,
             total_system_functions=total_system_functions,
             total_system_notfound=len(gsn), total_imports=total_imports_all,
+            modules=gsl,
             generation_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             platform=platform)
 

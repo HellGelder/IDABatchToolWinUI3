@@ -64,6 +64,30 @@
         </div>
     </div>
 
+    <h2>Системные библиотеки</h2>
+    <div class="card">
+        {% if module_rows %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Библиотека</th>
+                    <th>Категория</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in module_rows %}
+                <tr>
+                    <td>{{ m.name }}</td>
+                    <td><span class="cat-badge" title="{{ m.description }}">{{ m.category }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty-state">Системные библиотеки не обнаружены.</p>
+        {% endif %}
+    </div>
+
     <h2>Исследованные файлы</h2>
     <div class="card">
         {% if reports %}
