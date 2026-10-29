@@ -60,9 +60,9 @@
     "semantic_hash": "473443bb2cb8fef4c927a76708b43548"
   },
   "Pages/AnalysisPage.xaml.cs": {
-    "mtime": 1793083840.5538797,
-    "seen": 1793084315.579267,
-    "ast_hash": "2409c98b55e34e4dbd5f6a85c1794e90",
+    "mtime": 1793086553.552457,
+    "seen": 1793262223.2401798,
+    "ast_hash": "ac351e7f665a43aff97e62a5e5e1b204",
     "semantic_hash": ""
   },
   "Pages/DiffPage.xaml": {
@@ -96,9 +96,9 @@
     "semantic_hash": "c0c48391b68cff62553ffff40a2bbc25"
   },
   "Pages/SfaPage.xaml.cs": {
-    "mtime": 1793083814.574152,
-    "seen": 1793084315.5792844,
-    "ast_hash": "173068e0c78cb4e2a7046176dbb7c25d",
+    "mtime": 1793086897.7389343,
+    "seen": 1793262223.2402868,
+    "ast_hash": "fdc15b9dac2d21254105283696ac3a0c",
     "semantic_hash": ""
   },
   "Properties/launchSettings.json": {
@@ -174,9 +174,9 @@
     "semantic_hash": "5f7211e2509a0f0ce8a4e27dd87b2f8d"
   },
   "Services/UiDialogs.cs": {
-    "mtime": 1793083768.0959604,
-    "seen": 1793084315.5793614,
-    "ast_hash": "c2b08b293252c267282d48a7dd38c982",
+    "mtime": 1793086454.8876235,
+    "seen": 1793262223.2405944,
+    "ast_hash": "66c3838ab4b4555cf0f8f53472337e98",
     "semantic_hash": ""
   },
   "TaskManagerWindow.xaml": {
@@ -204,10 +204,10 @@
     "semantic_hash": "c4f1c081f45d5012a1e27afcc7b28a2e"
   },
   "Workers/HtmlGenWorker.cs": {
-    "mtime": 1793025951.4589214,
-    "seen": 1793026571.83839,
-    "ast_hash": "25bee3e09170a3e5add3826db15ea51e",
-    "semantic_hash": "25bee3e09170a3e5add3826db15ea51e"
+    "mtime": 1793084866.255379,
+    "seen": 1793262223.2406254,
+    "ast_hash": "5553871ea25016240837dee6dec46a5e",
+    "semantic_hash": ""
   },
   "Workers/ManPagesSyncWorker.cs": {
     "mtime": 1793025951.4599943,
@@ -288,16 +288,16 @@
     "semantic_hash": "d8f7162847b132d9b73644b8dd897585"
   },
   "_python/manpages_bridge.py": {
-    "mtime": 1793025951.4978857,
-    "seen": 1793026571.8385072,
-    "ast_hash": "78ac131bfb6993bb809ceae3bae19dcd",
-    "semantic_hash": "78ac131bfb6993bb809ceae3bae19dcd"
+    "mtime": 1793262015.5740829,
+    "seen": 1793262223.2406924,
+    "ast_hash": "864b20b1d4af56a9d27c48b96f0822ed",
+    "semantic_hash": ""
   },
   "_python/report_bridge.py": {
-    "mtime": 1793025951.5020096,
-    "seen": 1793026571.8385136,
-    "ast_hash": "b3c035170cbc4242ad1e9496989f18f5",
-    "semantic_hash": "b3c035170cbc4242ad1e9496989f18f5"
+    "mtime": 1793262004.4674919,
+    "seen": 1793262223.2406967,
+    "ast_hash": "d63511a37420e82fd4b6a74f4fa5e863",
+    "semantic_hash": ""
   },
   "install-prereqs.ps1": {
     "mtime": 1793025951.2836483,
@@ -324,9 +324,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1793084114.752702,
-    "seen": 1793084315.579483,
-    "ast_hash": "8c9e562f84861fe68b5a8964434cfa2d",
+    "mtime": 1793086709.4098814,
+    "seen": 1793262223.2407873,
+    "ast_hash": "003ccee3d6f38179ab68fb98e0ae1ab6",
     "semantic_hash": ""
   },
   "README.txt": {
@@ -396,9 +396,9 @@
     "semantic_hash": ""
   },
   "version.txt": {
-    "mtime": 1793084076.2407365,
-    "seen": 1793084315.5795193,
-    "ast_hash": "f2485d3f119846968ab364f227865fe8",
+    "mtime": 1793262087.4687529,
+    "seen": 1793262223.240893,
+    "ast_hash": "ec5b023bf0760748bedfa476a630e4d4",
     "semantic_hash": ""
   },
   "sfb-logo.png": {
@@ -522,10 +522,10 @@
     "semantic_hash": "503e21ccea923a3392d75eae58d19463"
   },
   "Services/InputScanner.cs": {
-    "mtime": 1793025951.4078753,
-    "seen": 1793026571.838285,
-    "ast_hash": "0d1bac6dfaf88db96e1630388f3c941b",
-    "semantic_hash": "0d1bac6dfaf88db96e1630388f3c941b"
+    "mtime": 1793086574.9613483,
+    "seen": 1793262223.2405496,
+    "ast_hash": "42d901577172d74745c43ea100c9d034",
+    "semantic_hash": ""
   },
   "Services/JobObject.cs": {
     "mtime": 1793025951.409938,

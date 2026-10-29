@@ -28,15 +28,26 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
+_HERE = os.path.dirname(os.path.abspath(__file__))
+
+# Каталог моста - в sys.path явно. Встроенный Python (embeddable, его ставит
+# install-prereqs.ps1 в app\Tools\Python) содержит файл pythonXY._pth: при его
+# наличии sys.path собирается ТОЛЬКО из записей этого файла и каталог
+# запущенного скрипта туда не добавляется. Без этой вставки не видны соседние
+# пакеты (_python\classifier, elf_descriptions) - ModuleNotFoundError.
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
+TEMPLATES_DIR = os.path.join(_HERE, "templates")
 VENDOR_DIR = os.path.normpath(os.path.join(TEMPLATES_DIR, "..", "vendor"))
 
-# Переносимая поставка: если мост запущен от Tools\Python рядом с приложением,
-# подключаем соседний site-packages (jinja2, requests), иначе они не видны.
-_SP = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                    "..", "..", "Tools", "Python", "site-packages"))
-if os.path.isdir(_SP) and _SP not in sys.path:
-    sys.path.insert(0, _SP)
+# Переносимая поставка: site-packages встроенного Python (jinja2, requests).
+# В поставке он лежит в app\Tools\Python (рядом с _python), в исходном дереве -
+# на уровень выше; подключаем тот, что существует.
+for _sp in (os.path.normpath(os.path.join(_HERE, "..", "Tools", "Python", "site-packages")),
+            os.path.normpath(os.path.join(_HERE, "..", "..", "Tools", "Python", "site-packages"))):
+    if os.path.isdir(_sp) and _sp not in sys.path:
+        sys.path.insert(0, _sp)
 
 # Протокол обмена с GUI (PROGRESS/ERROR/RESULT) - строго UTF-8: без этого
 # pythonw пишет в канал в системной кодировке (cp1251), и русские сообщения
