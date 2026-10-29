@@ -1,0 +1,17 @@
+﻿Встроенная документация man-pages - источники
+==============================================
+Собрано: 2026-10-29 19:42
+Сборка:  scripts\build-manpages.ps1 -> _python\manpages_build.py
+
+man-pages-ru (русские страницы):
+  версия:  4.31.0 (manpages-l10n)
+  источник: https://geo.mirror.pkgbuild.com/extra/os/x86_64/man-pages-ru-4.31.0-1-any.pkg.tar.zst
+
+man-pages (английский fallback):
+  версия:  6.18
+  источник: https://www.kernel.org/pub/linux/docs/man-pages/man-pages-6.18.tar.xz
+
+Рендер: pandoc (roff man -> HTML). База: schema=2,
+pages(page_name, section, lang), function_index(func_name, ...).
+Приоритет выбора страницы: секция 3 > 2 > 7 > 1 > 5 > 4 > 8 > 6,
+внутри секции ru > en.

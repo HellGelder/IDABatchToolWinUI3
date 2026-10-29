@@ -13,6 +13,10 @@ public static class AppConstants
     public static readonly string IdatDefaultExe = "idat.exe";
     public static readonly string BindiffDefaultExe = "bindiff.exe";
     public static readonly string ManpagesDbFileName = "manpages.db";
+    /// <summary>Встроенная документация man-pages: docs\ рядом с _python\ -
+    /// заполняется на сборке (scripts\build-manpages.ps1), приложение только читает.</summary>
+    public static readonly string ManpagesDbEmbedded =
+        Path.Combine(WinUiDir, "docs", ManpagesDbFileName);
 
     // Имена папок результатов внутри входной/выходной папки (единый источник
     // для страниц, сканера и воркеров).

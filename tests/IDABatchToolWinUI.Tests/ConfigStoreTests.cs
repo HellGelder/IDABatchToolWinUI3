@@ -114,7 +114,7 @@ public sealed class ConfigStoreTests : IDisposable
         Assert.Contains("default_inputdir:", text);
         Assert.Contains("log_level: INFO", text);
         Assert.Contains("theme: light", text);
-        Assert.Contains("manpages_db_path:", text);
+        // manpages_db_path удалён: документация встроена в поставку (1.0.0.32).
         // Временный файл записи не остаётся
         Assert.False(File.Exists(_path + ".tmp"));
     }

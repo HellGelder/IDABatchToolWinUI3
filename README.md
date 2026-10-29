@@ -207,7 +207,7 @@ Remove-Item Env:GRAPHIFY_OUT
 
 - В анализ берётся категория **«Системные библиотеки ОС»** из классификатора импортов (Python‑пакет `_python/classifier`: Windows, Linux, Android, macOS, сторонние модули - сверен с эталоном исполнения 1).
 - **Документация Windows** - Microsoft Learn: мост обращается напрямую к MCP‑эндпоинту `learn.microsoft.com/api/mcp` (быстро, Node не нужен); `npx @microsoft/learn-cli` остался фолбэком. Поиск идёт параллельно (4 потока пула, keep‑alive соединение на поток), прогресс в GUI прореживается до 4 обновлений в секунду. Результаты кэшируются в `<входная папка>\SFAReports\mslearn_cache.db` - при повторных прогонах сеть не используется. Если кэш уже существует, при запуске анализа предлагается выбор: полный поиск или перегенерация HTML из кэша.
-- **Документация Linux/Android** - man‑pages: локальная SQLite‑БД (`manpages.db`, схема `pages`/`function_index`), скачивается и импортируется с kernel.org на вкладке «Конфигурация».
+- **Документация Linux/Android** - встроенная man‑pages: SQLite‑БД `app\docs\manpages.db` (схема 2: `pages(page_name, section, lang)` / `function_index`) собирается на сборке из русского корпуса man‑pages‑ru (manpages‑l10n) и английского man‑pages (kernel.org) по всем секциям 1–8; непереведённые страницы показываются по‑английски с пометкой «en». Скачивание в рантайме не выполняется. Сборка базы - `scriptsuild-manpages.ps1` (нужен pandoc).
 - Отчёты - в `<входная папка>\SFAReports`: сводный индекс и частные отчёты с описаниями функций, кэш‑статистика («найдено / в кэше»).
 - **«Сгенерировать HTML»** активна только после завершения всех фаз анализа (включая поиск документации MS Learn) - во время работы фазы кнопка выключена, чтобы отчёт не строился по неполному кэшу.
 - По завершении генерации (в том числе при перегенерации из кэша) показывается окно с проверяемыми счётчиками и кнопками **«Открыть папку» / «Открыть индекс» / «ОК»**; итог дублируется в журнал страницы.
@@ -237,7 +237,7 @@ Remove-Item Env:GRAPHIFY_OUT
 | Тип | Куда пишется | Состав |
 |-----|--------------|--------|
 | Общий анализ | `<вход>\IDAReports` | `index.html` + частный отчёт на файл |
-| СФ | `<вход>\SFAReports` | индекс + частные отчёты, кэши `mslearn_cache.db`, `sfa_function_index.db`, `manpages.db` |
+| СФ | `<вход>\SFAReports` | индекс + частные отчёты, кэши `mslearn_cache.db`, `sfa_function_index.db` (встроенная документация - `app\docs\manpages.db`) |
 | Сравнение | `<результаты>\Reports` | `diff_index.html` + парные отчёты; в частных - обратная ссылка на индекс (детерминированная, работает и при первом прогоне) |
 | Git-сравнение | рядом с `changes.diff` | `<имя>_report.html` - автономный вьюер diff2html: свёрнутый список файлов, режимы «рядом»/«строками» |
 | Git-сравнение (модульное) | корень папки результата | `git_index.html` - сводка по модулям (счётчики, статусы, переходы) + `<модуль>\changes_report.html` |
@@ -257,8 +257,9 @@ max_ida: 4                    # одновременных процессов ID
 default_inputdir: .           # стартовая папка выбора
 log_level: INFO               # уровень логирования
 theme: light                  # light | dark
-manpages_db_path: ""          # путь к manpages.db (пусто - искать в SFAReports)
 ```
+
+Документация man-pages встроена в поставку (`app\docs\manpages.db`) и настройками не управляется.
 
 ---
 
@@ -271,7 +272,7 @@ MainWindow (NavigationView, кэш страниц, блокировка нави
  │        └─ Workers/HtmlGenWorker ── _python/report_bridge.py
  ├─ Pages/DiffPage ────── Workers/DiffWorker ── idat (BinExport) + bindiff.exe + Diaphora
  ├─ Pages/SfaPage ─────── AnalysisWorker + HtmlGenWorker + кэши MS Learn / man-pages
- ├─ Pages/SettingsPage ── ConfigService, ToolLocator, ManPagesSyncWorker, ThemeHelper
+ ├─ Pages/SettingsPage ── ConfigService, ToolLocator, ThemeHelper
  └─ TaskManagerWindow ─── Services/AnalysisMonitor (общее состояние очереди)
 ```
 
@@ -280,12 +281,12 @@ MainWindow (NavigationView, кэш страниц, блокировка нави
 | Каталог | Содержимое |
 |---------|-----------|
 | `Pages/` | Четыре страницы UI (XAML + code‑behind), подписки на события - в конструкторе (страницы кэшируются) |
-| `Workers/` | Фоновые задачи: `AnalysisWorker` (анализ + экспорт), `DiffWorker` (конвейер сравнения, до 6 параллельных пар), `HtmlGenWorker` (Python‑мост отчётов), `ManPagesSyncWorker` (синхронизация man‑pages) |
+| `Workers/` | Фоновые задачи: `AnalysisWorker` (анализ + экспорт), `DiffWorker` (конвейер сравнения, до 6 параллельных пар), `HtmlGenWorker` (Python‑мост отчётов) |
 | `Services/` | `AppConstants` (пути, поиск Python, платформы и детект по сигнатурам), `ConfigService` + `MiniYaml` (собственный YAML‑парсер), `ToolLocator` (автопоиск idat/bindiff), `ExecutableFinder` (поиск исполняемых по расширениям/сигнатурам, отказоустойчивый обход каталогов), `ArchiveHandler` (APK/IPA/DMG), `IdaRunner` (пакетный запуск idat с отменой и очисткой), `AnalysisMonitor` (общее состояние очереди для диспетчера), `UiDialogs` (пикеры/диалоги), `AppNotifier` (toast‑уведомления) |
 | `Models/` | `FileItem` (элемент очереди/тремапа), `DiffPair` (пара для сравнения), `PairRowViewModel` (строка таблицы пар, INPC для `x:Bind`) |
 | `Controls/` | `TreemapControl` - полоса статусов анализа по числу файлов |
 | `Helpers/` | Зарезервировано |
-| `_python/` | Python‑мосты: `report_bridge.py`, `manpages_bridge.py`, `elf_descriptions.py`, пакет `classifier/`, шаблоны `templates/`, vendor‑ассеты `vendor/` |
+| `_python/` | Python‑мосты: `report_bridge.py`, `manpages_build.py`, `elf_descriptions.py`, пакет `classifier/`, шаблоны `templates/`, vendor‑ассеты `vendor/` |
 | `scripts/` | `export_data.py` (IDAPython‑экспорт) и полный Diaphora (`scripts/diaphora/`) |
 | `Assets/` | Иконки, `AppIcon.ico` (иконка exe и заголовка окна) |
 
@@ -304,7 +305,7 @@ MainWindow (NavigationView, кэш страниц, блокировка нави
 | Файл / пакет | Запуск | Назначение |
 |--------------|--------|-----------|
 | `_python/report_bridge.py` | GUI (`HtmlGenWorker`) | Генерация всех трёх типов HTML‑отчётов. Только стандартная библиотека + **jinja2**. Поддерживает `--kind analysis|sfa|diff`, `--reuse-cache`, `--delete-json`, `--json-paths` (перегенерация из кэша). Поиск MS Learn - прямой MCP‑клиент (`learn.microsoft.com/api/mcp`, сессия из кэша learn‑cli) с фолбэком на npx |
-| `_python/manpages_bridge.py` | GUI (`ManPagesSyncWorker`) | Скачивает архив man‑pages (v6.9) с kernel.org, разбирает секции 2/3, импортирует в SQLite (`pages`, `function_index`, `meta`). Нужен **requests** |
+| `_python/manpages_build.py` | сборка (`scripts/build-manpages.ps1`) | Собирает встроенную БД документации: рендерит корпуса man‑pages‑ru + man‑pages (все секции 1–8) в HTML через **pandoc** и складывает в SQLite (`pages(page_name, section, lang)`, `function_index`, `meta`). Запускается на сборке поставки, приложением не используется |
 | `_python/classifier/` | из report_bridge | Классификатор импортированных модулей по категориям и платформам (Windows/Linux/Android/macOS/сторонние) - полный перенос классификатора исполнения 1 |
 | `_python/elf_descriptions.py` | из report_bridge | Словарь назначений секций/сегментов ELF на русском - для частных отчётов Linux/Android |
 | `scripts/export_data.py` | `idat -A -S` (IdaRunner, DiffWorker) | IDAPython‑экспорт: формат/хеши/компилятор, функции, импорты, xref'ы, опционально псевдокод (`pseudocode=1`) |
@@ -327,12 +328,13 @@ IDABatchToolWinUI/
 ├── bindiff.exe                  # опционально: BinDiff рядом с приложением
 ├── Assets/                      # иконки, AppIcon.ico
 ├── Pages/                       # AnalysisPage, DiffPage, SfaPage, SettingsPage
-├── Workers/                     # AnalysisWorker, DiffWorker, HtmlGenWorker, ManPagesSyncWorker
+├── Workers/                     # AnalysisWorker, DiffWorker, HtmlGenWorker
 ├── Services/                    # константы/конфиг/поиск инструментов/IDA/монитор/диалоги
 ├── Models/                      # FileItem, DiffPair, PairRowViewModel
 ├── Controls/                    # TreemapControl
-├── _python/                     # report_bridge.py, manpages_bridge.py, classifier/, templates/, vendor/
-└── scripts/                     # export_data.py, diaphora/
+├── _python/                     # report_bridge.py, manpages_build.py, classifier/, templates/, vendor/
+├── docs/                        # встроенная документация: manpages.db, LICENSE корпусов
+└── scripts/                     # export_data.py, diaphora/, build-manpages.ps1, extract_corpus.py
 ```
 
 ---

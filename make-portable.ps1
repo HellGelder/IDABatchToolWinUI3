@@ -25,13 +25,16 @@
     .\make-portable.ps1 -Rid win-arm64 -NoZip
 .EXAMPLE
     .\make-portable.ps1 -SkipGraph        # без актуализации графа graphify
+.EXAMPLE
+    .\make-portable.ps1 -SkipManpages     # без сборки/встраивания man-pages
 #>
 param(
     [string]$Configuration = "Release",
     [string]$Rid = "win-x64",
     [switch]$NoPublish,
     [switch]$NoZip,
-    [switch]$SkipGraph
+    [switch]$SkipGraph,
+    [switch]$SkipManpages
 )
 
 $ErrorActionPreference = "Stop"
@@ -136,6 +139,21 @@ if (Test-Path (Join-Path $toolsSrc "python.exe")) {
 }
 else {
     Write-Warning "Tools\Python не встроен: на целевой машине нужен Python с jinja2/requests либо автоустановка через install-prereqs.ps1 (приложение само предложит при запуске)"
+}
+
+# ── 3.7. Встроенная документация man-pages: app\docs\ ──────────────────────
+if (-not $SkipManpages) {
+    & (Join-Path $root "scripts\build-manpages.ps1")
+}
+$docsSrc = Join-Path $root "docs"
+if (Test-Path (Join-Path $docsSrc "manpages.db")) {
+    $docsDst = Join-Path $appDir "docs"
+    if (Test-Path $docsDst) { Remove-Item $docsDst -Recurse -Force }
+    Copy-Item $docsSrc $docsDst -Recurse -Force
+    Write-Host "Документация man-pages встроена (app\docs)"
+}
+else {
+    Write-Warning "docs\manpages.db не собрана - поставка без встроенной документации (см. scripts\build-manpages.ps1)"
 }
 
 # ── 4. Лончер ───────────────────────────────────────────────────────────────

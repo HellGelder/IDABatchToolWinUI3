@@ -16,7 +16,6 @@ public sealed class AppConfig
     public string DefaultInputDir { get; set; } = ".";
     public string LogLevel { get; set; } = "INFO";
     public string Theme { get; set; } = "light";
-    public string ManPagesDbPath { get; set; } = "";
 }
 
 public static class ConfigService
@@ -36,7 +35,6 @@ public static class ConfigService
             cfg.MaxIda = YamiInt(root, "max_ida", cfg.MaxIda);
             cfg.DefaultInputDir = YamlGet(root, "default_inputdir", cfg.DefaultInputDir);
             cfg.LogLevel = YamlGet(root, "log_level", cfg.LogLevel);
-            cfg.ManPagesDbPath = YamlGet(root, "manpages_db_path", cfg.ManPagesDbPath);
             var ida = root.GetMap("ida");
             if (ida != null) cfg.IdaExecutable = YamiStr(ida, "executable", cfg.IdaExecutable);
             var bindiff = root.GetMap("bindiff");
@@ -64,7 +62,6 @@ public static class ConfigService
         sb.AppendLine($"default_inputdir: {QuoteIfNeeded(cfg.DefaultInputDir)}");
         sb.AppendLine($"log_level: {cfg.LogLevel}");
         sb.AppendLine($"theme: {cfg.Theme}");
-        sb.AppendLine($"manpages_db_path: {QuoteIfNeeded(cfg.ManPagesDbPath)}");
         File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
     }
 

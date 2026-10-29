@@ -228,6 +228,12 @@ from classifier.system_modules import get_system_module_name as _classifier_syst
 from classifier.system_modules import is_sfa_module as _classifier_is_sfa
 from classifier.system_modules import is_system_module as _classifier_is_system
 from classifier.system_modules import normalize_platform as _normalize_platform
+from classifier.manpages_taxonomy import (
+    section_rank as _mp_section_rank,
+    lang_rank as _mp_lang_rank,
+    library_display as _mp_library_display,
+    library_is_system as _mp_library_is_system,
+)
 
 # Неизвестная платформа → проверка по всем словарям (как в исполнении 1).
 _UNKNOWN_DESC = "Неопознанный модуль"
@@ -1389,7 +1395,12 @@ def _manpages_candidates(func_name):
 
 
 def _manpages_open(candidates, log):
-    """Открывает БД man-pages: первый читаемый файл из списка кандидатов."""
+    """Открывает БД man-pages: первый читаемый файл из списка кандидатов.
+
+    Базы старой схемы (до встраивания: без колонки lang) пропускаются -
+    новые запросы ссылаются на pages.lang, и частичный fallback сломал бы
+    поиск документации.
+    """
     searched = []
     for raw in candidates:
         if not raw:
@@ -1404,19 +1415,20 @@ def _manpages_open(candidates, log):
             conn = sqlite3.connect(str(p))
             try:
                 count = conn.execute("SELECT COUNT(*) FROM function_index").fetchone()[0]
+                conn.execute("SELECT lang FROM pages LIMIT 1").fetchone()
             except sqlite3.Error:
                 conn.close()
                 raise
         except sqlite3.Error as e:
-            log(f"[WARN] БД man-pages не читается ({p}): {e}")
+            log(f"[WARN] БД man-pages не читается или устаревшей схемы ({p}): {e}")
             continue
         version = ""
         try:
-            row = conn.execute("SELECT value FROM meta WHERE key = 'manpages_version'").fetchone()
+            row = conn.execute("SELECT value FROM meta WHERE key = 'en_version'").fetchone()
             version = row[0] if row else ""
         except sqlite3.Error:
             pass
-        log(f"[INFO] man-pages DB: {p} (функций: {count}, версия: {version})")
+        log(f"[INFO] man-pages DB: {p} (функций: {count}, man-pages: {version or '?'})")
         return conn
     log("[WARN] БД man-pages не найдена (искали: "
         + (", ".join(searched) or "пути не заданы") + ")")
@@ -1433,140 +1445,67 @@ def _manpages_count(conn):
         return 0
 
 
-def _manpages_preferred_path(candidates):
-    """Путь к базе man-pages: существующий файл, иначе первый создаваемый.
+def _manpages_embedded_path():
+    r"""Встроенная БД документации: app\docs\manpages.db относительно _python.
 
-    Кандидат-каталог превращается в ``<каталог>/manpages.db`` (так же, как в
-    настройках приложения: там путь к папке).
+    В портабе report_bridge лежит в app\_python\, документация - в
+    app\docs\; в исходном дереве относительный путь тот же. Файл может
+    отсутствовать (дев-запуск без сборки документации) - тогда отчёты
+    идут без документации.
     """
-    resolved = []
-    for raw in candidates:
-        if not raw:
-            continue
-        p = Path(raw)
-        if p.suffix.lower() != ".db":
-            p = p / "manpages.db"
-        resolved.append(p)
-        if p.is_file():
-            return p
-    for p in resolved:
-        if p.parent.is_dir():
-            return p
-    return None
+    return Path(os.path.normpath(os.path.join(_HERE, "..", "docs", "manpages.db")))
 
 
-def _manpages_autosync(db_path, log, progress=None):
-    """Скачивает архив man-pages и импортирует его в ``db_path``.
-
-    Для Linux/Android база man-pages - единственный источник системности:
-    библиотека импорта в ELF-экспорте не определена (псевдо-модуль
-    ``.dynsym``), поэтому без базы анализ СФ показывает 0 системных функций.
-    Импорт выполняется тем же модулем, что и кнопка «Скачать и импортировать».
-
-    Returns:
-        True, если после импорта в базе есть функции.
-    """
+def _manpages_meta(conn):
+    """Версии корпусов и рендерер из meta БД (для сноски атрибуции отчёта)."""
+    if conn is None:
+        return None
+    wanted = ("ru_version", "en_version", "renderer", "generated_at")
     try:
-        import manpages_bridge as mpb
-    except Exception as e:
-        log(f"[ERROR] Модуль импорта man-pages недоступен: {e}")
-        return False
-
-    # Не повторяем скачивание, если только что импортировали и получили 0:
-    # иначе каждый прогон заново тянет архив и висит на таймауте без сети.
-    try:
-        if db_path.is_file() and time.time() - db_path.stat().st_mtime < 3600:
-            log(f"[INFO] База man-pages пуста и только что пересоздана ({db_path}) - "
-                "повторный импорт пропущен")
-            return False
-    except OSError:
-        pass
-
-    version = getattr(mpb, "MANPAGES_VERSION", "")
-    url = getattr(mpb, "MANPAGES_ARCHIVE_URL", "")
-    if not url:
-        log("[ERROR] Не задан адрес архива man-pages")
-        return False
-    if progress is not None:
-        progress(f"Скачивание базы man-pages {version}…")
-    log(f"[INFO] БД man-pages пуста или отсутствует - скачивание {url}")
-    try:
-        with urllib.request.urlopen(url, timeout=120) as resp:
-            payload = resp.read()
-    except Exception as e:
-        log(f"[WARN] Не удалось скачать man-pages: {e}")
-        return False
-
-    log(f"[INFO] Архив man-pages получен ({len(payload) / 1024 / 1024:.1f} МБ), разбор…")
-    if progress is not None:
-        progress(f"Разбор man-pages {version}…")
-    try:
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        count = mpb.import_archive(db_path, payload)
-    except Exception as e:
-        log(f"[WARN] Импорт man-pages не удался ({db_path}): {e}")
-        return False
-
-    log(f"[INFO] man-pages импортированы: {db_path} (функций: {count})")
-    return count > 0
+        rows = conn.execute("SELECT key, value FROM meta").fetchall()
+    except sqlite3.Error:
+        return None
+    meta = {k: v for k, v in rows if k in wanted}
+    return meta or None
 
 
 def _manpages_get_page(conn, func_name):
-    """Документация функции из БД man-pages в формате search_results."""
-    for candidate in _manpages_candidates(func_name):
-        try:
-            # Ключ страницы - (page_name, section): одноимённые страницы есть и
-            # в man2, и в man3, join только по имени выдал бы чужую секцию.
-            row = conn.execute(
-                "SELECT p.page_name, p.section, p.title, p.markdown, p.library "
-                "FROM function_index f JOIN pages p "
-                "ON p.page_name = f.page_name AND p.section = f.section "
-                "WHERE f.func_name = ?", (candidate,)).fetchone()
-        except sqlite3.Error:
-            return None
-        if row:
-            page_name, section, title, markdown, library = row
-            url = f"https://man7.org/linux/man-pages/man{section}/{page_name}.{section}.html"
-            header = f"**{title}** - man {section}" if title else f"man {section}"
-            body = f"{header}\n\n{markdown}" if markdown else header
-            return {"title": f"{page_name}({section})", "url": url,
-                    "markdown": body, "markdown_html": "",
-                    "library": library or ""}
-    return None
+    """Документация функции из встроенной БД man-pages.
 
-
-# Слова в секции LIBRARY, похожие на имя библиотеки, но ими не являющиеся
-# («Standard C library (libc, -lc)»).
-_LIB_TOKEN_RE = re.compile(r"\blib[a-z][A-Za-z0-9_+.\-]*")
-_LIB_TOKEN_NOISE = frozenset({"library", "libraries"})
-
-
-def _manpage_library(library_text, platform):
-    """Библиотека функции по секции LIBRARY man-страницы.
-
-    В ELF-экспорте библиотека импорта не определена (у всех импортов
-    псевдо-модуль ``.dynsym``), поэтому единственный источник - man-страница:
-    она называет библиотеку коротко (``libc``, ``libpthread``), а
-    классификатор по алиасам приводит имя к записи словаря (``libc.so.6``).
-
-    Returns:
-        (имя для колонки «Библиотека»: каноническое, если библиотека есть в
-        системном словаре, иначе первое упоминание; признак системности по
-        словарю СФ - категория «Системные библиотеки ОС»).
+    Одна страница на функцию по утверждённым правилам: секция важнее языка
+    (3 > 3const > 3type > … > 2 > 2const > … > 7 > 1 > 5 > 4 > 8 > 6 -
+    ELF-импорт это библиотечный вызов, секция 3 главнее), внутри секции
+    русская страница предпочитается английской (fallback RU→EN).
+    Библиотека уже выгружена в БД токенами LIBRARY-страницы (не зависят
+    от языка перевода).
     """
-    tokens = []
-    # Библиотека указывается в скобках: «Standard C library (libc, -lc)».
-    for group in re.findall(r"\(([^)]*)\)", library_text or "") or [library_text or ""]:
-        for token in _LIB_TOKEN_RE.findall(group):
-            token = token.strip(".,;()")
-            if not token or token.lower() in _LIB_TOKEN_NOISE or token in tokens:
-                continue
-            tokens.append(token)
-    for token in tokens:
-        canon = _classifier_system_name(token, platform)
-        if canon:
-            return canon, bool(_classifier_is_sfa(canon, platform))
-    return (tokens[0] if tokens else ""), False
+    candidates = _manpages_candidates(func_name)
+    if not candidates:
+        return None
+    placeholders = ",".join("?" * len(candidates))
+    try:
+        rows = conn.execute(
+            "SELECT p.page_name, p.section, p.lang, p.title, p.library, p.html "
+            "FROM function_index f JOIN pages p "
+            "ON p.page_name = f.page_name AND p.section = f.section "
+            "AND p.lang = f.lang "
+            "WHERE f.func_name IN (" + placeholders + ")",
+            candidates).fetchall()
+    except sqlite3.Error:
+        return None
+    if not rows:
+        return None
+    rows.sort(key=lambda r: (_mp_section_rank(r[1]), _mp_lang_rank(r[2])))
+    page_name, section, lang, title, library, html = rows[0]
+    return {
+        "title": f"{page_name}({section})",
+        "page_name": page_name,
+        "section": section,
+        "lang": lang,
+        # Могут быть перечислены через запятую («libc,librt») - берём первую.
+        "library": (library or "").split(",")[0].strip(),
+        "html": html or "",
+    }
 
 
 def _sfa_index_open(index_db):
@@ -1670,7 +1609,7 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
                         platform, data_override=None, reuse_cache=False,
                         doc_cache=None, manpages_conn=None, sfa_index_conn=None,
                         log=None, progress=None, doc_manager=None,
-                        doc_progress=None):
+                        doc_progress=None, manpages_meta=None):
     """Индивидуальный HTML-отчёт «Анализ СФ» - перенос логики
     SfaReportGenerator.generate_report_from_json исполнения 1.
 
@@ -1697,6 +1636,8 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
         progress: колбэк (func_name, idx, total_in_file) - проход по импортам.
         doc_manager: DocSearchManager для параллельного поиска (Windows).
         doc_progress: колбэк (func_name, done, total) - получение документации.
+        manpages_meta: meta встроенной БД man-pages (версии корпусов) для
+            сноски атрибуции отчёта.
     Returns:
         dict статистики или None, если генерация отменена.
     """
@@ -1712,6 +1653,11 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
     use_manpages = platform == "Linux / Android"
     list_all_imports = use_manpages
     docs_available = platform == "Windows"
+
+    # Вариант платформы внутри «Linux / Android»: bionic-канонизация soname
+    # применяется только к бинарникам с Android ELF-заметкой (android_api),
+    # остальные получают glibc-soname (утверждённое правило).
+    manpages_variant = "android" if data.get("android_api") is not None else "glibc"
 
     file_name = os.path.basename(data.get("file_name", str(json_path)))
     imports = data.get("imports", [])
@@ -1765,9 +1711,11 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
         results = None
         found = False
         needs_doc = False
-        # Системность по библиотеке из man-страницы: словарь решает, является
-        # ли эта библиотека системной для СФ (категория «Системные библиотеки
-        # ОС»). Наличие документации само по себе системности не даёт.
+        # Системность по библиотеке из man-страницы: любая функция,
+        # документированная man-pages, системная (таксономия man-pages -
+        # библиотеки ОС). Страницы без LIBRARY (man7 и т.п.) - тоже системные
+        # (fallback-категория «Системные библиотеки ОС»). Bionic-функции вне
+        # man-pages документации не получают и системными не отмечаются (v1).
         lib_is_sfa = False
         if doc_cache is not None and doc_cache.has_function(func_name):
             results = doc_cache.get_results(func_name)
@@ -1783,15 +1731,17 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
                 if page:
                     results = [page]
                     found = True
-                    lib_name, lib_is_sfa = _manpage_library(page.get("library", ""), platform)
+                    lib_name = _mp_library_display(page["library"], manpages_variant)
                     if lib_name:
                         dll_name = lib_name
+                    lib_is_sfa = _mp_library_is_system(page["library"])
                     log(f"[INFO] man-pages: {func_name} → {page['title']}"
+                        f" [{page['lang']}]"
                         + (f" [{dll_name}]" if lib_name else ""))
                 else:
                     log(f"[INFO] man-pages: страница для {func_name} не найдена")
             else:
-                log(f"[INFO] {func_name}: БД man-pages недоступна")
+                log(f"[INFO] {func_name}: встроенная БД man-pages недоступна")
         elif reuse_cache and doc_manager is not None:
             # Reuse-режим с добором: кэш неполон (записи от прошлых прогонов,
             # поиск мог быть прерван) - недостающую документацию ищем в npx,
@@ -1940,6 +1890,7 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
         "list_all_imports": list_all_imports,
         "docs_available": docs_available,
         "marked_js": _marked_js(),
+        "manpages_meta": manpages_meta,
     }
     text = render_template("sfa_report.html", **ctx)
     os.makedirs(os.path.dirname(output_html), exist_ok=True)
@@ -2203,6 +2154,10 @@ CREATE TABLE IF NOT EXISTS file_libs (
     PRIMARY KEY (json_path, lib_name)
 );
 CREATE INDEX IF NOT EXISTS idx_fl_jp ON file_libs(json_path);
+CREATE TABLE IF NOT EXISTS file_meta (
+    json_path TEXT PRIMARY KEY,
+    android_api INTEGER
+);
 CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL DEFAULT ''
@@ -2254,11 +2209,18 @@ def build_sfa_index(index_db, json_files, platform):
 
             conn.execute("DELETE FROM file_imports WHERE json_path = ?", (jp_str,))
             conn.execute("DELETE FROM file_libs WHERE json_path = ?", (jp_str,))
+            conn.execute("DELETE FROM file_meta WHERE json_path = ?", (jp_str,))
             for lib in data.get("needed_libs") or []:
                 if lib:
                     conn.execute(
                         "INSERT OR IGNORE INTO file_libs (json_path, lib_name) VALUES (?, ?)",
                         (jp_str, lib))
+            # Вариант bionic/glibc нужен и в reuse-режиме (JSON удалён):
+            # android_api из ELF-заметок сохраняется рядом с импортами.
+            android_api = data.get("android_api")
+            conn.execute(
+                "INSERT OR REPLACE INTO file_meta (json_path, android_api) VALUES (?, ?)",
+                (jp_str, int(android_api) if android_api is not None else None))
 
             for imp in imports:
                 func_name = imp.get("name", "")
@@ -2292,10 +2254,12 @@ def build_sfa_index(index_db, json_files, platform):
 
 
 def read_index_imports(index_db, json_path):
-    """Читает импорты файла из index-БД для reuse-режима. Возвращает (imports, file_name, needed_libs)."""
+    """Читает импорты файла из index-БД для reuse-режима.
+    Возвращает (imports, file_name, needed_libs, android_api)."""
     imports = []
     file_name = ""
     needed_libs = []
+    android_api = None
     try:
         conn = sqlite3.connect(str(index_db))
         try:
@@ -2309,11 +2273,16 @@ def read_index_imports(index_db, json_path):
             libs = conn.execute(
                 "SELECT lib_name FROM file_libs WHERE json_path = ?", (str(json_path),)).fetchall()
             needed_libs = [r[0] for r in libs]
+            row = conn.execute(
+                "SELECT android_api FROM file_meta WHERE json_path = ?",
+                (str(json_path),)).fetchone()
+            if row and row[0] is not None:
+                android_api = int(row[0])
         finally:
             conn.close()
     except Exception:
         pass
-    return imports, file_name, needed_libs
+    return imports, file_name, needed_libs, android_api
 
 
 def read_index_json_paths(index_db):
@@ -2490,30 +2459,19 @@ def run_generate(args):
         except Exception as e:
             log.log(f"[WARN] Failed to open cache DB: {e}")
 
-        # Путь к man-pages: из настроек, затем рядом с папкой отчётов и выше.
+        # Путь к man-pages: встроенная БД (app\docs\manpages.db), затем
+        # явный аргумент и fallback рядом с отчётами. Скачивания нет:
+        # документация встроена в поставку.
         manpages_candidates = [args.manpages_db,
+                               _manpages_embedded_path(),
                                reports_dir / "manpages.db",
                                reports_dir.parent / "manpages.db"]
         manpages_conn = _manpages_open(manpages_candidates, log.log)
-
-        # Linux/Android: без базы man-pages системность ELF-функций не
-        # определяется (в экспорте модуль импорта - псевдо-модуль .dynsym),
-        # поэтому отсутствующую или пустую базу скачиваем и импортируем сами.
         if platform == "Linux / Android" and _manpages_count(manpages_conn) == 0:
-            if manpages_conn is not None:
-                try:
-                    manpages_conn.close()
-                except Exception:
-                    pass
-                manpages_conn = None
-            target = _manpages_preferred_path(manpages_candidates)
-            if target is not None and _manpages_autosync(
-                    # total=1: при total=0 UI-прогресс получает нулевой максимум
-                    target, log.log, lambda msg: emit_progress(0, 1, msg)):
-                manpages_conn = _manpages_open([target], log.log)
-            else:
-                log.log("[WARN] База man-pages недоступна - Linux-функции останутся "
-                        "без документации и не будут отмечены системными")
+            log.log("[WARN] Встроенная БД man-pages отсутствует или пуста - "
+                    "Linux-функции останутся без документации и не будут "
+                    "отмечены системными")
+        manpages_meta = _manpages_meta(manpages_conn)
 
         sfa_index_conn = _sfa_index_open(sfa_index_db)
 
@@ -2558,7 +2516,8 @@ def run_generate(args):
 
             if args.reuse_cache and not jp.exists():
                 # читаем импорты из index БД
-                imports_data, local_file_name, needed_libs = read_index_imports(sfa_index_db, jp)
+                imports_data, local_file_name, needed_libs, android_api = \
+                    read_index_imports(sfa_index_db, jp)
                 if not imports_data:
                     emit_error(f"Нет импортов в индексе для {os.path.basename(str(jp))}")
                     done += 1
@@ -2571,6 +2530,7 @@ def run_generate(args):
                     "file_size": 0,
                     "is_elf": bool(needed_libs),
                     "ida_info": {},
+                    "android_api": android_api,
                 }
             else:
                 try:
@@ -2613,7 +2573,8 @@ def run_generate(args):
                     reuse_cache=args.reuse_cache,
                     doc_cache=doc_cache, manpages_conn=manpages_conn,
                     sfa_index_conn=sfa_index_conn, log=log.log, progress=on_func,
-                    doc_manager=doc_manager, doc_progress=on_doc)
+                    doc_manager=doc_manager, doc_progress=on_doc,
+                    manpages_meta=manpages_meta)
             except Exception as e:
                 emit_error(f"Ошибка генерации отчёта {os.path.basename(str(jp))}: {e}")
                 done += 1

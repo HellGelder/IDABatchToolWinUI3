@@ -47,6 +47,20 @@
         .markdown-content table { font-size: 12px; }
         .markdown-content table th { background: var(--surface-secondary); }
 
+        /* man-страница (готовый HTML из встроенной БД): первый заголовок -
+           заголовок секции NAME, он избыточен рядом с колонкой функции */
+        .markdown-content.man-html h1:first-of-type { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); }
+        .src-line { margin-top: 6px; font-size: 12px; color: var(--text-secondary); }
+        .lang-badge {
+            display: inline-block; padding: 0 5px; margin-left: 4px;
+            border: 1px solid var(--separator); border-radius: var(--radius-sm);
+            font-size: 10px; text-transform: uppercase; color: var(--text-secondary);
+        }
+        .manpages-footnote {
+            margin-top: 16px; padding-top: 8px; border-top: 1px solid var(--separator);
+            font-size: 11px; color: var(--text-tertiary);
+        }
+
         .summary-bar {
             display: flex; gap: 20px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;
         }
@@ -106,8 +120,10 @@
     {% if not docs_available %}
     <p class="empty-state">
         {% if platform == "Linux / Android" %}
-        База документации man-pages не найдена. Выполните синхронизацию
-        man-pages в настройках - после этого функции получат документацию.
+        Встроенная документация man-pages не найдена (ожидался файл
+        app\docs\manpages.db). Функции показаны без документации
+        и не отмечены системными. Пересоберите поставку или скопируйте
+        базу документации рядом с отчётами (manpages.db).
         {% else %}
         Для платформы {{ platform }} внешний поиск документации
         не выполняется. Список системных функций ниже приведён без документации.
@@ -143,12 +159,10 @@
                 <td class="info-cell">
                     {% if call.search_results and call.search_results|length > 0 %}
                     {% set result = call.search_results[0] %}
+                    {% if result.html %}
+                    <div class="markdown-content man-html">{{ result.html | safe }}</div>
+                    {% else %}
                     <div class="markdown-content" id="md-{{ loop.index0 }}">Загрузка...</div>
-                    {% if result.url %}
-                    <div style="margin-top:6px;font-size:12px;">
-                        <a href="{{ result.url }}" target="_blank" rel="noopener">Источник: {{ result.title }}</a>
-                    </div>
-                    {% endif %}
                     <script>
                         (function(){
                             const mdText = {{ result.markdown | tojson }};
@@ -164,6 +178,8 @@
                             }
                         })();
                     </script>
+                    {% endif %}
+                    <div class="src-line">Источник: {{ result.title }}{% if result.lang == 'en' %}<span class="lang-badge">en</span>{% endif %}</div>
                     {% else %}
                     <span class="empty">Документация не найдена</span>
                     {% endif %}
@@ -172,6 +188,14 @@
             {% endfor %}
         </tbody>
     </table>
+    {% if manpages_meta %}
+    <p class="manpages-footnote">
+        Документация: man-pages-ru (manpages-l10n) {{ manpages_meta.get('ru_version', '') or 'н/д' }},
+        man-pages {{ manpages_meta.get('en_version', '') or 'н/д' }}{{ '; рендер: ' + manpages_meta.get('renderer', '') if manpages_meta.get('renderer') else '' }}.
+        Русские страницы показываются при наличии в корпусе переводов, остальные - английские (помечены «en»).
+        Корпуса распространяются на условиях лицензий GNU GPL; файлы LICENSE - рядом с базой документации (app\docs).
+    </p>
+    {% endif %}
     <script>
         (function() {
             const filterAll = document.getElementById('filter-all');

@@ -122,7 +122,6 @@ public sealed class ConfigStore : IConfigStore
         if (!seen.Contains("default_inputdir")) lines.Add($"default_inputdir: {ConfigService.QuoteIfNeeded(cfg.DefaultInputDir)}");
         if (!seen.Contains("log_level")) lines.Add($"log_level: {cfg.LogLevel}");
         if (!seen.Contains("theme")) lines.Add($"theme: {cfg.Theme}");
-        if (!seen.Contains("manpages_db_path")) lines.Add($"manpages_db_path: {ConfigService.QuoteIfNeeded(cfg.ManPagesDbPath)}");
 
         return string.Join("\n", lines) + "\n";
     }
@@ -133,7 +132,6 @@ public sealed class ConfigStore : IConfigStore
         "default_inputdir" => ConfigService.QuoteIfNeeded(cfg.DefaultInputDir),
         "log_level" => cfg.LogLevel,
         "theme" => cfg.Theme,
-        "manpages_db_path" => ConfigService.QuoteIfNeeded(cfg.ManPagesDbPath),
         _ => null,
     };
 

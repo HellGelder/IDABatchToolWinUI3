@@ -6,6 +6,30 @@
 Package.appxmanifest и app.manifest синхронно; make-portable.ps1
 и тест VersionConsistencyTests ловят расхождение).
 
+1.0.0.32 / 2026-10-29
+  Встроенная документация man-pages (Linux/Android) - скачивание man-pages удалено:
+  - в поставку встраивается русская документация man-pages-ru (manpages-l10n 4.31.0)
+    с английским fallback (man-pages 6.18), все секции 1-8, ~4000 страниц, ~4000
+    функций в индексе; БД app\docs\manpages.db собирается на сборке
+    (scripts\build-manpages.ps1, рендер roff->HTML через pandoc), приложение
+    только читает; в настройках остался статус базы, кнопка «Скачать и
+    импортировать» и автосинхронизация удалены (Workers/ManPagesSyncWorker,
+    _python/manpages_bridge.py, конфиг-ключ manpages_db_path - ликвидированы);
+  - документация показывается для ВСЕХ ELF-импортов: страница выбирается по
+    приоритету секций (3 > 2 > 7 > ...), внутри секции русская страница
+    предпочитается английской; английский fallback помечается «en», в отчёте -
+    сноска с версиями корпусов и лицензиями (GPL-атрибуция, LICENSE в app\docs);
+  - классификация модулей Linux/Android переработана под таксономию man-pages:
+    словарь linux.py (~1800 строк) ликвидирован, «функция -> библиотека»
+    берётся из секций LIBRARY man-страниц на этапе сборки БД; категории -
+    строго по библиотекам man-pages (libc, libm, libpthread, librt, libdl,
+    libresolv, libanl, libnsl, libcrypt, libutil), bionic/AOSP-словари вынесены
+    в категорию «Системные библиотеки Android»; soname-канонизация для Android
+    применяется только к бинарникам с ELF-заметкой android_api (libpthread,
+    librt, libresolv и т.д. -> libc.so), для остальных - glibc-sonames;
+  - sfa_function_index.db хранит android_api на файл (bionic/glibc вариант
+    работает и в reuse-режиме); install-prereqs.ps1 больше не ставит requests.
+
 1.0.0.31 / 2026-10-29
   Исправлено:
   - после прогона оставались временные файлы: лог фазы экспорта

@@ -5,9 +5,9 @@ import re
 from typing import Dict, Optional
 
 from .windows import WINDOWS_MODULES
-from .linux import LINUX_MODULES
 from .android import ANDROID_MODULES
 from .macos import MACOS_MODULES
+from .manpages_taxonomy import linux_soname_descriptions
 from .naming import normalize_module_name
 from .third_party_platforms import (
     THIRD_PARTY_WINDOWS,
@@ -55,8 +55,10 @@ class WindowsClassifier(BasePlatformClassifier):
 
 class LinuxClassifier(BasePlatformClassifier):
     def __init__(self):
-        system = {}
-        system.update(LINUX_MODULES)
+        # man-pages таксономия (soname glibc/bionic → описание библиотеки)
+        # плюс словари android.py для bionic/AOSP-библиотек, которых в
+        # man-pages нет. Ручные словари linux.py ликвидированы.
+        system = linux_soname_descriptions()
         system.update(ANDROID_MODULES)
         super().__init__("Linux/Android", system, THIRD_PARTY_LINUX)
 

@@ -3,8 +3,8 @@
 install-prereqs.ps1 - доустановка Python-окружения для IDA Batch Tool.
 
 Скачивает встроенный Python (embeddable, python.org) в app\Tools\Python,
-подключает site-packages и устанавливает туда пакеты jinja2 и requests.
-Права администратора не требуются, система не изменяется.
+подключает site-packages и устанавливает туда пакет jinja2 (шаблоны
+HTML-отчётов). Права администратора не требуются, система не изменяется.
 Нужен доступ в интернет (python.org, bootstrap.pypa.io, pypi.org).
 #>
 $ErrorActionPreference = "Stop"
@@ -46,19 +46,19 @@ try {
     New-Item -ItemType Directory -Force -Path $spDir | Out-Null
 
     # 3. Пакеты
-    Write-Host "3/4 Установка пакетов jinja2 и requests (pypi.org)..."
+    Write-Host "3/4 Установка пакета jinja2 (pypi.org)..."
     $pyExe = Join-Path $pyDir "python.exe"
     $getPip = Join-Path $env:TEMP "get-pip.py"
     if (-not (Test-Path (Join-Path $pyDir "Scripts\pip.exe"))) {
         Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile $getPip -UseBasicParsing
         & $pyExe $getPip --no-warn-script-location --quiet
     }
-    & $pyExe -m pip install --target $spDir --upgrade --quiet jinja2 requests
+    & $pyExe -m pip install --target $spDir --upgrade --quiet jinja2
     if ($LASTEXITCODE -ne 0) { throw "pip завершился с кодом $LASTEXITCODE" }
 
     # 4. Проверка
     Write-Host "4/4 Проверка импорта..."
-    & $pyExe -c "import jinja2, requests; print('OK: jinja2', jinja2.__version__, '| requests', requests.__version__)"
+    & $pyExe -c "import jinja2; print('OK: jinja2', jinja2.__version__)"
     if ($LASTEXITCODE -ne 0) { throw "проверка импорта не прошла" }
 
     Write-Host ""
@@ -70,6 +70,6 @@ catch {
     Write-Host ""
     Write-Host ("ОШИБКА: " + $_.Exception.Message) -ForegroundColor Red
     Write-Host "Проверьте доступ в интернет и запустите скрипт ещё раз," -ForegroundColor Yellow
-    Write-Host "либо установите Python 3.10+ с пакетами jinja2 и requests вручную." -ForegroundColor Yellow
+    Write-Host "либо установите Python 3.10+ с пакетом jinja2 вручную." -ForegroundColor Yellow
     exit 1
 }

@@ -1,4 +1,12 @@
-"""Логика классификации и группировка модулей по категориям."""
+"""Логика классификации и группировка модулей по категориям.
+
+Linux / Android классифицируются по таксономии man-pages
+(manpages_taxonomy): категории «строго по библиотекам» - каждая
+библиотека man-pages является отдельной категорией, bionic/AOSP-словари
+вынесены в «Системные библиотеки Android». Ручные групповые словари
+linux.py ликвидированы: функции документируются по man-pages, и
+классификация следует за корпусом, а не за словарём.
+"""
 from typing import Tuple
 
 # Импортируем словари для категорий
@@ -10,15 +18,6 @@ from .windows import (
     _WINDOWS_NETWORK, _WINDOWS_GRAPHICS, _WINDOWS_MULTIMEDIA,
     _WINDOWS_RUNTIME, _WINDOWS_REMOTE, _WINDOWS_DATA_SERVICES,
     _WINDOWS_KERNEL_DRIVERS,
-)
-from .linux import (
-    _LINUX_CORE_LIBS, _LINUX_DYNAMIC_LINKER,
-    _LINUX_GRAPHICS, _LINUX_AUDIO,
-    _LINUX_NETWORK, _LINUX_SECURITY, _LINUX_CRYPTO,
-    _LINUX_SYSTEM, _LINUX_GLIB,
-    _LINUX_COMPILER_RUNTIME, _LINUX_CONTAINERS,
-    _LINUX_DATA, _LINUX_TERMINAL, _LINUX_UTILITIES,
-    _LINUX_COMPRESSION, _LINUX_QT, _LINUX_IMAGE,
 )
 from .android import (
     _ANDROID_CORE, _ANDROID_BINDER, _ANDROID_HIDL,
@@ -48,14 +47,60 @@ from .third_party import (
     _THIRD_PARTY_XML, _THIRD_PARTY_CRYPTO_MORE,
     _THIRD_PARTY_VIRTUALIZATION, _THIRD_PARTY_QT,
 )
+from .manpages_taxonomy import (
+    MANPAGES_LIB_CATEGORIES, MANPAGES_CATEGORY_DESCRIPTIONS,
+    GLIBC_SONAMES, BIONIC_SONAMES, LOADER_SONAMES,
+    CATEGORY_OS_FALLBACK as _MANPAGES_OS_FALLBACK,
+    CATEGORY_ANDROID as _MANPAGES_ANDROID,
+)
+
+
+def _manpages_lib_dict(lib: str) -> dict[str, str]:
+    """Записи категории одной библиотеки man-pages: glibc- и bionic-soname
+    плюс короткая форма → описание. Для libdl добавляется загрузчик
+    (страницы ld.so не имеют секции LIBRARY - утверждённая таксономия)."""
+    desc = MANPAGES_CATEGORY_DESCRIPTIONS.get(lib, "")
+    entries: dict[str, str] = {}
+    for name in (GLIBC_SONAMES.get(lib), BIONIC_SONAMES.get(lib), lib):
+        if name:
+            entries.setdefault(name, desc)
+    if lib == "libdl":
+        for loader in LOADER_SONAMES:
+            entries.setdefault(loader, desc)
+    return entries
+
 
 _CATEGORIES = {
-    "Системные библиотеки ОС": {
+    # Категории man-pages «строго по библиотекам» - ПЕРЕД fallback'ами:
+    # get_module_category берёт первую категорию, и «libc.so» bionic должен
+    # попасть в «libc», а не в «Системные библиотеки Android».
+    **{
+        lib: {
+            "description": MANPAGES_CATEGORY_DESCRIPTIONS.get(lib, ""),
+            "dicts": [_manpages_lib_dict(lib)],
+        }
+        for lib in MANPAGES_LIB_CATEGORIES
+    },
+    _MANPAGES_ANDROID: {
+        "description": (
+            "Системные библиотеки Android (bionic/AOSP): libc, libm, libdl, "
+            "логирование (liblog), Binder IPC, HIDL, cutils, media, "
+            "графика, сеть, Bluetooth, NDK, ICU, JNI, сжатие. "
+            "В man-pages эти библиотеки не документированы - описывает "
+            "словарь android.py."
+        ),
+        "dicts": [
+            _ANDROID_CORE, _ANDROID_BINDER, _ANDROID_HIDL,
+            _ANDROID_RUNTIME, _ANDROID_HARDWARE,
+            _ANDROID_JNI, _ANDROID_COMPRESSION,
+        ],
+    },
+    _MANPAGES_OS_FALLBACK: {
         "description": (
             "Базовые библиотеки операционной системы: "
             "управление памятью, процессами, файлами, системные вызовы, "
             "аппаратная абстракция, подсистемы совместимости (WOW64), "
-            "динамическая загрузка, POSIX-функции, runtime Android, "
+            "динамическая загрузка, POSIX-функции, "
             "фреймворки macOS/iOS."
         ),
         "dicts": [
@@ -65,14 +110,7 @@ _CATEGORIES = {
             _WINDOWS_API_SETS, _WINDOWS_DOTNET,
             _WINDOWS_REMOTE, _WINDOWS_DATA_SERVICES,
             _WINDOWS_KERNEL_DRIVERS,
-            _LINUX_CORE_LIBS, _LINUX_DYNAMIC_LINKER,
-            _LINUX_SYSTEM, _LINUX_GLIB,
-            _LINUX_TERMINAL, _LINUX_UTILITIES,
-            _LINUX_CONTAINERS, _LINUX_COMPRESSION,
             _SYSTEM_CORE, _SYSTEM_SERVICES, _APP_SERVICES, _SWIFT_RUNTIME,
-            _ANDROID_CORE, _ANDROID_BINDER, _ANDROID_HIDL,
-            _ANDROID_RUNTIME, _ANDROID_HARDWARE,
-            _ANDROID_JNI, _ANDROID_COMPRESSION,
         ],
     },
     "Криптография и безопасность": {
@@ -84,7 +122,6 @@ _CATEGORIES = {
         ),
         "dicts": [
             _WINDOWS_SECURITY_CRYPTO,
-            _LINUX_SECURITY, _LINUX_CRYPTO,
             _SECURITY_CRYPTO,
             _ANDROID_CRYPTO, _ANDROID_SECURITY,
             _THIRD_PARTY_CRYPTO, _THIRD_PARTY_CRYPTO_MORE,
@@ -99,7 +136,6 @@ _CATEGORIES = {
         ),
         "dicts": [
             _WINDOWS_NETWORK,
-            _LINUX_NETWORK,
             _NETWORK_WEB,
             _ANDROID_NETWORK, _ANDROID_BLUETOOTH,
             _THIRD_PARTY_NETWORK, _THIRD_PARTY_BROWSER,
@@ -117,8 +153,6 @@ _CATEGORIES = {
         ),
         "dicts": [
             _WINDOWS_GRAPHICS, _WINDOWS_MULTIMEDIA,
-            _LINUX_GRAPHICS, _LINUX_AUDIO,
-            _LINUX_QT, _LINUX_IMAGE,
             _UI_GRAPHICS, _MULTIMEDIA, _ML_VISION,
             _ANDROID_NATIVE_WINDOW, _ANDROID_MEDIA, _ANDROID_GRAPHICS,
             _ANDROID_CAMERA, _ANDROID_AUDIO,
@@ -138,7 +172,6 @@ _CATEGORIES = {
         ),
         "dicts": [
             _WINDOWS_RUNTIME,
-            _LINUX_COMPILER_RUNTIME,
             _SWIFT_RUNTIME, _DEVELOPER_TOOLS,
             _ANDROID_NDK, _ANDROID_ICU,
             _THIRD_PARTY_ML, _THIRD_PARTY_ML_MORE,
@@ -154,7 +187,6 @@ _CATEGORIES = {
             "шрифты (Fontconfig)."
         ),
         "dicts": [
-            _LINUX_DATA,
             _DATA_STORAGE,
             _ANDROID_EXPAT,
             _THIRD_PARTY_COMPRESSION, _THIRD_PARTY_COMPRESSION_MORE,

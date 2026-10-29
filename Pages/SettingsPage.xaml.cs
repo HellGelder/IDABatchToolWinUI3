@@ -15,7 +15,6 @@ public sealed partial class SettingsPage : Page
 {
     private readonly IConfigStore _store;
     private AppConfig _cfg;
-    private ManPagesSyncWorker? _manWorker;
 
     public SettingsPage(IConfigStore store)
     {
@@ -37,9 +36,7 @@ public sealed partial class SettingsPage : Page
         ThemeLightButton.Click += (_, _) => SwitchTheme("light");
         ThemeDarkButton.Click += (_, _) => SwitchTheme("dark");
 
-        BrowseManPagesButton.Click += (_, _) => UiDialogs.PickFolderAsync(ManPagesPathTextBox).SafeFireAndForget("Settings.BrowseManPages");
         CheckManPagesButton.Click += (_, _) => RunSafe(CheckManPagesAsync(showPopup: true));
-        SyncManPagesButton.Click += (_, _) => RunSafe(SyncManPagesAsync());
 
         LoadToUi();
     }
@@ -51,10 +48,10 @@ public sealed partial class SettingsPage : Page
         var isDark = _cfg.Theme == "dark";
         ThemeLightButton.IsChecked = !isDark;
         ThemeDarkButton.IsChecked = isDark;
-        ManPagesPathTextBox.Text = _cfg.ManPagesDbPath;
 
-        if (!string.IsNullOrWhiteSpace(ManPagesPathTextBox.Text))
-            CheckManPagesAsync().SafeFireAndForget("Settings.CheckManPages");
+        // Встроенная документация поставляется с приложением - статус можно
+        // показывать сразу, без сохранения настроек.
+        CheckManPagesAsync().SafeFireAndForget("Settings.CheckManPages");
     }
 
     private void SwitchTheme(string theme)
@@ -71,7 +68,6 @@ public sealed partial class SettingsPage : Page
     {
         _cfg.IdaExecutable = string.IsNullOrWhiteSpace(IdatPathTextBox.Text) ? "idat.exe" : IdatPathTextBox.Text.Trim();
         _cfg.BindiffExecutable = string.IsNullOrWhiteSpace(BindiffPathTextBox.Text) ? "bindiff.exe" : BindiffPathTextBox.Text.Trim();
-        _cfg.ManPagesDbPath = ManPagesPathTextBox.Text.Trim();
         try
         {
             _store.Save(_cfg);
@@ -270,40 +266,27 @@ public sealed partial class SettingsPage : Page
     }
 
     // ──────────────────────────────────────────────
-    //  man-pages (Linux)
+    //  man-pages (Linux) - встроенная документация
     // ──────────────────────────────────────────────
-
-    private string ManPagesDbPath()
-    {
-        var raw = ManPagesPathTextBox.Text.Trim();
-        if (string.IsNullOrEmpty(raw)) raw = _cfg.ManPagesDbPath.Trim();
-        if (string.IsNullOrEmpty(raw))
-        {
-            var inputDir = string.IsNullOrWhiteSpace(_cfg.DefaultInputDir) || _cfg.DefaultInputDir == "."
-                ? Directory.GetCurrentDirectory() : _cfg.DefaultInputDir;
-            return Path.Combine(inputDir, AppConstants.SfaReportsDirName, AppConstants.ManpagesDbFileName);
-        }
-        var p = Path.GetFullPath(raw);
-        return Path.GetExtension(p).Equals(".db", StringComparison.OrdinalIgnoreCase)
-            ? p : Path.Combine(p, AppConstants.ManpagesDbFileName);
-    }
 
     private async Task CheckManPagesAsync(bool showPopup = false)
     {
         // Даём строке статуса уйти в очередь отрисовки до синхронной проверки
         await Task.Yield();
-        var dbPath = ManPagesDbPath();
+        var dbPath = AppConstants.ManpagesDbEmbedded;
         if (!File.Exists(dbPath))
         {
-            ManPagesStatusText.Text = $"Статус: база не найдена ({dbPath}). Нажмите «Скачать и импортировать».";
+            ManPagesStatusText.Text =
+                "Статус: встроенная база не найдена (app\\docs\\manpages.db). " +
+                "Документация Linux-функций будет недоступна - пересоберите поставку.";
             if (showPopup) await ShowManPagesResultAsync(false, ManPagesStatusText.Text);
             return;
         }
         try
         {
-            var (count, version, sizeMb) = await Task.Run(() => ReadManPagesInfo(dbPath));
+            var (count, versions, sizeMb) = await Task.Run(() => ReadManPagesInfo(dbPath));
             ManPagesStatusText.Text =
-                $"Статус: база найдена - {count} функций, man-pages {version}, {sizeMb:F1} МБ";
+                $"Статус: встроена - {count} функций, корпуса {versions}, {sizeMb:F1} МБ";
             if (showPopup) await ShowManPagesResultAsync(true, ManPagesStatusText.Text);
         }
         catch
@@ -329,12 +312,12 @@ public sealed partial class SettingsPage : Page
         try { await dlg.ShowAsync(); } catch { /* окно закрыто пользователем */ }
     }
 
-    private static (long Count, string Version, double SizeMb) ReadManPagesInfo(string dbPath)
+    private static (long Count, string Versions, double SizeMb) ReadManPagesInfo(string dbPath)
     {
         using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={dbPath}");
         conn.Open();
         long count = 0;
-        var version = "";
+        var versions = "";
         try
         {
             using var cmd = conn.CreateCommand();
@@ -345,62 +328,23 @@ public sealed partial class SettingsPage : Page
         try
         {
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT value FROM meta WHERE key='manpages_version'";
-            var v = cmd.ExecuteScalar();
-            if (v != null) version = Convert.ToString(v) ?? "";
+            // Схема 2: версии корпусов лежат в meta раздельно (ru/en).
+            cmd.CommandText = "SELECT key, value FROM meta WHERE key IN ('ru_version','en_version')";
+            using var reader = cmd.ExecuteReader();
+            var ru = "";
+            var en = "";
+            while (reader.Read())
+            {
+                var v = Convert.ToString(reader["value"]) ?? "";
+                if (Convert.ToString(reader["key"]) == "ru_version") ru = v; else en = v;
+            }
+            versions = $"man-pages-ru {OrNA(ru)} + man-pages {OrNA(en)}";
         }
         catch { /* нет meta */ }
         var size = new FileInfo(dbPath).Length / 1024.0 / 1024.0;
-        return (count, version, size);
-    }
+        return (count, versions, size);
 
-    private async Task SyncManPagesAsync()
-    {
-        if (_manWorker != null)
-        {
-            await UiDialogs.InfoAsync("Синхронизация", "Загрузка уже выполняется.");
-            return;
-        }
-
-        var dbPath = ManPagesDbPath();
-        if (string.IsNullOrWhiteSpace(ManPagesPathTextBox.Text))
-        {
-            ManPagesPathTextBox.Text = Path.GetDirectoryName(dbPath) ?? "";
-            _cfg.ManPagesDbPath = ManPagesPathTextBox.Text;
-            _store.Save(_cfg);
-        }
-
-        SyncManPagesButton.IsEnabled = false;
-        CheckManPagesButton.IsEnabled = false;
-        ManPagesStatusText.Text = "Статус: загрузка архива man-pages…";
-
-        _manWorker = new ManPagesSyncWorker(dbPath);
-        _manWorker.Progress += (msg, pct) => RunOnUi(() =>
-            ManPagesStatusText.Text = $"Статус: {msg} ({pct}%)");
-        _manWorker.ErrorOccurred += msg => RunOnUi(() =>
-            ManPagesStatusText.Text = $"Статус: ошибка - {msg}");
-        _manWorker.Finished += (success, message) =>
-            RunOnUi(() => OnManPagesFinishedAsync(success, dbPath, message));
-        _manWorker.Start();
-    }
-
-    private async Task OnManPagesFinishedAsync(bool success, string dbPath, string message)
-    {
-        SyncManPagesButton.IsEnabled = true;
-        CheckManPagesButton.IsEnabled = true;
-            if (success)
-            {
-                _cfg.ManPagesDbPath = Path.GetDirectoryName(dbPath) ?? "";
-                _store.Save(_cfg);
-            await UiDialogs.InfoAsync("Готово", $"Документация man-pages импортирована:\n{message}");
-            await CheckManPagesAsync();
-        }
-        else
-        {
-            await UiDialogs.WarnAsync("Ошибка", $"Не удалось импортировать man-pages:\n{message}");
-        }
-        _manWorker?.Dispose();
-        _manWorker = null;
+        static string OrNA(string v) => string.IsNullOrWhiteSpace(v) ? "н/д" : v;
     }
 
     /// <summary>Запуск задачи страницы: исключение пишется в AppLog, а не роняет

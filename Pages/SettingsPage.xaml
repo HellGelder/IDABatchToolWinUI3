@@ -131,34 +131,16 @@
                 </StackPanel>
             </Border>
 
-            <!-- Документация man-pages (Linux) -->
+            <!-- Документация man-pages (встроена в поставку) -->
             <Border Grid.Row="4" Style="{StaticResource GroupBoxStyle}">
                 <StackPanel Spacing="6">
-                    <TextBlock Text="Документация man-pages (Linux)" Style="{StaticResource GroupHeaderStyle}" />
-                    <TextBlock Text="Загружает официальный архив man-pages и сохраняет его локально. После этого документация Linux-функций доступна офлайн."
+                    <TextBlock Text="Документация man-pages (Linux / Android)" Style="{StaticResource GroupHeaderStyle}" />
+                    <TextBlock Text="Русская документация man-pages встроена в поставку (app\docs\manpages.db): непереведённые страницы показываются по-английски с пометкой «en». Скачивание не требуется."
                                TextWrapping="Wrap" FontSize="10"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <Grid ColumnSpacing="6">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBox x:Name="ManPagesPathTextBox" Grid.Column="0"
-                                 PlaceholderText="Путь к папке с manpages.db..." />
-                        <Button x:Name="BrowseManPagesButton" Grid.Column="1" Content="Обзор..." MinWidth="70"
-                                Padding="8,4" />
-                    </Grid>
                     <TextBlock x:Name="ManPagesStatusText" Text="Статус: не проверено" FontSize="11" />
-                    <Grid ColumnSpacing="6">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Button x:Name="CheckManPagesButton" Grid.Column="0" Content="Проверить" MinWidth="80" Padding="8,4" />
-                        <Button x:Name="SyncManPagesButton" Grid.Column="1" Content="Скачать и импортировать"
-                                MinWidth="160" Padding="8,4" />
-                    </Grid>
+                    <Button x:Name="CheckManPagesButton" Content="Проверить" MinWidth="80" Padding="8,4"
+                            HorizontalAlignment="Left" />
                 </StackPanel>
             </Border>
 

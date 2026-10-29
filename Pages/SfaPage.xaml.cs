@@ -661,16 +661,11 @@ public SfaPage(IConfigStore store)
 
     private string ResolveManpagesDb(string sfaReports)
     {
-        // Путь читаем из store на момент вызова: значение, заданное в настройках
-        // после создания страницы (например, сразу после скачивания man-pages),
-        // попадает сюда без перезапуска приложения.
-        var cfgPath = _store.Current.ManPagesDbPath;
-        if (!string.IsNullOrWhiteSpace(cfgPath))
-        {
-            var p = Path.GetFullPath(cfgPath);
-            return Path.GetExtension(p).Equals(".db", StringComparison.OrdinalIgnoreCase)
-                ? p : Path.Combine(p, AppConstants.ManpagesDbFileName);
-        }
+        // Документация встроена в поставку (app\docs\manpages.db, рядом с
+        // _python\). Fallback - прежнее место рядом с отчётами: база могла
+        // быть скопирована туда вручную или осталась от прошлых прогонов.
+        var embedded = AppConstants.ManpagesDbEmbedded;
+        if (File.Exists(embedded)) return embedded;
         return Path.Combine(sfaReports, AppConstants.ManpagesDbFileName);
     }
 
