@@ -232,7 +232,7 @@ from classifier.manpages_taxonomy import (
     section_rank as _mp_section_rank,
     lang_rank as _mp_lang_rank,
     library_display as _mp_library_display,
-    library_is_system as _mp_library_is_system,
+    is_syscall_section as _mp_is_syscall_section,
 )
 
 # Неизвестная платформа → проверка по всем словарям (как в исполнении 1).
@@ -1711,11 +1711,11 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
         results = None
         found = False
         needs_doc = False
-        # Системность по библиотеке из man-страницы: любая функция,
-        # документированная man-pages, системная (таксономия man-pages -
-        # библиотеки ОС). Страницы без LIBRARY (man7 и т.п.) - тоже системные
-        # (fallback-категория «Системные библиотеки ОС»). Bionic-функции вне
-        # man-pages документации не получают и системными не отмечаются (v1).
+        # Системность man-страницы: только секция system calls (2*, включая
+        # 2const/2type - константы/типы syscall-домена). Документированность
+        # в секциях 3/7/1 и прочих системности НЕ даёт (правило владельца
+        # 2026-10-29). Bionic-функции вне man-pages документации системными
+        # не отмечаются (v1).
         lib_is_sfa = False
         if doc_cache is not None and doc_cache.has_function(func_name):
             results = doc_cache.get_results(func_name)
@@ -1734,9 +1734,9 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
                     lib_name = _mp_library_display(page["library"], manpages_variant)
                     if lib_name:
                         dll_name = lib_name
-                    lib_is_sfa = _mp_library_is_system(page["library"])
+                    lib_is_sfa = _mp_is_syscall_section(page["section"])
                     log(f"[INFO] man-pages: {func_name} → {page['title']}"
-                        f" [{page['lang']}]"
+                        f" [{page['lang']} / секция {page['section']}]"
                         + (f" [{dll_name}]" if lib_name else ""))
                 else:
                     log(f"[INFO] man-pages: страница для {func_name} не найдена")
@@ -1832,10 +1832,14 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
             if dll_from_md:
                 dll_name = dll_from_md
 
-        # Системность: известная системная библиотека из импорта (Windows) либо
-        # библиотека из man-страницы, входящая в словарь системных (Linux/ELF).
-        # Наличие документации системности не даёт - решает только словарь.
-        if row["module_is_system"]:
+        # Системность: на Linux/Android - только man-секция system calls (2*).
+        # Известная системная библиотека импорта (DT_NEEDED) и документированность
+        # в других секциях системности НЕ дают (правило владельца 2026-10-29).
+        # На Windows - словарь: системная библиотека импорта; для псевдо-модуля
+        # .dynsym системность решается кэшем документации.
+        if use_manpages:
+            is_system_call = bool(lib_is_sfa)
+        elif row["module_is_system"]:
             is_system_call = True
         elif row["is_pseudo"]:
             is_system_call = bool(lib_is_sfa)

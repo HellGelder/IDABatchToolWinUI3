@@ -6,6 +6,17 @@
 Package.appxmanifest и app.manifest синхронно; make-portable.ps1
 и тест VersionConsistencyTests ловят расхождение).
 
+1.0.0.33 / 2026-10-29
+  Исправлено:
+  - системность функции на Linux/Android определяется ТОЛЬКО man-секцией
+    system calls (2, включая 2const/2type - константы и типы syscall-домена,
+    например ioctl-команды): документированность в секциях 3/7/1 и прочих
+    системности не даёт, известная системная библиотека импорта (DT_NEEDED)
+    тоже больше не отмечает функцию системной. Man-страницы секции 3
+    (printf, malloc, pthread_create и т.д.) по-прежнему показываются как
+    документация, но в счётчик системных функций не попадают
+    (classifier/manpages_taxonomy.py: library_is_system -> is_syscall_section)
+
 1.0.0.32 / 2026-10-29
   Встроенная документация man-pages (Linux/Android) - скачивание man-pages удалено:
   - в поставку встраивается русская документация man-pages-ru (manpages-l10n 4.31.0)
