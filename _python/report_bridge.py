@@ -233,8 +233,18 @@ from classifier.manpages_taxonomy import (
     lang_rank as _mp_lang_rank,
     library_display as _mp_library_display,
     is_syscall_section as _mp_is_syscall_section,
-    manpages_category as _mp_category,
+    section_base as _mp_section_base,
+    section_category as _mp_section_category,
+    section_description as _mp_section_description,
+    section_color as _mp_section_color,
+    section_categories_ordered as _mp_section_categories_ordered,
+    sort_sections as _mp_sort_sections,
+    module_library_key as _mp_module_library_key,
     category_name_ru as _mp_category_name_ru,
+    CATEGORY_NO_MANPAGES as _MP_NO_MANPAGES,
+    NO_MANPAGES_DESCRIPTION as _MP_NO_MANPAGES_DESC,
+    CATEGORY_NO_MANPAGES_COLOR as _MP_NO_MANPAGES_COLOR,
+    INTERNAL_MODULE_COLOR as _MP_INTERNAL_COLOR,
 )
 
 # Неизвестная платформа → проверка по всем словарям (как в исполнении 1).
@@ -430,6 +440,19 @@ def _classify_full(module_name, internal_set):
     return _CATEGORY_LABELS.get(cat_ru, "Unknown"), desc
 
 
+def _module_section_tags(module_name, library_sections):
+    """Теги секций man для модуля: [{'name', 'color'}] в порядке приоритета.
+
+    Используется в карточках «Прямые зависимости» (ELF) и таблице индекса:
+    библиотека может быть документирована сразу в нескольких секциях.
+    """
+    key = _mp_module_library_key(module_name)
+    if not key or not library_sections:
+        return []
+    return [{"name": _mp_section_category(sec), "color": _mp_section_color(sec)}
+            for sec in _mp_sort_sections(library_sections.get(key, ()))]
+
+
 def generate_analysis_report(json_path, output_html, internal_set, reports_dir=None):
     """Генерирует индивидуальный HTML-отчёт «Общий анализ»."""
     with open(json_path, "r", encoding="utf-8") as f:
@@ -451,17 +474,37 @@ def generate_analysis_report(json_path, output_html, internal_set, reports_dir=N
 
     module_deps = []
     seen = set()
+    # ELF (Linux/Android): карточки зависимостей показывают секции man-страниц
+    # вместо словарных меток System/Crypto/Internal (правило владельца
+    # 2026-10-30). Mach-O и PE остаются на прежних метках.
+    elf_sections = _manpages_library_sections() if data.get("is_elf") else None
     if data.get("is_elf") or data.get("is_macho"):
         for needed in data.get("needed_libs", []):
             name = normalize_display_name(needed)
             if name in seen:
                 continue
             seen.add(name)
-            cat_label, desc = _classify_full(name, internal_set)
-            color = _CATEGORY_COLORS.get(cat_label, "#9E9E9E")
-            module_deps.append({"name": name, "count": 0, "category": cat_label,
-                                "description": desc, "color": color})
-        module_deps = sorted(module_deps, key=lambda x: (x["category"], x["name"]))
+            if elf_sections is not None:
+                tags = _module_section_tags(name, elf_sections)
+                is_internal = _is_internal_module(name, internal_set)
+                color = tags[0]["color"] if tags else (
+                    _MP_INTERNAL_COLOR if is_internal else _MP_NO_MANPAGES_COLOR)
+                module_deps.append({
+                    "name": name, "count": 0, "category": "",
+                    "description": _classify_with_context(name, internal_set),
+                    "sections": [t["name"] for t in tags],
+                    "section_tags": tags, "section_count": len(tags),
+                    "internal": is_internal, "color": color,
+                })
+            else:
+                cat_label, desc = _classify_full(name, internal_set)
+                color = _CATEGORY_COLORS.get(cat_label, "#9E9E9E")
+                module_deps.append({"name": name, "count": 0, "category": cat_label,
+                                    "description": desc, "color": color})
+        if elf_sections is not None:
+            module_deps.sort(key=lambda x: x["name"].lower())
+        else:
+            module_deps.sort(key=lambda x: (x["category"], x["name"]))
     else:
         from collections import Counter
         cnt = Counter()
@@ -572,53 +615,102 @@ def generate_analysis_index(reports_dir, input_dir, report_links, global_modules
     """Сводный index.html для «Общего анализа»: категория со словесным описанием
     и описание у каждого модуля (как в исполнении 1, generator.generate_index).
 
-    Раскладка: каждый модуль попадает ровно в одну категорию классификатора
-    (импортированный - с тегом «импортирована», собственный - «собственный»).
-    Собственная библиотека дополнительно показывается в «Внутренних модулях
-    проекта» (тег «системная», если словарь относит её к категории ОС).
-    «Системные» - только категория «Системные библиотеки ОС»: криптография
-    (libcrypto/libssl), сеть, графика и среды выполнения идут в свои
-    категории и в счётчик системных не попадают.
+    Linux/Android: категории-группы - СЕКЦИИ man-страниц (Системные вызовы,
+    Библиотечные вызовы, Обзоры и соглашения…): модуль показывается в каждой
+    секции, в которой документирован, то есть библиотеки «раскидываются» по
+    секциям (правило владельца 2026-10-30); модули без man-страниц попадают в
+    группу «Нет man-страниц». Счётчик «Модулей» - уникальные имена, поэтому
+    сумма по группам может быть больше (двойной учёт осознанный).
+
+    Windows и прочие платформы: прежние словарные категории классификатора
+    (man-страниц для них нет, секций не существует). У каждого модуля -
+    теги секций man-страниц и число секций.
     """
     categories = {}
+    # Секции man-страниц по библиотекам: у каждого модуля в индексе - теги
+    # секций, в которых он фигурирует (правило владельца 2026-10-30).
+    library_sections = _manpages_library_sections()
+    use_sections = bool(platform) and _normalize_platform(platform) == "Linux / Android"
+
+    def _sections_for(mod):
+        key = _mp_module_library_key(mod)
+        return _mp_sort_sections(library_sections.get(key, ())) if key else []
 
     def _place(mod, cat, desc, cat_desc, tag):
         info = categories.setdefault(
             cat, {"name": cat, "description": cat_desc, "count": 0, "modules": []})
         info["count"] += 1
-        info["modules"].append({"name": mod, "desc": desc, "tag": tag})
+        sections = _sections_for(mod)
+        info["modules"].append({
+            "name": mod, "desc": desc, "tag": tag,
+            "sections": [_mp_section_category(s) for s in sections],
+            "section_count": len(sections),
+        })
 
     # Собственные библиотеки ОС, которые никто не импортирует, в
     # global_modules не попадают (нет ни одного DT_NEEDED на них). Добавляем
-    # их к общему списку, чтобы группа «Системные библиотеки ОС» индекса и
-    # счётчик «Системных библиотек» сводки СФ считались по одному множеству.
+    # их к общему списку, чтобы модули исследуемой директории были в индексе;
+    # счётчик «Системных библиотек» сводки СФ от этого больше не зависит.
     modules_all = set(global_modules)
     if input_dir:
         modules_all.update(_collect_own_system_libs(input_dir, platform))
 
+    # Плоский список модулей с тегами секций (таблица индекса Linux/Android).
+    module_rows = []
+
     for mod in sorted(modules_all, key=str.lower):
         is_internal = _is_internal_module(mod, internal_set)
+        tag = "собственный" if is_internal else "импортирована"
+        cat, desc = _classify_module(mod)
+
+        if use_sections:
+            # Категория = секция man-страницы: модуль попадает во все секции,
+            # в которых документирован (libc - и в системные, и в библиотечные).
+            sections = _sections_for(mod)
+            module_rows.append({
+                "name": mod, "tag": tag,
+                "sections": [_mp_section_category(s) for s in sections],
+                "section_tags": _module_section_tags(mod, library_sections),
+                "section_count": len(sections),
+            })
+            if sections:
+                for sec in sections:
+                    _place(mod, _mp_section_category(sec), desc,
+                           _mp_section_description(sec), tag)
+            else:
+                _place(mod, _MP_NO_MANPAGES, desc, _MP_NO_MANPAGES_DESC, tag)
+            continue
+
+        # Windows и прочие: словарные категории классификатора (прежнее поведение).
         is_system = bool(_classifier_is_system(mod, platform)) if platform \
             else bool(_classifier_is_system(mod))
-
         if is_internal:
             _place(mod,
                    "Внутренние модули проекта",
                    "Собственный модуль проекта (внутренняя библиотека)",
                    "Библиотеки и исполняемые файлы из исследуемой директории.",
                    "системная" if is_system else "")
-
-        cat, desc = _classify_module(mod)
         # Свои модули вне словарей остаются только в «Внутренних модулях».
         if is_internal and cat == "Неопознанные модули":
             continue
-        _place(mod, cat, desc, _category_description(cat),
-               "собственный" if is_internal else "импортирована")
-    grouped = _sorted_category_groups(categories)
-    # Категории man-pages («libc», «libm», ...) показываются русскими
-    # названиями (левая панель индекса); остальные группы уже русские.
-    for group in grouped:
-        group["name"] = _mp_category_name_ru(group["name"])
+        _place(mod, cat, desc, _category_description(cat), tag)
+
+    if use_sections:
+        # Порядок групп: системные вызовы → библиотечные → остальные по номеру,
+        # «Нет man-страниц» - в конце.
+        order = {name: i for i, name in enumerate(_mp_section_categories_ordered())}
+        order[_MP_NO_MANPAGES] = len(order) + 100
+        grouped = []
+        for name in sorted(categories, key=lambda n: (order.get(n, 50), n.lower())):
+            info = categories[name]
+            info["modules"] = sorted(info["modules"], key=lambda m: m["name"].lower())
+            grouped.append(info)
+    else:
+        grouped = _sorted_category_groups(categories)
+        # Категории man-pages («libc», «libm», ...) показываются русскими
+        # названиями (левая панель индекса); остальные группы уже русские.
+        for group in grouped:
+            group["name"] = _mp_category_name_ru(group["name"])
 
     ctx = {
         "input_dir": input_dir,
@@ -633,6 +725,10 @@ def generate_analysis_index(reports_dir, input_dir, report_links, global_modules
         "generation_time": generation_time,
         "ida_info": ida_info or {},
         "grouped_categories": grouped,
+        # Linux/Android: таблица «библиотека → секции man» (module_rows);
+        # Windows - прежний split-view по словарным категориям.
+        "sections_mode": use_sections,
+        "module_rows": module_rows,
         "reports": report_links,
     }
     index_path = os.path.join(reports_dir, "index.html")
@@ -1475,6 +1571,47 @@ def _manpages_meta(conn):
     return meta or None
 
 
+_MANPAGES_LIBRARY_SECTIONS_CACHE = None
+
+
+def _manpages_library_sections():
+    """Секции man-страниц по короткому имени библиотеки (теги модулей индекса).
+
+    Возвращает {короткое имя библиотеки: {базовые секции}}. Источник - встроенная
+    БД app\\docs\\manpages.db; если её нет, тегов секций у модулей не будет.
+    Результат кэшируется на процесс: БД в рантайме не меняется, а функция
+    вызывается для каждого ELF-отчёта.
+    """
+    global _MANPAGES_LIBRARY_SECTIONS_CACHE
+    if _MANPAGES_LIBRARY_SECTIONS_CACHE is not None:
+        return _MANPAGES_LIBRARY_SECTIONS_CACHE
+    sections = {}
+    conn = None
+    try:
+        conn = _manpages_open([_manpages_embedded_path()], lambda msg: None)
+        if conn is None:
+            _MANPAGES_LIBRARY_SECTIONS_CACHE = sections
+            return sections
+        rows = conn.execute(
+            "SELECT library, section FROM pages WHERE library <> ''").fetchall()
+    except sqlite3.Error:
+        _MANPAGES_LIBRARY_SECTIONS_CACHE = sections
+        return sections
+    finally:
+        if conn is not None:
+            conn.close()
+    for library, section in rows:
+        base = _mp_section_base(section)
+        if not base:
+            continue
+        for token in str(library or "").split(","):
+            key = token.strip().lower()
+            if key:
+                sections.setdefault(key, set()).add(base)
+    _MANPAGES_LIBRARY_SECTIONS_CACHE = sections
+    return sections
+
+
 def _manpages_get_page(conn, func_name):
     """Документация функции из встроенной БД man-pages.
 
@@ -1659,6 +1796,11 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
     use_manpages = platform == "Linux / Android"
     list_all_imports = use_manpages
     docs_available = platform == "Windows"
+    # Документация реально доступна, если открыта непустая БД man-pages.
+    # Раньше шаблон считал её недоступной для любой не-Windows платформы и
+    # печатал «Встроенная документация man-pages не найдена» даже когда
+    # man-страницы были подставлены в каждую строку.
+    manpages_available = use_manpages and _manpages_count(manpages_conn) > 0
 
     # Вариант платформы внутри «Linux / Android»: bionic-канонизация soname
     # применяется только к бинарникам с Android ELF-заметкой (android_api),
@@ -1667,7 +1809,6 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
 
     file_name = os.path.basename(data.get("file_name", str(json_path)))
     imports = data.get("imports", [])
-    needed_libs = data.get("needed_libs", []) or []
     total_imports = len(imports)
     valid_imports = sum(1 for imp in imports if imp.get("name"))
     log(f"[INFO] Processing {json_path}")
@@ -1741,7 +1882,13 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
                     found = True
                     mp_library = page["library"]
                     mp_section = page["section"]
-                    lib_name = _mp_library_display(page["library"], manpages_variant)
+                    # Сисколлы man2 без секции LIBRARY (creat, dup2,
+                    # clock_gettime…) реализуются обёртками libc по
+                    # определению man-pages(7) - иначе библиотека в отчёте
+                    # оставалась «-» и не попадала в счётчик системных.
+                    if not mp_library and _mp_section_base(mp_section) == "2":
+                        mp_library = "libc"
+                    lib_name = _mp_library_display(mp_library, manpages_variant)
                     if lib_name:
                         dll_name = lib_name
                     lib_is_sfa = _mp_is_syscall_section(page["section"])
@@ -1783,18 +1930,13 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
         else:
             log(f"[INFO] {func_name}: поиск документации недоступен")
 
-        # Категория функции для отчёта: man-страница задаёт категорию по
-        # библиотеке LIBRARY (libc, libm, ..., страницы без LIBRARY - fallback
-        # «Системные библиотеки ОС»); без man-страницы категория берётся по
-        # soname библиотеки импорта (например bionic liblog -> «Системные
-        # библиотеки Android»); псевдо-модуль .dynsym без документации
-        # остаётся без категории.
-        category = ""
-        if not is_pseudo_module and module and module != "-":
-            mod_cat, _ = get_module_category_and_description(module)
-            category = "" if mod_cat == "Неопознанные модули" else mod_cat
-        if mp_library is not None:
-            category = _mp_category(mp_library)
+        # Категория строки = СЕКЦИЯ man-страницы (решение владельца
+        # 2026-10-30): секция отвечает, что это за документ (сисколл,
+        # библиотечный вызов, обзор…), а не из какой библиотеки функция.
+        # Библиотечной категории здесь больше нет - страницы без LIBRARY
+        # ошибочно попадали в «Системные библиотеки ОС»; строки без
+        # man-страницы остаются без категории.
+        category = _mp_section_category(mp_section) if mp_section else ""
 
         rows.append({
             "func": func_name,
@@ -1903,15 +2045,19 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
     notfound_count = len(system_entries) - found_count
     notfound_names = {e["name"] for e in entries if not e["found"]}
     system_notfound_names = {e["name"] for e in system_entries if not e["found"]}
-    # Системные библиотеки модуля: для ELF источник - зависимости (DT_NEEDED);
-    # в list_all-режиме дополняем библиотеками подтверждённых системных строк.
-    # Критерий - СФ-библиотеки («Системные библиотеки ОС»), тот же, что у индекса.
-    system_libs = {lib for lib in needed_libs if _is_sfa_module(lib, platform)}
-    if list_all_imports:
-        for e in system_entries:
-            dll = e["dll"]
-            if dll and dll != "-" and _is_sfa_module(dll, platform):
-                system_libs.add(dll)
+    # Системные библиотеки (правило владельца 2026-10-30): только те, из
+    # которых в отчёт попали системные строки (man2) - «библиотеки секции
+    # системных вызовов». Словарный критерий 1.0.0.28 и добавление собственных
+    # библиотек ОС отменены: счётчик обязан быть производным от отчёта.
+    system_libs = {e["dll"] for e in system_entries if e["dll"] and e["dll"] != "-"}
+
+    # Секции отчёта в утверждённом порядке: системные вызовы → библиотечные →
+    # остальные по номеру (фильтры над таблицей).
+    report_categories = []
+    for sec in _mp_sort_sections([e.get("section", "") for e in entries]):
+        name = _mp_section_category(sec)
+        if name and name not in report_categories:
+            report_categories.append(name)
 
     ctx = {
         "file_name": file_name,
@@ -1920,6 +2066,8 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
         "system_calls": entries,
         "list_all_imports": list_all_imports,
         "docs_available": docs_available,
+        "manpages_available": manpages_available,
+        "report_categories": report_categories,
         "marked_js": _marked_js(),
         "manpages_meta": manpages_meta,
     }
@@ -2678,16 +2826,14 @@ def run_generate(args):
             emit_error("Генерация отчётов СФ отменена пользователем.")
             return
 
-        # Счётчики сводного отчёта - по уникальным множествам; собственные
-        # системные библиотеки проекта добавляются к импортированным (библиотеки
-        # ОС, лежащие в исследуемой директории). Пустые счётчики дополняются из
-        # индекса (аналог фолбэка исполнения 1).
-        gsl.update(_collect_own_system_libs(input_dir, platform))
+        # Счётчики сводного отчёта - по уникальным множествам. «Системные
+        # библиотеки» с 1.0.0.36 - только библиотеки системных строк (man2);
+        # собственные библиотеки ОС без системных строк больше не добавляются.
         total_system_modules = len(gsl)
         total_system_functions = len(gsf)
-        idx_modules, idx_functions = _sfa_index_totals(sfa_index_conn)
-        if not total_system_modules:
-            total_system_modules = idx_modules
+        # Фолбэк счётчика библиотек из index-БД отменён вместе со словарным
+        # критерием: 0 означает «системных строк в отчёте нет», а не сбой.
+        _, idx_functions = _sfa_index_totals(sfa_index_conn)
         if not total_system_functions:
             total_system_functions = idx_functions
 

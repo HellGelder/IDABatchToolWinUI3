@@ -45,6 +45,15 @@ $EnUrl = "https://www.kernel.org/pub/linux/docs/man-pages/man-pages-$EnVersion.t
 $cache   = Join-Path $env:LOCALAPPDATA "IDABatchTool\manpages-corpus"
 $docsDir = Join-Path $root "docs"
 $dbPath  = Join-Path $docsDir "manpages.db"
+
+# Готовая БД отменяет всю сборку: ни pandoc, ни python, ни сеть не нужны.
+# Проверка стоит ДО требований к инструментам - иначе сборка поставки падает
+# на машине без pandoc, хотя docs\manpages.db уже лежит в репозитории.
+if ((Test-Path $dbPath) -and -not $Force) {
+    Write-Host "docs\manpages.db уже собран - пропуск (пересборка: build-manpages.ps1 -Force)"
+    return
+}
+
 New-Item -ItemType Directory -Force -Path $cache, $docsDir | Out-Null
 
 # ── 0. pandoc ───────────────────────────────────────────────────────────────
@@ -91,16 +100,11 @@ if (-not (Test-Path (Join-Path $enDir "man1"))) {
 
 # ── 2. Сборка БД ────────────────────────────────────────────────────────────
 $buildPy = Join-Path $root "_python\manpages_build.py"
-if ((Test-Path $dbPath) -and -not $Force) {
-    Write-Host "docs\manpages.db уже собран - пропуск (пересборка: build-manpages.ps1 -Force)"
-}
-else {
-    Write-Host "Сборка manpages.db (рендер ~4000 страниц, несколько минут)…"
-    & $python $buildPy `
-        --ru-dir $ruDir --en-dir $enDir --out $dbPath --pandoc $pandoc `
-        --ru-version $RuVersion --en-version $EnVersion --jobs 12
-    if ($LASTEXITCODE -ne 0) { throw "Сборка manpages.db не удалась" }
-}
+Write-Host "Сборка manpages.db (рендер ~4000 страниц, несколько минут)…"
+& $python $buildPy `
+    --ru-dir $ruDir --en-dir $enDir --out $dbPath --pandoc $pandoc `
+    --ru-version $RuVersion --en-version $EnVersion --jobs 12
+if ($LASTEXITCODE -ne 0) { throw "Сборка manpages.db не удалась" }
 
 # ── 3. Источники корпусов ──────────────────────────────────────────────────
 $sources = @"

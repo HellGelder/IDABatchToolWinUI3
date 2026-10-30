@@ -173,6 +173,14 @@
     .dep-name { font-weight: 600; font-family: ui-monospace, "SF Mono", "Consolas", monospace; font-size: 13px; }
     .dep-count { background: var(--surface-secondary); padding: 1px 7px; border-radius: var(--radius-pill); color: var(--text-secondary); font-size: 11px; }
     .dep-category { font-style: italic; color: var(--text-secondary); }
+    /* Теги секций man в карточке зависимости (ELF): библиотека может быть
+       документирована сразу в нескольких секциях - цвет тега свой у каждой. */
+    .dep-tag {
+        display: inline-block; padding: 1px 6px; border-radius: 8px;
+        border: 1px solid var(--separator); color: var(--text-secondary);
+        font-size: 10px; font-style: normal; white-space: nowrap;
+    }
+    .dep-tag-count { border-style: dashed; }
     .dep-desc { cursor: help; }
 
     /* ▸ Блок кода */

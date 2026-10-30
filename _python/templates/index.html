@@ -71,10 +71,28 @@
         .mod-tag-imported { border-color: #4a90d9; color: #4a90d9; }
         .mod-tag-own { border-color: #9a7bd0; color: #9a7bd0; }
         .mod-tag-system { border-color: #2e9e6b; color: #2e9e6b; }
+        /* Теги секций man-страниц: в скольких секциях модуль документирован
+           (порядок: системные вызовы → библиотечные → остальные по номеру). */
+        .mod-tag-section { border-color: #b07d2b; color: #b07d2b; }
+        .mod-tag-nosection { border-color: var(--separator); color: var(--text-secondary); }
         .mod-desc {
             text-align: left; color: var(--text-secondary);
             font-size: 12px; line-height: 1.4;
         }
+        /* Таблица индекса Linux/Android: библиотека → секции man-страниц */
+        .section-table {
+            width: 100%; border-collapse: collapse; margin-top: 8px;
+        }
+        .section-table th, .section-table td {
+            text-align: left; padding: 7px 10px;
+            border-bottom: 1px solid var(--separator);
+            vertical-align: top; font-size: 13px;
+        }
+        .section-table th {
+            color: var(--text-secondary); font-weight: 600; font-size: 12px;
+        }
+        .section-table .mod-name { white-space: normal; }
+        .section-table .mod-tag { margin: 0 6px 2px 0; }
     </style>
 </head>
 <body>
@@ -133,10 +151,50 @@
         <p class="meta-text" style="margin-top: 8px;">Сгенерировано: {{ generation_time }}</p>
     </div>
 
-    <!-- ▸ Классификация: интерактивный список + детализация справа -->
+    <!-- ▸ Классификация: Linux/Android - таблица «библиотека → секции man»;
+         Windows - интерактивный список категорий + детализация справа -->
     <div class="card">
         <h2 style="margin-top:0">Классификация импортированных модулей</h2>
-        {% if grouped_categories %}
+        {% if sections_mode %}
+        {% if module_rows %}
+        <p class="meta-text" style="margin-top: 0;">В man-документации библиотека
+            может быть указана сразу в нескольких секциях: в правой колонке -
+            все секции, в которых она фигурирует, в порядке приоритета
+            (Системные вызовы → Библиотечные вызовы → остальные по номеру).</p>
+        <table class="section-table">
+            <thead>
+                <tr>
+                    <th style="width: 45%;">Библиотека</th>
+                    <th>Секции man-страниц</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mod in module_rows %}
+                <tr>
+                    <td>
+                        <span class="mod-name">{{ mod.name }}</span>
+                        {% if mod.tag %}
+                        <span class="mod-tag mod-tag-{{ 'imported' if mod.tag == 'импортирована' else 'own' }}">{{ mod.tag }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if mod.section_tags %}
+                        {% for tag in mod.section_tags %}
+                        <span class="mod-tag" style="border-color: {{ tag.color }}; color: {{ tag.color }};">{{ tag.name }}</span>
+                        {% endfor %}
+                        <span class="mod-tag mod-tag-nosection">секций: {{ mod.section_count }}</span>
+                        {% else %}
+                        <span class="mod-tag mod-tag-nosection">Нет man-страниц</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty-state">Модули не найдены.</p>
+        {% endif %}
+        {% elif grouped_categories %}
         <div class="split-view">
             <div class="split-left">
                 <ul class="cat-list" id="catList">
@@ -204,6 +262,18 @@
                         tag = '<span class="mod-tag mod-tag-own">внутренняя</span>';
                     } else if (mod.tag === 'системная') {
                         tag = '<span class="mod-tag mod-tag-system">системная</span>';
+                    }
+                    var sections = mod.sections || [];
+                    if (sections.length) {
+                        sections.forEach(function(sec) {
+                            tag += '<span class="mod-tag mod-tag-section">' +
+                                   escapeHtml(sec) + '</span>';
+                        });
+                        tag += '<span class="mod-tag mod-tag-nosection">' +
+                               'секций: ' + sections.length + '</span>';
+                    } else {
+                        tag += '<span class="mod-tag mod-tag-nosection">' +
+                               'нет man-страниц</span>';
                     }
                     html += '<div class="mod-entry">' +
                             '<span class="mod-name">' + escapeHtml(mod.name) + tag + '</span>' +

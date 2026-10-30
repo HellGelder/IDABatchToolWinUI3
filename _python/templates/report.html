@@ -53,7 +53,21 @@
                         {% if not is_elf and dep.count > 0 %}
                         <span class="dep-count">{{ dep.count }} функций</span>
                         {% endif %}
+                        {% if dep.section_tags is defined %}
+                        {% if dep.internal %}
+                        <span class="dep-tag" style="border-color: #607D8B; color: #607D8B;">внутренняя</span>
+                        {% endif %}
+                        {% if dep.section_tags %}
+                        {% for tag in dep.section_tags %}
+                        <span class="dep-tag" style="border-color: {{ tag.color }}; color: {{ tag.color }};">{{ tag.name }}</span>
+                        {% endfor %}
+                        <span class="dep-tag dep-tag-count">секций: {{ dep.section_count }}</span>
+                        {% else %}
+                        <span class="dep-tag dep-tag-count">Нет man-страниц</span>
+                        {% endif %}
+                        {% else %}
                         <span class="dep-category">{{ dep.category }}</span>
+                        {% endif %}
                         {% if dep.description %}
                         <span class="dep-desc" title="{{ dep.description }}">ℹ️</span>
                         {% endif %}

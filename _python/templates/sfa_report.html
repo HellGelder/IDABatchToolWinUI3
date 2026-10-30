@@ -124,10 +124,9 @@
     </div>
 
     {% if list_all_imports %}
-    {% set report_categories = system_calls | map(attribute='category') | select | unique | sort %}
     {% if report_categories %}
     <div class="cat-bar" id="cat-bar">
-        <span class="cat-bar-label">Категория:</span>
+        <span class="cat-bar-label">Секция:</span>
         <button class="filter-btn cat-filter active" data-category="" id="cat-all">Все <span class="count">{{ system_calls|length }}</span></button>
         {% for cat in report_categories %}
         <button class="filter-btn cat-filter" data-category="{{ cat }}">{{ cat }} <span class="count">{{ system_calls | selectattr('category', 'equalto', cat) | list | length }}</span></button>
@@ -136,17 +135,17 @@
     {% endif %}
     {% endif %}
 
-    {% if not docs_available %}
+    {% if platform == "Linux / Android" and not manpages_available %}
     <p class="empty-state">
-        {% if platform == "Linux / Android" %}
         Встроенная документация man-pages не найдена (ожидался файл
         app\docs\manpages.db). Функции показаны без документации
         и не отмечены системными. Пересоберите поставку или скопируйте
         базу документации рядом с отчётами (manpages.db).
-        {% else %}
+    </p>
+    {% elif platform != "Linux / Android" and not docs_available %}
+    <p class="empty-state">
         Для платформы {{ platform }} внешний поиск документации
         не выполняется. Список системных функций ниже приведён без документации.
-        {% endif %}
     </p>
     {% endif %}
 
@@ -156,7 +155,7 @@
             <tr>
                 <th style="width:160px;">Библиотека</th>
                 <th style="width:220px;">Функция</th>
-                {% if list_all_imports %}<th style="width:160px;">Категория (man-pages)</th>{% endif %}
+                {% if list_all_imports %}<th style="width:180px;">Секция man-pages</th>{% endif %}
                 {% if list_all_imports %}<th style="width:200px;">Системность</th>{% endif %}
                 <th>Информация ({{ 'man-pages' if platform == 'Linux / Android' else 'Microsoft Learn' }})</th>
             </tr>
