@@ -1,4 +1,4 @@
-<Project>
+﻿<Project>
 
   <!--
     Единый источник версии сборки (F2). Автоматически импортируется MSBuild
@@ -10,10 +10,10 @@
     Лончер и zip штампуются версией из этого файла автоматически.
   -->
   <PropertyGroup>
-    <Version>1.0.0.39</Version>
-    <FileVersion>1.0.0.39</FileVersion>
-    <AssemblyVersion>1.0.0.39</AssemblyVersion>
-    <InformationalVersion>1.0.0.39</InformationalVersion>
+    <Version>1.0.0.41</Version>
+    <FileVersion>1.0.0.41</FileVersion>
+    <AssemblyVersion>1.0.0.41</AssemblyVersion>
+    <InformationalVersion>1.0.0.41</InformationalVersion>
   </PropertyGroup>
 
 </Project>

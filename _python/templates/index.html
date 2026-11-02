@@ -172,7 +172,10 @@
                 {% for mod in module_rows %}
                 <tr>
                     <td>
-                        <span class="mod-name">{{ mod.name }}</span>
+                        <span class="mod-name" title="{{ mod.description }}">{{ mod.name }}</span>
+                        {% if mod.system %}
+                        <span class="mod-tag mod-tag-system">системная</span>
+                        {% endif %}
                         {% if mod.tag %}
                         <span class="mod-tag mod-tag-{{ 'imported' if mod.tag == 'импортирована' else 'own' }}">{{ mod.tag }}</span>
                         {% endif %}

@@ -6,6 +6,38 @@
 Package.appxmanifest и app.manifest синхронно; make-portable.ps1
 и тест VersionConsistencyTests ловят расхождение).
 
+1.0.0.41 / 2026-11-02
+  Изменено:
+  - словарь описаний man-pages: полные русские описания для всех библиотек
+    корпуса (libc, libm, libpthread, librt, libdl, libresolv, libanl,
+    libcrypt, libutil, libnuma, libkeyutils, libaio); в таксономию добавлены
+    libnuma, libkeyutils, libaio (soname libnuma.so.1, libkeyutils.so.1,
+    libaio.so.1);
+  - описания видны в карточках «Прямые зависимости» ELF, в подсказке у имени
+    модуля в индексе ПО и в подсказке у библиотеки в сводном СФ;
+  - описания собраны по данным корпуса: строка LIBRARY/БИБЛИОТЕКА, реальные
+    имена функций и разделы страниц; для libnsl страниц в корпусе нет -
+    описание сохранено прежнее;
+  - тесты: 10 Python-тестов (добавлены проверки покрытия описаний).
+
+1.0.0.40 / 2026-11-02
+  Изменено:
+  - Linux/Android, индекс анализа ПО: библиотека системная только при
+    упоминании в man2 (libc, librt, libnuma, libkeyutils); словарная
+    системность (libm, libpthread, libdl) отключена;
+  - Linux/Android, анализ СФ: функция системная по разделу man2, без
+    привязки к библиотеке (сырые вызовы bpf/restart_syscall тоже
+    системные); подстановка libc для страниц без LIBRARY убрана;
+  - колонка «Библиотека»: все LIBRARY-токены страницы сверяются с
+    зависимостями файла, показывается фактический soname (libc.so.6,
+    librt.so.1); без LIBRARY - «—»; библиотека вне зависимостей - имя
+    из документации с пометкой «не в зависимостях»;
+  - сводный индекс СФ: категория системных библиотек - «Системные
+    вызовы» вместо словарных libc/libm;
+  - тесты: 8 Python-тестов системности Linux (_python/tests).
+  Удалено: неиспользуемый код manpages_taxonomy (manpages_category,
+  library_display, GLIBC_OS_SONAMES, BIONIC_OS_SONAMES).
+
 1.0.0.39 / 2026-10-30
   Изменено:
   - частные HTML-отчёты анализа ПО (ELF, Linux/Android): карточки «Прямые

@@ -30,7 +30,8 @@
         tbody tr.not-found:hover { opacity: 0.75; }
         tbody tr:not(.is-system) td { background: transparent; }
 
-        .dll-cell { white-space: nowrap; font-family: ui-monospace, "SF Mono", "Consolas", monospace; color: var(--accent); width: 160px; }
+        .dll-cell { white-space: nowrap; font-family: ui-monospace, "SF Mono", "Consolas", monospace; color: var(--accent); width: 180px; }
+        .dll-note { display: block; white-space: normal; margin-top: 2px; font-family: inherit; font-size: 10px; color: var(--text-tertiary); }
         .func-cell { font-family: ui-monospace, "SF Mono", "Consolas", monospace; font-weight: 500; width: 220px; }
         .status-cell { width: 200px; white-space: nowrap; }
         .info-cell { min-width: 300px; }
@@ -164,7 +165,7 @@
             {% for call in system_calls %}
             {% set row_class = ("" if call.is_system else "non-system") ~ (" not-found" if not call.found else "") %}
             <tr class="{{ row_class }}" data-found="{{ 'true' if call.found else 'false' }}" data-system="{{ 'true' if call.is_system else 'false' }}"{% if list_all_imports %} data-category="{{ call.category }}"{% endif %}>
-                <td class="dll-cell">{{ call.dll }}</td>
+                <td class="dll-cell">{{ call.dll }}{% if call.dll_note %}<span class="dll-note" title="Библиотека указана на man-странице, но отсутствует в зависимостях файла">{{ call.dll_note }}</span>{% endif %}</td>
                 <td class="func-cell">{{ call.name }}</td>
                 {% if list_all_imports %}
                 <td class="cat-cell">{{ call.category if call.category else '—' }}</td>

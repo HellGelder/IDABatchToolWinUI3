@@ -47,23 +47,86 @@ MANPAGES_LIB_CATEGORIES: dict[str, str] = {
     "libnsl": "libnsl",
     "libcrypt": "libcrypt",
     "libutil": "libutil",
+    # Библиотеки, документированные в корпусе, но не входившие в таксономию:
+    "libnuma": "libnuma",
+    "libkeyutils": "libkeyutils",
+    "libaio": "libaio",
 }
 
 # Русские описания категорий (отчёт анализа ПО показывает их в таблице модулей).
+# Источник - строка LIBRARY/БИБЛИОТЕКА man-страниц библиотеки плюс реальные
+# имена функций корпуса (libnuma, libkeyutils, libaio раньше были вне таблицы).
 MANPAGES_CATEGORY_DESCRIPTIONS: dict[str, str] = {
     "libc": (
-        "Стандартная библиотека C (glibc): функции ISO C, интерфейс системных "
-        "вызовов POSIX, NSS. man-pages: Standard C library (libc, -lc)."
+        "Стандартная библиотека C (glibc): функции ISO C - ввод/вывод (stdio), "
+        "память и строки (stdlib, string), время, локаль, NSS; обёртки системных "
+        "вызовов POSIX (man2) и загрузка разделяемых объектов. "
+        "man-pages: Standard C library (libc, -lc)."
     ),
-    "libm": "Математическая библиотека: sin, cos, sqrt, pow и т.п. (libm, -lm).",
-    "libpthread": "POSIX-потоки и синхронизация: pthread_*, семафоры (libpthread).",
-    "librt": "POSIX-расширения реального времени: aio_*, mq_*, clock, shm (librt).",
-    "libdl": "Динамическая загрузка: dlopen, dlsym (libdl) и страницы загрузчика ld.so.",
-    "libresolv": "DNS-резолвер: resolver(3), dns_* (libresolv).",
-    "libanl": "Асинхронное разрешение имён: getaddrinfo_a (libanl).",
-    "libnsl": "Сетевые службы: NIS/YP, xdr_* (libnsl).",
-    "libcrypt": "Хеширование паролей: crypt, crypt_r (libcrypt/libxcrypt).",
-    "libutil": "Системные утилиты: openpty, forkpty, login_tty (libutil).",
+    "libm": (
+        "Математическая библиотека: тригонометрия (sin, cos, atan), экспоненты и "
+        "логарифмы (exp, log, pow), округление, классификация чисел (isnan, "
+        "isinf), комплексная арифметика (complex(7)). "
+        "man-pages: Math library (libm, -lm)."
+    ),
+    "libpthread": (
+        "POSIX-потоки: создание и завершение (pthread_create, pthread_join), "
+        "атрибуты, мьютексы, условные переменные, блокировки чтения-записи, "
+        "барьеры, семафоры, TLS. man-pages: POSIX threads library "
+        "(libpthread, -lpthread). С glibc 2.34 функции перенесены в libc."
+    ),
+    "librt": (
+        "POSIX-расширения реального времени: асинхронный ввод/вывод (aio_*), "
+        "очереди сообщений (mq_*), POSIX-часы и таймеры (clock_*, timer_*), "
+        "разделяемая память (shm_*). man-pages: Real-time library (librt, -lrt). "
+        "С glibc 2.17 большинство функций перенесено в libc."
+    ),
+    "libdl": (
+        "Динамическая загрузка: dlopen, dlsym, dlvsym, dladdr, dlinfo, dlclose, "
+        "dlmopen; страницы загрузчика ld.so. man-pages: Dynamic linking library "
+        "(libdl, -ldl). С glibc 2.34 - часть libc."
+    ),
+    "libresolv": (
+        "DNS-резолвер: инициализация и запросы (res_init, res_query, res_search), "
+        "разбор и сборка DNS-сообщений (dn_expand, dn_comp), преобразование "
+        "сетевых адресов (inet_net_pton, inet_net_ntop). "
+        "man-pages: Resolver library (libresolv, -lresolv)."
+    ),
+    "libanl": (
+        "Асинхронное разрешение имён: getaddrinfo_a, gai_suspend, gai_error, "
+        "gai_cancel. man-pages: Asynchronous name lookup library (libanl, -lanl)."
+    ),
+    "libnsl": (
+        "Сетевые службы: NIS/YP и XDR-сериализация (xdr_*). В текущем корпусе "
+        "man-pages страниц с этой библиотекой нет - описание сохранено из "
+        "предыдущей версии словаря."
+    ),
+    "libcrypt": (
+        "Хеширование паролей: crypt, crypt_r; шифрование блоков (encrypt, "
+        "encrypt_r, setkey, setkey_r). man-pages: Password hashing library "
+        "(libcrypt, -lcrypt)."
+    ),
+    "libutil": (
+        "Системные утилиты: псевдотерминалы (openpty, forkpty, login_tty), "
+        "учёт входов (login, logout, logwtmp, updwtmp). "
+        "man-pages: System utilities library (libutil, -lutil)."
+    ),
+    "libnuma": (
+        "Политики NUMA: привязка памяти к узлам (mbind, set_mempolicy, "
+        "get_mempolicy) и миграция страниц и процессов (move_pages, "
+        "migrate_pages). man-pages: NUMA (Non-Uniform Memory Access) policy "
+        "library (libnuma, -lnuma)."
+    ),
+    "libkeyutils": (
+        "Управление ключами ядра: request_key; смежные вызовы add_key и keyctl "
+        "документированы на страницах man2. man-pages: Linux Key Management "
+        "Utilities (libkeyutils, -lkeyutils)."
+    ),
+    "libaio": (
+        "Асинхронный ввод/вывод: io_setup и io_destroy; сами вызовы io_submit и "
+        "io_getevents документированы на страницах man2. "
+        "man-pages: Asynchronous I/O library (libaio, -laio)."
+    ),
 }
 
 # Fallback для страниц man-pages без секции LIBRARY: man7-обзорные страницы,
@@ -87,6 +150,9 @@ MANPAGES_CATEGORY_NAMES_RU: dict[str, str] = {
     "libnsl": "Сетевые службы (NIS/YP)",
     "libcrypt": "Хеширование паролей",
     "libutil": "Системные утилиты",
+    "libnuma": "Политики NUMA",
+    "libkeyutils": "Управление ключами ядра",
+    "libaio": "Асинхронный ввод-вывод",
 }
 
 
@@ -253,18 +319,6 @@ def module_library_key(module_name: str) -> str:
     return name
 
 
-def manpages_category(library: str) -> str:
-    """Категория по короткому имени библиотеки из LIBRARY-страницы.
-
-    Пустая строка библиотеки (страницы без LIBRARY) → fallback-категория.
-    Неизвестная библиотека (нет в таблице) → тоже fallback.
-    Для функций частного отчёта СФ НЕ используется (там категория - секция,
-    см. `section_category`); остаётся для библиотечных категорий индекса.
-    """
-    lib = (library or "").strip().lower()
-    return MANPAGES_LIB_CATEGORIES.get(lib, CATEGORY_OS_FALLBACK)
-
-
 # ── Отображаемый soname по варианту платформы ───────────────────────────────
 # В отчёте модуль показывается soname'ом (однородно с DT_NEEDED-импортами).
 # glibc: канонические soname библиотек; bionic (Android): pthread/dl/rt и все
@@ -283,6 +337,10 @@ GLIBC_SONAMES: dict[str, str] = {
     "libnsl": "libnsl.so.1",
     "libutil": "libutil.so.1",
     "libcrypt": "libcrypt.so.1",
+    # Библиотеки вне прежней таксономии (появились в корпусе man-pages):
+    "libnuma": "libnuma.so.1",
+    "libkeyutils": "libkeyutils.so.1",
+    "libaio": "libaio.so.1",
 }
 
 BIONIC_SONAMES: dict[str, str] = {
@@ -301,20 +359,6 @@ BIONIC_SONAMES: dict[str, str] = {
 }
 
 
-def library_display(library: str, variant: str) -> str:
-    """Soname для колонки «Библиотека» в отчёте.
-
-    variant: "glibc" | "android" (детект - по ELF-заметкам android_api).
-    Пустая/неизвестная библиотека → пустая строка (модуль не назначается).
-    """
-    lib = (library or "").strip().lower()
-    if not lib:
-        return ""
-    if variant == "android":
-        return BIONIC_SONAMES.get(lib, "")
-    return GLIBC_SONAMES.get(lib, "")
-
-
 def is_syscall_section(section: str) -> bool:
     """Системность функции по секции её man-страницы.
 
@@ -327,23 +371,6 @@ def is_syscall_section(section: str) -> bool:
     """
     return bool(section) and str(section).startswith("2")
 
-
-# ── Системные soname при классификации модулей по имени (DT_NEEDED) ────────
-# Импорты ELF обычно приходят псевдо-модулем .dynsym, но когда библиотека
-# известна (DT_NEEDED/IDA), системность решается по этим наборам soname.
-
-GLIBC_OS_SONAMES: frozenset[str] = frozenset({
-    "libc.so.6", "libm.so.6", "libmvec.so.1", "libpthread.so.0",
-    "librt.so.1", "libdl.so.2", "libresolv.so.2", "libanl.so.1",
-    "libnsl.so.1", "libutil.so.1", "libcrypt.so.1", "libcrypt.so.2",
-    "ld-linux.so.2", "ld-linux-x86-64.so.2", "ld-linux-aarch64.so.2",
-    # musl (Alpine и др.) - та же документированная man-pages поверхность API:
-    "libc.musl-x86_64.so.1", "libc.musl-aarch64.so.1", "ld-musl-x86_64.so.1",
-})
-
-BIONIC_OS_SONAMES: frozenset[str] = frozenset({
-    "libc.so", "libm.so", "libdl.so", "linker", "linker64",
-})
 
 # Soname динамического загрузчика: страниц у ld.so нет секции LIBRARY,
 # поэтому загрузчик относится к категории libdl (утверждённая таксономия).

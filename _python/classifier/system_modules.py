@@ -1,12 +1,14 @@
-"""Определение системных библиотек по собственным словарям проекта.
+"""Определение системных библиотек по собственным словарям платформ.
 
-Единственная точка принятия решения «является ли библиотека системной».
-Для Linux / Android системность задают таксономия man-pages
-(manpages_taxonomy: glibc- и bionic-soname, классификация функций по
-man-pages) и словари android.py для bionic/AOSP-библиотек, которых в
-man-pages нет. Системными считаются категории «Системные библиотеки ОС»,
-категории man-pages «строго по библиотекам» (libc, libm, …) и
-«Системные библиотеки Android». Криптография (libcrypto, advapi32), сеть
+Словарная системность применяется только к Windows и macOS / iOS:
+Linux / Android системность по словарям НЕ определяется (решение владельца
+2026-11-02). Для Linux «системная» - это библиотека, имя которой встречается
+на страницах man-страниц раздела «Системные вызовы» (man2); набор строится
+из ``docs/manpages.db`` в ``report_bridge`` (``_manpages_man2_libraries``),
+поэтому ``is_system_module`` и ``is_sfa_module`` для Linux возвращают False.
+
+Для Windows / macOS системными считаются категории «Системные библиотеки ОС»
+(``CATEGORY_OS_FALLBACK``). Криптография (libcrypto, advapi32), сеть
 (ws2_32, mpr), графика, данные и среды выполнения (msvcrt, libgcc_s) -
 не системные: они относятся к своим категориям. Запись в объединённом
 словаре платформы сама по себе системности не даёт - она нужна для
@@ -15,10 +17,8 @@ man-pages нет. Системными считаются категории «�
 Источник истины:
 
 * Windows - ``WINDOWS_MODULES``;
-* Linux / Android - soname-наборы ``manpages_taxonomy`` + ``ANDROID_MODULES``
-  (ручные словари linux.py ликвидированы - классификация следует за
-  корпусом man-pages);
-* macOS / iOS - ``MACOS_MODULES``.
+* macOS / iOS - ``MACOS_MODULES``;
+* Linux / Android - man-страницы (``docs/manpages.db``), не этот модуль.
 
 Сторонние библиотеки (``THIRD_PARTY_*``) системными не считаются: они
 преднамеренно исключены, чтобы в отчёт попадали только компоненты ОС.
@@ -34,15 +34,8 @@ from typing import Iterable, Mapping
 
 from .naming import module_name_aliases, normalize_module_name
 from .windows import WINDOWS_MODULES
-from .android import ANDROID_MODULES
 from .macos import MACOS_MODULES
-from .manpages_taxonomy import (
-    GLIBC_OS_SONAMES,
-    BIONIC_OS_SONAMES,
-    MANPAGES_LIB_CATEGORIES,
-    CATEGORY_OS_FALLBACK,
-    CATEGORY_ANDROID,
-)
+from .manpages_taxonomy import CATEGORY_OS_FALLBACK
 
 # Контрактные DLL (API Sets) не перечислены полностью в словаре -
 # они определяются по префиксу имени и относятся только к Windows.
@@ -71,26 +64,6 @@ def _collect_map(dicts: Iterable[Mapping[str, str]]) -> dict[str, str]:
     return result
 
 
-def _linux_map() -> dict[str, str]:
-    """Карта «вариант ключа → канонический soname» для Linux / Android.
-
-    Основу составляют soname-наборы таксономии man-pages (glibc + bionic:
-    libc.so.6, libpthread.so.0, libc.so, linker, …), поверх - словарь
-    android.py (liblog.so, libbinder.so, …). Порядок glibc → bionic:
-    короткая форма «libc» канонизируется в glibc-soname «libc.so.6».
-    """
-    mapping: dict[str, str] = {}
-    for soname in sorted(GLIBC_OS_SONAMES):
-        for alias in module_name_aliases(soname):
-            mapping.setdefault(alias, soname)
-    for soname in sorted(BIONIC_OS_SONAMES):
-        for alias in module_name_aliases(soname):
-            mapping.setdefault(alias, soname)
-    for alias, name in _collect_map([ANDROID_MODULES]).items():
-        mapping.setdefault(alias, name)
-    return mapping
-
-
 # Нормализованные ключи системных модулей по платформам - строятся лениво:
 # module_name_aliases по всем словарям на import-е оплачивался даже прогонами,
 # где is_system_module не вызывается ни разу.
@@ -98,15 +71,19 @@ _SYSTEM_MAP: dict[str, dict[str, str]] = {}
 
 
 def _system_map(platform: str) -> dict[str, str]:
-    """Карта «вариант ключа → имя записи словаря» для платформы (с кэшем)."""
+    """Карта «вариант ключа → имя записи словаря» для платформы (с кэшем).
+
+    Для Linux / Android карта пустая: системность там определяется по
+    man-страницам (man2), а не словарями.
+    """
     mapping = _SYSTEM_MAP.get(platform)
     if mapping is None:
         if platform == "Windows":
             mapping = _collect_map([WINDOWS_MODULES])
-        elif platform == "Linux / Android":
-            mapping = _linux_map()
-        else:
+        elif platform == "macOS / iOS":
             mapping = _collect_map([MACOS_MODULES])
+        else:
+            mapping = {}
         _SYSTEM_MAP[platform] = mapping
     return mapping
 
@@ -144,21 +121,19 @@ def normalize_platform(platform: str) -> str:
 
 
 # Категории, по которым определяются системные библиотеки ОС: «системные» -
-# это базовые библиотеки операционной системы. Для Linux / Android это и
-# категории man-pages «строго по библиотекам» (libc, libm, …), и bionic
-# («Системные библиотеки Android»), и fallback для страниц man-pages без
-# LIBRARY. Криптография (libcrypto, advapi32), сеть (mpr, ws2_32), графика,
-# данные и среды выполнения (msvcrt, libgcc_s) системными не считаются - они
-# относятся к своим категориям и не входят в счётчики системных библиотек
-# ни в индексе, ни в анализе СФ.
+# это базовые библиотеки операционной системы. Словарная системность
+# применяется только к Windows и macOS / iOS (категория
+# «Системные библиотеки ОС»); Linux / Android определяют системность по
+# man-страницам (man2) в report_bridge, а не по этой таблице.
+# Криптография (libcrypto, advapi32), сеть (mpr, ws2_32), графика, данные и
+# среды выполнения (msvcrt, libgcc_s) системными не считаются - они
+# относятся к своим категориям и не входят в счётчики системных библиотек.
 SYSTEM_OS_CATEGORY = "Системные библиотеки ОС"
-SYSTEM_CATEGORIES: frozenset[str] = frozenset(
-    set(MANPAGES_LIB_CATEGORIES.values()) | {CATEGORY_OS_FALLBACK, CATEGORY_ANDROID}
-)
+SYSTEM_CATEGORIES: frozenset[str] = frozenset({CATEGORY_OS_FALLBACK})
 
 
 def _is_os_library(module_name: str, platform: str = "Windows") -> bool:
-    """Библиотека из системных категорий (ОС / man-pages / Android)."""
+    """Библиотека из системной категории словаря (Windows / macOS)."""
     canon = get_system_module_name(module_name, platform)
     if not canon:
         return False
@@ -170,21 +145,19 @@ def _is_os_library(module_name: str, platform: str = "Windows") -> bool:
 def is_system_module(module_name: str, platform: str = "Windows") -> bool:
     """Относится ли модуль к системным библиотекам ОС.
 
-    Проверяется категория канонического имени: «Системные библиотеки ОС»
-    (Windows, macOS), категории man-pages «строго по библиотекам» и
-    «Системные библиотеки Android» (Linux / Android). Запись в словаре ещё
-    не делает библиотеку системной (libcrypto - криптография, libgcc_s -
-    среда выполнения, ws2_32 - сеть).
+    Для Windows и macOS проверяется категория канонического имени
+    («Системные библиотеки ОС»). Для Linux / Android словарный критерий
+    отменён: системность определяется по man-страницам (man2) в
+    report_bridge, поэтому здесь всегда False.
 
     Args:
         module_name: имя модуля из импорта (``kernel32.dll``, ``libc.so.6``,
             ``Foundation.framework`` и т.п.).
         platform: целевая платформа (ключ ``PLATFORM_EXTENSIONS`` или его
-            нестрогий синоним). Для неизвестной платформы модуль проверяется
-            по словарям всех платформ.
+            нестрогий синоним).
 
     Returns:
-        True, если модуль входит в системную категорию.
+        True, если модуль входит в системную категорию словаря.
     """
     return _is_os_library(module_name, platform)
 
@@ -231,14 +204,12 @@ def get_system_module_name(module_name: str, platform: str = "Windows") -> str:
 
 # Категории для отчётов СФ - те же системные (см. SYSTEM_CATEGORIES выше).
 # is_sfa_module оставлен как отдельное имя для читаемости вызывающего кода
-# (СФ-отчёты): критерий совпадает с is_system_module, чтобы «Системных
-# библиотек» в СФ и системные категории в индексе не расходились.
+# (СФ-отчёты): критерий совпадает с is_system_module.
 def is_sfa_module(module_name: str, platform: str = "Windows") -> bool:
-    """Модуль входит в отчёты СФ: системная библиотека (критерий тот же,
-    что у is_system_module).
+    """Модуль входит в отчёты СФ по словарному критерию (Windows / macOS).
 
-    Криптография (libcrypto/libssl), сеть, графика и runtime (libgcc_s)
-    системными не считаются - иначе «Системных библиотек» в СФ расходится
-    с категориями отчёта анализа ПО.
+    Для Linux / Android словарная системность отменена: системный вызов
+    определяется разделом man-страницы (man2) в report_bridge, поэтому
+    здесь всегда False.
     """
     return _is_os_library(module_name, platform)

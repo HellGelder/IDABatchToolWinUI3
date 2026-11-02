@@ -78,15 +78,15 @@
     "semantic_hash": "65e1b2b3a6085a0db215156a813d4e0f"
   },
   "Pages/SettingsPage.xaml": {
-    "mtime": 1793022490.4222176,
-    "seen": 1793026571.8380797,
-    "ast_hash": "b9537af77d46a29ae7bb889e43c80062",
-    "semantic_hash": "b9537af77d46a29ae7bb889e43c80062"
+    "mtime": 1793340647.4435444,
+    "seen": 1793625065.5092318,
+    "ast_hash": "85be051d0179b7fefac0fb36b3215c64",
+    "semantic_hash": ""
   },
   "Pages/SettingsPage.xaml.cs": {
-    "mtime": 1793083783.2095366,
-    "seen": 1793084315.579279,
-    "ast_hash": "68be50afe73451bbc0c578243e575cf3",
+    "mtime": 1793340647.4465258,
+    "seen": 1793625065.5092366,
+    "ast_hash": "b41e543feb933ba306f79405bbaecf0b",
     "semantic_hash": ""
   },
   "Pages/SfaPage.xaml": {
@@ -96,9 +96,9 @@
     "semantic_hash": "c0c48391b68cff62553ffff40a2bbc25"
   },
   "Pages/SfaPage.xaml.cs": {
-    "mtime": 1793278724.3484702,
-    "seen": 1793279019.0636714,
-    "ast_hash": "3ebd922b57a9e54793209f71d4537762",
+    "mtime": 1793340647.4495249,
+    "seen": 1793625065.5092432,
+    "ast_hash": "818c47b6971f779de38545d6a3a7856a",
     "semantic_hash": ""
   },
   "Properties/launchSettings.json": {
@@ -114,9 +114,9 @@
     "semantic_hash": ""
   },
   "Services/AppConstants.cs": {
-    "mtime": 1793276353.7651708,
-    "seen": 1793279019.0636823,
-    "ast_hash": "0480027b2900711ffc4eb3befbf9ffcf",
+    "mtime": 1793340647.4555683,
+    "seen": 1793625065.5092556,
+    "ast_hash": "1713d808584ee154430130b548e2c93b",
     "semantic_hash": ""
   },
   "Services/AppNotifier.cs": {
@@ -132,10 +132,10 @@
     "semantic_hash": "68b6e5cab83f4092316565cbc5176348"
   },
   "Services/ConfigService.cs": {
-    "mtime": 1793025951.3919392,
-    "seen": 1793026571.8382316,
-    "ast_hash": "cdd72641038375fb32ccd251dbd65dd6",
-    "semantic_hash": "cdd72641038375fb32ccd251dbd65dd6"
+    "mtime": 1793340647.4586067,
+    "seen": 1793625065.509275,
+    "ast_hash": "f3f5e6b2bc6e8f97a013e97e6067ab5a",
+    "semantic_hash": ""
   },
   "Services/DirectoriesDiffService.cs": {
     "mtime": 1793025951.3998716,
@@ -209,12 +209,6 @@
     "ast_hash": "5553871ea25016240837dee6dec46a5e",
     "semantic_hash": ""
   },
-  "Workers/ManPagesSyncWorker.cs": {
-    "mtime": 1793025951.4599943,
-    "seen": 1793026571.8383923,
-    "ast_hash": "e4cd76de4b0584c5fe0a360e29600ea9",
-    "semantic_hash": "e4cd76de4b0584c5fe0a360e29600ea9"
-  },
   "_python/classifier/__init__.py": {
     "mtime": 1793022490.4754078,
     "seen": 1793026571.8383946,
@@ -228,16 +222,10 @@
     "semantic_hash": "7a410895b0c702ce656d7b341d56a831"
   },
   "_python/classifier/categories.py": {
-    "mtime": 1793025951.545986,
-    "seen": 1793026571.8383992,
-    "ast_hash": "5ed3867a9e2ee7833c9d0e509348f098",
-    "semantic_hash": "5ed3867a9e2ee7833c9d0e509348f098"
-  },
-  "_python/classifier/linux.py": {
-    "mtime": 1793025951.564933,
-    "seen": 1793026571.8384013,
-    "ast_hash": "443c4c037f782012a2b04e5883f54491",
-    "semantic_hash": "443c4c037f782012a2b04e5883f54491"
+    "mtime": 1793340647.4626431,
+    "seen": 1793625065.50941,
+    "ast_hash": "8ecf2d3343a4e176a4df11fb78d43a63",
+    "semantic_hash": ""
   },
   "_python/classifier/macos.py": {
     "mtime": 1793025951.5821402,
@@ -252,15 +240,15 @@
     "semantic_hash": ""
   },
   "_python/classifier/platform_classifier.py": {
-    "mtime": 1793022490.4832103,
-    "seen": 1793026571.8384285,
-    "ast_hash": "fce28ac38c2b2debee81df0fa23085f3",
-    "semantic_hash": "fce28ac38c2b2debee81df0fa23085f3"
+    "mtime": 1793340647.465603,
+    "seen": 1793625065.509425,
+    "ast_hash": "d4a7b88187869177ad8db19609b63a43",
+    "semantic_hash": ""
   },
   "_python/classifier/system_modules.py": {
-    "mtime": 1793275702.777544,
-    "seen": 1793279019.06379,
-    "ast_hash": "cc5db0fddc82badb13b25c69c5f6f96e",
+    "mtime": 1793624536.7698667,
+    "seen": 1793625065.5094283,
+    "ast_hash": "8433fb1d95db52f4019856c89a6cdbfe",
     "semantic_hash": ""
   },
   "_python/classifier/third_party.py": {
@@ -287,28 +275,22 @@
     "ast_hash": "d8f7162847b132d9b73644b8dd897585",
     "semantic_hash": "d8f7162847b132d9b73644b8dd897585"
   },
-  "_python/manpages_bridge.py": {
-    "mtime": 1793270439.2731426,
-    "seen": 1793279019.063804,
-    "ast_hash": "b3dd41343e3b7af2ceaf55a98058e78e",
-    "semantic_hash": ""
-  },
   "_python/report_bridge.py": {
-    "mtime": 1793276429.1066008,
-    "seen": 1793279019.0638063,
-    "ast_hash": "0507ac591b941c16f5e16c5c75b6775c",
+    "mtime": 1793626651.9665368,
+    "seen": 1793626855.5892472,
+    "ast_hash": "edabdb94838f9f9e6ee768cb7b40924f",
     "semantic_hash": ""
   },
   "install-prereqs.ps1": {
-    "mtime": 1793025951.2836483,
-    "seen": 1793026571.8385315,
-    "ast_hash": "a431aecb33f24fe43bdcf1d80bd288e3",
-    "semantic_hash": "a431aecb33f24fe43bdcf1d80bd288e3"
+    "mtime": 1793340647.6386719,
+    "seen": 1793625065.5094538,
+    "ast_hash": "60110a89395754ebfc12d20e5a0f5d5e",
+    "semantic_hash": ""
   },
   "make-portable.ps1": {
-    "mtime": 1793080323.649706,
-    "seen": 1793080699.141804,
-    "ast_hash": "08c37d903728204e106967e8797de4f0",
+    "mtime": 1793340647.642576,
+    "seen": 1793625065.5094564,
+    "ast_hash": "45ac1a354f4c92aebf75753e70786541",
     "semantic_hash": ""
   },
   "scripts/export_data.py": {
@@ -318,15 +300,15 @@
     "semantic_hash": "705892103471c830b0ad61041086560c"
   },
   "AGENTS.md": {
-    "mtime": 1793080323.6366394,
-    "seen": 1793080699.1418712,
-    "ast_hash": "95e44268d5801288cd693c901b07a2c4",
+    "mtime": 1793340647.4325962,
+    "seen": 1793625065.5095181,
+    "ast_hash": "353cf0f3e0d812e5b0631704d46459ea",
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1793086709.4098814,
-    "seen": 1793262223.2407873,
-    "ast_hash": "003ccee3d6f38179ab68fb98e0ae1ab6",
+    "mtime": 1793346301.209438,
+    "seen": 1793625065.5095212,
+    "ast_hash": "b9e25506bd5c82549a69235a4ab64f47",
     "semantic_hash": ""
   },
   "README.txt": {
@@ -366,27 +348,27 @@
     "semantic_hash": ""
   },
   "_python/templates/index.html": {
-    "mtime": 1793275730.0142946,
-    "seen": 1793279019.0638766,
-    "ast_hash": "bc461607a6ea4538697fa738d14b6ed5",
+    "mtime": 1793626655.1728675,
+    "seen": 1793626855.5893314,
+    "ast_hash": "e6b544e6c436dc67fce4c40f6818c74b",
     "semantic_hash": ""
   },
   "_python/templates/report.html": {
-    "mtime": 1793022490.5002058,
-    "seen": 1793080699.1419067,
-    "ast_hash": "cd743acb51abca9a53fed8ec21fb78a3",
+    "mtime": 1793346230.5067463,
+    "seen": 1793625065.5095649,
+    "ast_hash": "fbe223ba986f4831ca14b58bd7a9e055",
     "semantic_hash": ""
   },
   "_python/templates/sfa_index.html": {
-    "mtime": 1793022490.5012302,
-    "seen": 1793080699.1419108,
-    "ast_hash": "cde7176e5012357099cccced410932c3",
+    "mtime": 1793340647.4805274,
+    "seen": 1793625065.5095685,
+    "ast_hash": "fff02ad0bcb88f688b2ccfd41f03f6fa",
     "semantic_hash": ""
   },
   "_python/templates/sfa_report.html": {
-    "mtime": 1793025951.8749983,
-    "seen": 1793080699.1419148,
-    "ast_hash": "da7560850c02131dd12e8ddc2f549ee8",
+    "mtime": 1793624657.7838798,
+    "seen": 1793625065.5095716,
+    "ast_hash": "2afca977fbcc6321037db1f0b079df8c",
     "semantic_hash": ""
   },
   "config.yaml": {
@@ -396,9 +378,9 @@
     "semantic_hash": ""
   },
   "version.txt": {
-    "mtime": 1793278871.2890122,
-    "seen": 1793279019.063891,
-    "ast_hash": "d93eb21fc3577389fe483204c8d7977d",
+    "mtime": 1793626675.1838343,
+    "seen": 1793626855.589348,
+    "ast_hash": "28261f59e047cdb56dc735d5bcc00674",
     "semantic_hash": ""
   },
   "sfb-logo.png": {
@@ -516,10 +498,10 @@
     "semantic_hash": "1ef1a013c0be3d171500e2276b72b8b6"
   },
   "Services/ConfigStore.cs": {
-    "mtime": 1793025951.3958766,
-    "seen": 1793026571.8382459,
-    "ast_hash": "503e21ccea923a3392d75eae58d19463",
-    "semantic_hash": "503e21ccea923a3392d75eae58d19463"
+    "mtime": 1793340647.459575,
+    "seen": 1793625065.509278,
+    "ast_hash": "f01d154a72ad5cc204b58a6277143c37",
+    "semantic_hash": ""
   },
   "Services/InputScanner.cs": {
     "mtime": 1793086574.9613483,
@@ -600,10 +582,10 @@
     "semantic_hash": "bb884da27181e628194819257330a5d7"
   },
   "tests/IDABatchToolWinUI.Tests/ConfigStoreTests.cs": {
-    "mtime": 1793022491.077212,
-    "seen": 1793026571.8385744,
-    "ast_hash": "25f2995436127487ef08e10bcbcb41b8",
-    "semantic_hash": "25f2995436127487ef08e10bcbcb41b8"
+    "mtime": 1793340647.648669,
+    "seen": 1793625065.5094779,
+    "ast_hash": "57427a6a113b3958d403c4cdccb13e43",
+    "semantic_hash": ""
   },
   "tests/IDABatchToolWinUI.Tests/DiffParserTests.cs": {
     "mtime": 1793025951.4459019,
@@ -657,6 +639,48 @@
     "mtime": 1793277053.5152931,
     "seen": 1793279019.0638318,
     "ast_hash": "dbb44856345fca5dc512d7505ab8609d",
+    "semantic_hash": ""
+  },
+  "_python/classifier/manpages_taxonomy.py": {
+    "mtime": 1793626624.3062673,
+    "seen": 1793626855.5892181,
+    "ast_hash": "144525207a42abaeca13fdf213197c2f",
+    "semantic_hash": ""
+  },
+  "_python/manpages_build.py": {
+    "mtime": 1793340647.4685433,
+    "seen": 1793625065.5094454,
+    "ast_hash": "6f992186ec49873ed4de1a5c2072da5d",
+    "semantic_hash": ""
+  },
+  "_python/tests/test_linux_systemness.py": {
+    "mtime": 1793626663.1267023,
+    "seen": 1793626855.5892498,
+    "ast_hash": "d4e4f644810119185a97d5f9aff76adb",
+    "semantic_hash": ""
+  },
+  "scripts/build-manpages.ps1": {
+    "mtime": 1793342110.3998992,
+    "seen": 1793625065.509459,
+    "ast_hash": "04a7184af81572da050c11f0bf73ca91",
+    "semantic_hash": ""
+  },
+  "scripts/extract_corpus.py": {
+    "mtime": 1793340647.646516,
+    "seen": 1793625065.509465,
+    "ast_hash": "649f18573ab1788926fef06970861701",
+    "semantic_hash": ""
+  },
+  "unblock-portable.ps1": {
+    "mtime": 1793340647.6505485,
+    "seen": 1793625065.5095143,
+    "ast_hash": "bb3ac5417dee9d964c49d52d157177e3",
+    "semantic_hash": ""
+  },
+  "docs/MANPAGES-SOURCES.txt": {
+    "mtime": 1793340647.4885676,
+    "seen": 1793625065.5095785,
+    "ast_hash": "855adbc24fe5b353920b5919f2552b7a",
     "semantic_hash": ""
   }
 }

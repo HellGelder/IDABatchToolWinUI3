@@ -224,14 +224,12 @@ def normalize_display_name(module_name):
 
 from classifier.platform_classifier import classify_module as _classifier_describe
 from classifier.categories import get_module_category_and_description
-from classifier.system_modules import get_system_module_name as _classifier_system_name
 from classifier.system_modules import is_sfa_module as _classifier_is_sfa
 from classifier.system_modules import is_system_module as _classifier_is_system
 from classifier.system_modules import normalize_platform as _normalize_platform
 from classifier.manpages_taxonomy import (
     section_rank as _mp_section_rank,
     lang_rank as _mp_lang_rank,
-    library_display as _mp_library_display,
     is_syscall_section as _mp_is_syscall_section,
     section_base as _mp_section_base,
     section_category as _mp_section_category,
@@ -355,26 +353,32 @@ def _build_internal_set(input_dir):
 
 
 def _collect_own_system_libs(input_dir, platform):
-    """Собственные системные библиотеки: файлы исследуемой директории
-    категории «Системные библиотеки ОС».
+    """Собственные системные библиотеки: файлы исследуемой директории.
 
-    Счётчик «Системных библиотек» сводки СФ - по уникальным импортированным
-    библиотекам ОС плюс собственные библиотеки ОС (та же категория, что и
-    группа «Системные библиотеки ОС» в индексе общего анализа).
+    Linux / Android: системная - библиотека, упомянутая в man2
+    (критерий владельца 2026-11-02), а не словарная категория ОС.
+    Windows / macOS: прежний словарный критерий.
+
+    Счётчик «Системных библиотек» сводки СФ от этого больше не зависит:
+    он считается по строкам отчёта.
     """
     names = set()
     root = Path(input_dir) if input_dir else None
     if root is None or not root.is_dir():
         return names
+    is_linux = bool(platform) and _normalize_platform(platform) == "Linux / Android"
+    man2_libraries = _manpages_man2_libraries() if is_linux else frozenset()
     try:
         for f in root.rglob('*'):
             if not f.is_file():
                 continue
-            # Платформа неизвестна - библиотека ОС любой платформы
-            # (normalize_platform('') даёт Windows, поэтому явно по всем).
-            if platform:
+            if is_linux:
+                known = _mp_module_library_key(f.name) in man2_libraries
+            elif platform:
                 known = _is_sfa_module(f.name, platform)
             else:
+                # Платформа неизвестна - библиотека ОС любой платформы
+                # (normalize_platform('') даёт Windows, поэтому явно по всем).
                 known = any(_is_sfa_module(f.name, p) for p in
                             ("Windows", "Linux / Android", "macOS / iOS"))
             if known:
@@ -667,8 +671,12 @@ def generate_analysis_index(reports_dir, input_dir, report_links, global_modules
             # Категория = секция man-страницы: модуль попадает во все секции,
             # в которых документирован (libc - и в системные, и в библиотечные).
             sections = _sections_for(mod)
+            # Системная библиотека - упоминание в man2 (решение 2026-11-02),
+            # а не словарная категория ОС.
+            is_system = _mp_module_library_key(mod) in _manpages_man2_libraries()
             module_rows.append({
-                "name": mod, "tag": tag,
+                "name": mod, "tag": tag, "system": is_system,
+                "description": desc,
                 "sections": [_mp_section_category(s) for s in sections],
                 "section_tags": _module_section_tags(mod, library_sections),
                 "section_count": len(sections),
@@ -1612,6 +1620,56 @@ def _manpages_library_sections():
     return sections
 
 
+_MANPAGES_MAN2_LIBRARIES_CACHE = None
+
+
+def _manpages_man2_libraries():
+    """Токены библиотек, упомянутых в man2 — критерий системности Linux.
+
+    Библиотека считается системной, если её LIBRARY-токен встречается на
+    страницах раздела «Системные вызовы» (2/2const/2type). Источник —
+    встроенная ``docs/manpages.db``; без неё набор пуст.
+    """
+    global _MANPAGES_MAN2_LIBRARIES_CACHE
+    if _MANPAGES_MAN2_LIBRARIES_CACHE is None:
+        _MANPAGES_MAN2_LIBRARIES_CACHE = {
+            lib for lib, sections in _manpages_library_sections().items()
+            if "2" in sections
+        }
+    return _MANPAGES_MAN2_LIBRARIES_CACHE
+
+
+def _match_needed_libraries(libraries, needed_libs):
+    """Сверяет LIBRARY-токены страницы с зависимостями файла.
+
+    Токен ``libc`` сопоставляется с soname из DT_NEEDED через общий
+    ``module_library_key`` (``libc.so.6``, ``libc.so``, ``libc.musl-*``,
+    ``ld-linux*`` → ``libdl``). Возвращает ``(matched, unmatched)``:
+    подтверждённые soname (в порядке страницы, без повторов) и токены,
+    которых в зависимостях файла нет.
+    """
+    by_token: dict[str, list[str]] = {}
+    for needed in needed_libs or []:
+        key = _mp_module_library_key(needed)
+        if key:
+            by_token.setdefault(key, []).append(needed)
+
+    matched: list[str] = []
+    unmatched: list[str] = []
+    seen: set[str] = set()
+    for token in libraries or []:
+        key = str(token).strip().lower()
+        sons = by_token.get(key)
+        if sons:
+            for son in sons:
+                if son not in seen:
+                    seen.add(son)
+                    matched.append(son)
+        elif key and key not in unmatched:
+            unmatched.append(key)
+    return matched, unmatched
+
+
 def _manpages_get_page(conn, func_name):
     """Документация функции из встроенной БД man-pages.
 
@@ -1640,13 +1698,16 @@ def _manpages_get_page(conn, func_name):
         return None
     rows.sort(key=lambda r: (_mp_section_rank(r[1]), _mp_lang_rank(r[2])))
     page_name, section, lang, title, library, html = rows[0]
+    # LIBRARY может перечислять несколько библиотек через запятую
+    # («libc,librt») - отдаём полный набор, не только первую.
+    libraries = [t.strip() for t in (library or "").split(",") if t.strip()]
     return {
         "title": f"{page_name}({section})",
         "page_name": page_name,
         "section": section,
         "lang": lang,
-        # Могут быть перечислены через запятую («libc,librt») - берём первую.
-        "library": (library or "").split(",")[0].strip(),
+        "library": libraries[0] if libraries else "",
+        "libraries": libraries,
         "html": html or "",
     }
 
@@ -1802,11 +1863,6 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
     # man-страницы были подставлены в каждую строку.
     manpages_available = use_manpages and _manpages_count(manpages_conn) > 0
 
-    # Вариант платформы внутри «Linux / Android»: bionic-канонизация soname
-    # применяется только к бинарникам с Android ELF-заметкой (android_api),
-    # остальные получают glibc-soname (утверждённое правило).
-    manpages_variant = "android" if data.get("android_api") is not None else "glibc"
-
     file_name = os.path.basename(data.get("file_name", str(json_path)))
     imports = data.get("imports", [])
     total_imports = len(imports)
@@ -1859,14 +1915,50 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
         found = False
         needs_doc = False
         # Системность man-страницы: только секция system calls (2*, включая
-        # 2const/2type - константы/типы syscall-домена). Документированность
-        # в секциях 3/7/1 и прочих системности НЕ даёт (правило владельца
-        # 2026-10-29). Bionic-функции вне man-pages документации системными
-        # не отмечаются (v1).
+        # 2const/2type - константы/типы syscall-домена). Библиотека на
+        # системность НЕ влияет (решение владельца 2026-11-02): сырые вызовы
+        # ядра без LIBRARY (bpf, restart_syscall) тоже системные.
+        is_syscall = False
+        # Windows: системность псевдо-модуля определяется DLL из кэша MS Learn.
         lib_is_sfa = False
-        mp_library = None
         mp_section = ""
-        if doc_cache is not None and doc_cache.has_function(func_name):
+        dll_note = ""
+        dll_sonames = []
+        # На Linux локальная документация важнее кэша MS Learn: кэш мог
+        # остаться от Windows-прогона в том же каталоге отчётов.
+        if use_manpages:
+            if manpages_conn is not None:
+                page = _manpages_get_page(manpages_conn, func_name)
+                if page:
+                    results = [page]
+                    found = True
+                    mp_section = page["section"]
+                    is_syscall = _mp_is_syscall_section(mp_section)
+                    libraries = page.get("libraries") or []
+                    matched, _unmatched = _match_needed_libraries(
+                        libraries, data.get("needed_libs"))
+                    dll_sonames = matched
+                    if matched:
+                        # Библиотека подтверждена списком зависимостей файла -
+                        # показываем фактический soname (libc.so.6, librt.so.1).
+                        dll_name = ", ".join(matched)
+                    elif libraries:
+                        # Библиотека документирована, но файл её не подключает:
+                        # libc не подставляем, показываем имя из документации
+                        # с пометкой (решение владельца 2026-11-02).
+                        dll_name = ", ".join(libraries)
+                        dll_note = "не в зависимостях"
+                    else:
+                        # Прямой вызов ядра: страница не называет библиотеку.
+                        dll_name = "—"
+                    log(f"[INFO] man-pages: {func_name} → {page['title']}"
+                        f" [{page['lang']} / секция {page['section']}]"
+                        + (f" [{dll_name}]" if dll_name else ""))
+                else:
+                    log(f"[INFO] man-pages: страница для {func_name} не найдена")
+            else:
+                log(f"[INFO] {func_name}: встроенная БД man-pages недоступна")
+        elif doc_cache is not None and doc_cache.has_function(func_name):
             results = doc_cache.get_results(func_name)
             cached_dll = doc_cache.get_dll_name(func_name)
             if cached_dll:
@@ -1874,31 +1966,6 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
                 lib_is_sfa = _classifier_is_sfa(cached_dll, platform)
             found = bool(results)
             log(f"[INFO] Using cached results for {func_name} (count: {len(results)})")
-        elif use_manpages:
-            if manpages_conn is not None:
-                page = _manpages_get_page(manpages_conn, func_name)
-                if page:
-                    results = [page]
-                    found = True
-                    mp_library = page["library"]
-                    mp_section = page["section"]
-                    # Сисколлы man2 без секции LIBRARY (creat, dup2,
-                    # clock_gettime…) реализуются обёртками libc по
-                    # определению man-pages(7) - иначе библиотека в отчёте
-                    # оставалась «-» и не попадала в счётчик системных.
-                    if not mp_library and _mp_section_base(mp_section) == "2":
-                        mp_library = "libc"
-                    lib_name = _mp_library_display(mp_library, manpages_variant)
-                    if lib_name:
-                        dll_name = lib_name
-                    lib_is_sfa = _mp_is_syscall_section(page["section"])
-                    log(f"[INFO] man-pages: {func_name} → {page['title']}"
-                        f" [{page['lang']} / секция {page['section']}]"
-                        + (f" [{dll_name}]" if lib_name else ""))
-                else:
-                    log(f"[INFO] man-pages: страница для {func_name} не найдена")
-            else:
-                log(f"[INFO] {func_name}: встроенная БД man-pages недоступна")
         elif reuse_cache and doc_manager is not None:
             # Reuse-режим с добором: кэш неполон (записи от прошлых прогонов,
             # поиск мог быть прерван) - недостающую документацию ищем в npx,
@@ -1943,11 +2010,14 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
             "module": module,
             "address": imp.get("address", ""),
             "dll": dll_name,
+            "dll_note": dll_note,
+            "dll_sonames": dll_sonames,
             "is_pseudo": is_pseudo_module,
             "module_is_system": module_is_system,
             "results": results,
             "found": found,
             "needs_doc": needs_doc,
+            "is_syscall": is_syscall,
             "lib_is_sfa": lib_is_sfa,
             "category": category,
             "section": mp_section,
@@ -1992,7 +2062,7 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
         dll_name = row["dll"]
         results = row["results"]
         found = row["found"]
-        lib_is_sfa = row["lib_is_sfa"]
+        is_syscall = row["is_syscall"]
         if row["needs_doc"]:
             results, dll_from_md = resolved.get(func_name, ([], ""))
             found = bool(results)
@@ -2000,16 +2070,16 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
                 dll_name = dll_from_md
 
         # Системность: на Linux/Android - только man-секция system calls (2*).
-        # Известная системная библиотека импорта (DT_NEEDED) и документированность
-        # в других секциях системности НЕ дают (правило владельца 2026-10-29).
+        # Библиотека и её наличие в зависимостях системности НЕ дают
+        # (решение владельца 2026-11-02): сырые вызовы ядра системные.
         # На Windows - словарь: системная библиотека импорта; для псевдо-модуля
-        # .dynsym системность решается кэшем документации.
+        # .dynsym системность решается DLL из кэша документации.
         if use_manpages:
-            is_system_call = bool(lib_is_sfa)
+            is_system_call = bool(is_syscall)
         elif row["module_is_system"]:
             is_system_call = True
         elif row["is_pseudo"]:
-            is_system_call = bool(lib_is_sfa)
+            is_system_call = bool(row.get("lib_is_sfa"))
         else:
             is_system_call = False
 
@@ -2023,6 +2093,8 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
         entries.append({
             "name": func_name,
             "dll": dll_name,
+            "dll_note": row.get("dll_note", ""),
+            "dll_sonames": row.get("dll_sonames") or [],
             "address": row["address"],
             "module": row["module"],
             "search_results": results or [],
@@ -2045,11 +2117,19 @@ def generate_sfa_report(json_path, output_html, reports_dir, input_dir,
     notfound_count = len(system_entries) - found_count
     notfound_names = {e["name"] for e in entries if not e["found"]}
     system_notfound_names = {e["name"] for e in system_entries if not e["found"]}
-    # Системные библиотеки (правило владельца 2026-10-30): только те, из
-    # которых в отчёт попали системные строки (man2) - «библиотеки секции
-    # системных вызовов». Словарный критерий 1.0.0.28 и добавление собственных
-    # библиотек ОС отменены: счётчик обязан быть производным от отчёта.
-    system_libs = {e["dll"] for e in system_entries if e["dll"] and e["dll"] != "-"}
+    # Системные библиотеки: на Linux - только подтверждённые soname из
+    # зависимостей файла, из которых в отчёт попали системные строки (man2);
+    # сырые вызовы ядра (библиотека «—») входят в «Системные функции», но не
+    # в этот счётчик. На Windows - прежний критерий по колонке «Библиотека».
+    if use_manpages:
+        system_libs = {
+            soname for e in system_entries
+            for soname in (e.get("dll_sonames") or [])
+        }
+    else:
+        system_libs = {
+            e["dll"] for e in system_entries if e["dll"] and e["dll"] != "-"
+        }
 
     # Секции отчёта в утверждённом порядке: системные вызовы → библиотечные →
     # остальные по номеру (фильтры над таблицей).
@@ -2107,9 +2187,19 @@ def generate_sfa_index(reports_dir, input_dir, report_links, ida_info,
                        modules=None):
     # Модули (системные библиотеки) категорируются по таксономии man-pages
     # (для Windows - по своим словарям): категория берётся по soname модуля.
+    # На Linux системная библиотека - та, что документирует системные вызовы
+    # (man2), поэтому словарные категории (libc/libm) здесь не применяются.
+    is_linux = _normalize_platform(platform) == "Linux / Android"
     module_rows = []
     for m in sorted(modules or []):
-        cat, desc = get_module_category_and_description(m)
+        if is_linux:
+            cat = "Системные вызовы"
+            desc = _classifier_describe(m)
+            if not desc or desc == _UNKNOWN_DESC:
+                desc = ("Библиотека документирует функции раздела «Системные "
+                        "вызовы» (man2).")
+        else:
+            cat, desc = get_module_category_and_description(m)
         module_rows.append({"name": m, "category": cat, "description": desc})
     ctx = {
         "input_dir": input_dir,
