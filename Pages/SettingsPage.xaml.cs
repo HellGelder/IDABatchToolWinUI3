@@ -38,7 +38,59 @@ public sealed partial class SettingsPage : Page
 
         CheckManPagesButton.Click += (_, _) => RunSafe(CheckManPagesAsync(showPopup: true));
 
+        // Актуальность версии: результат может прийти уже после открытия
+        // вкладки - подписываемся и показываем то, что известно сейчас.
+        VersionCheckState.Changed += OnVersionCheckChanged;
+        Unloaded += (_, _) => VersionCheckState.Changed -= OnVersionCheckChanged;
+        ApplyVersionState();
+
         LoadToUi();
+    }
+
+    private void OnVersionCheckChanged()
+    {
+        // Событие приходит из фонового потока - инфобар трогаем в UI-потоке.
+        DispatcherQueue.TryEnqueue(ApplyVersionState);
+    }
+
+    private void ApplyVersionState()
+    {
+        var result = VersionCheckState.Result;
+        if (result == null)
+        {
+            // Проверка ещё идёт - инфобар не показываем.
+            VersionInfoBar.IsOpen = false;
+            return;
+        }
+
+        VersionInfoBar.IsOpen = true;
+        if (!result.Succeeded)
+        {
+            // Нейтральный инфобар: отсутствие сети не мешает работе.
+            VersionInfoBar.Severity = InfoBarSeverity.Informational;
+            VersionInfoBar.Title = "Версия не проверена";
+            VersionInfoBar.Message =
+                "Не удалось проверить актуальность версии. " +
+                (string.IsNullOrWhiteSpace(result.Error) ? "" : result.Error);
+        }
+        else if (result.IsOutdated)
+        {
+            VersionInfoBar.Severity = InfoBarSeverity.Warning;
+            VersionInfoBar.Title = "Доступна новая версия";
+            VersionInfoBar.Message =
+                $"Установлена версия {result.CurrentVersion}, " +
+                $"актуальная - {result.LatestVersion}.";
+        }
+        else
+        {
+            VersionInfoBar.Severity = InfoBarSeverity.Success;
+            VersionInfoBar.Title = "Актуальная версия";
+            VersionInfoBar.Message =
+                $"Установлена актуальная версия {result.CurrentVersion}.";
+        }
+
+        // Пользователь видит сообщение - значок «непрочитано» больше не нужен.
+        VersionCheckState.MarkRead();
     }
 
     private void LoadToUi()

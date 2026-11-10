@@ -166,7 +166,10 @@ public sealed class DiffProcessRunner
                 }
 
                 // Пульс: время, ОЗУ, (для экспорта) БД и процент из stdout Diaphora.
-                var status = $"{phaseLabel} {(int)elapsed.TotalMinutes} мин, ОЗУ {ws / 1024 / 1024} ГБ";
+                // WorkingSet64 - байты: делим на 1024^3 и подписываем ГБ
+                // (раньше делили на 1024^2, получая «МБ» с подписью «ГБ»).
+                var status = $"{phaseLabel} {(int)elapsed.TotalMinutes} мин, " +
+                             $"ОЗУ {ws / 1024.0 / 1024.0 / 1024.0:0.00} ГБ";
                 if (watchDbPath != null)
                     status += $", БД {size / 1024 / 1024} МБ";
                 if (progress.Total > 0 && progress.Done > 0)

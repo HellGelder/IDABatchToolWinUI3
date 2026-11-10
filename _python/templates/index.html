@@ -6,64 +6,10 @@
     <title>Сводный отчёт анализа</title>
     {% include "_design_tokens.html" %}
     <style>
-        .pill-tag {
-            display: inline-flex; align-items: center;
-            padding: 2px 10px; border-radius: var(--radius-pill);
-            background: var(--surface-secondary); color: var(--text-secondary);
-            font-size: 11px; margin: 2px 4px 2px 0;
-        }
-
-        /* ▸ Интерактивный список категорий (левая панель) */
-        .split-view { display: flex; gap: 24px; align-items: flex-start; }
-        .split-left {
-            flex-shrink: 0; width: 280px;
-            display: flex; flex-direction: column;
-        }
-        .split-right { flex: 1; min-width: 0; }
-
-        .cat-list { list-style: none; padding: 0; margin: 0; }
-        .cat-item {
-            display: flex; align-items: center; gap: 10px;
-            padding: 10px 12px; cursor: pointer; border-radius: var(--radius-sm);
-            margin-bottom: 2px; transition: background 0.1s;
-            font-size: 14px;
-        }
-        .cat-item:hover { background: var(--separator); }
-        .cat-item.active {
-            background: var(--accent-tint); color: var(--accent); font-weight: 600;
-        }
-        .cat-item .cat-count {
-            margin-left: auto; font-size: 13px; font-weight: 600;
-            color: var(--text-secondary);
-        }
-        .cat-item.active .cat-count { color: var(--accent); }
-
-        /* ▸ Детализация выбранной категории */
-        .group-detail-title {
-            font-size: 17px; font-weight: 700; margin: 0 0 4px; color: var(--text);
-        }
-        .group-detail-desc {
-            text-align: justify; color: var(--text-secondary);
-            font-size: 13px; line-height: 1.5; margin: 0 0 16px;
-        }
-        .group-empty { color: var(--text-tertiary); font-style: italic; }
-
-        /* ▸ Модуль: имя + пояснение на одной строке, строго по вертикали */
-        .mod-entry {
-            display: grid; grid-template-columns: minmax(160px, max-content) 1fr; gap: 16px;
-            align-items: baseline;
-            padding: 6px 4px; border-bottom: 1px solid var(--separator);
-        }
-        .mod-entry:last-child { border-bottom: none; }
-        .mod-name {
-            font-weight: 600; font-size: 13px; white-space: nowrap;
-            color: var(--text);
-        }
-        /* Тег модуля: «импортирована» (только зависимость), «собственный»
-           (файл лежит в исследуемой папке) или «системная» (собственный
-           файл, который словарь относит к библиотекам ОС). */
+        /* Тег модуля в таблице классификации: системная / собственная /
+           импортирована (правило владельца 2026-11-10). */
         .mod-tag {
-            display: inline-block; margin-left: 6px; padding: 1px 6px;
+            display: inline-block; padding: 1px 6px;
             border-radius: 8px; font-weight: 500; font-size: 10px;
             vertical-align: middle; white-space: nowrap;
             border: 1px solid var(--separator); color: var(--text-secondary);
@@ -71,15 +17,9 @@
         .mod-tag-imported { border-color: #4a90d9; color: #4a90d9; }
         .mod-tag-own { border-color: #9a7bd0; color: #9a7bd0; }
         .mod-tag-system { border-color: #2e9e6b; color: #2e9e6b; }
-        /* Теги секций man-страниц: в скольких секциях модуль документирован
-           (порядок: системные вызовы → библиотечные → остальные по номеру). */
-        .mod-tag-section { border-color: #b07d2b; color: #b07d2b; }
-        .mod-tag-nosection { border-color: var(--separator); color: var(--text-secondary); }
-        .mod-desc {
-            text-align: left; color: var(--text-secondary);
-            font-size: 12px; line-height: 1.4;
-        }
-        /* Таблица индекса Linux/Android: библиотека → секции man-страниц */
+        .mod-tag-empty { border-color: var(--separator); color: var(--text-secondary); }
+
+        /* Таблица индекса Linux/Android: тег → библиотека → секции man-страниц */
         .section-table {
             width: 100%; border-collapse: collapse; margin-top: 8px;
         }
@@ -91,7 +31,10 @@
         .section-table th {
             color: var(--text-secondary); font-weight: 600; font-size: 12px;
         }
-        .section-table .mod-name { white-space: normal; }
+        .section-table .mod-name {
+            font-weight: 600; font-size: 13px; white-space: normal;
+            color: var(--text);
+        }
         .section-table .mod-tag { margin: 0 6px 2px 0; }
     </style>
 </head>
@@ -148,23 +91,25 @@
                 <div class="stat-label">Ошибок</div>
             </div>
         </div>
-        <p class="meta-text" style="margin-top: 8px;">Сгенерировано: {{ generation_time }}</p>
+        <p class="meta-text" style="margin-top: 8px;">Сформировано: {{ generation_time }}</p>
     </div>
 
-    <!-- ▸ Классификация: Linux/Android - таблица «библиотека → секции man»;
-         Windows - интерактивный список категорий + детализация справа -->
+    <!-- ▸ Классификация: Linux/Android - таблица «тег → библиотека → секции man» -->
     <div class="card">
         <h2 style="margin-top:0">Классификация импортированных модулей</h2>
-        {% if sections_mode %}
         {% if module_rows %}
-        <p class="meta-text" style="margin-top: 0;">В man-документации библиотека
-            может быть указана сразу в нескольких секциях: в правой колонке -
-            все секции, в которых она фигурирует, в порядке приоритета
+        <p class="meta-text" style="margin-top: 0;">
+            «системная» - библиотека документирует системные вызовы (man2);
+            «собственная» - файл лежит в исследуемой папке;
+            «импортирована» - библиотека только импортируется (DT_NEEDED).
+            В третьей колонке - все секции man-страниц, в которых библиотека
+            документирована, в порядке приоритета
             (Системные вызовы → Библиотечные вызовы → остальные по номеру).</p>
         <table class="section-table">
             <thead>
                 <tr>
-                    <th style="width: 45%;">Библиотека</th>
+                    <th style="width: 13%;">Тег</th>
+                    <th style="width: 37%;">Библиотека</th>
                     <th>Секции man-страниц</th>
                 </tr>
             </thead>
@@ -172,46 +117,28 @@
                 {% for mod in module_rows %}
                 <tr>
                     <td>
+                        {% for tag in mod.status_tags %}
+                        {% set kind = 'system' if tag == 'системная'
+                                      else ('own' if tag == 'собственная' else 'imported') %}
+                        <span class="mod-tag mod-tag-{{ kind }}">{{ tag }}</span>
+                        {% endfor %}
+                    </td>
+                    <td>
                         <span class="mod-name" title="{{ mod.description }}">{{ mod.name }}</span>
-                        {% if mod.system %}
-                        <span class="mod-tag mod-tag-system">системная</span>
-                        {% endif %}
-                        {% if mod.tag %}
-                        <span class="mod-tag mod-tag-{{ 'imported' if mod.tag == 'импортирована' else 'own' }}">{{ mod.tag }}</span>
-                        {% endif %}
                     </td>
                     <td>
                         {% if mod.section_tags %}
                         {% for tag in mod.section_tags %}
                         <span class="mod-tag" style="border-color: {{ tag.color }}; color: {{ tag.color }};">{{ tag.name }}</span>
                         {% endfor %}
-                        <span class="mod-tag mod-tag-nosection">секций: {{ mod.section_count }}</span>
                         {% else %}
-                        <span class="mod-tag mod-tag-nosection">Нет man-страниц</span>
+                        <span class="mod-tag mod-tag-empty">—</span>
                         {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
-        {% else %}
-        <p class="empty-state">Модули не найдены.</p>
-        {% endif %}
-        {% elif grouped_categories %}
-        <div class="split-view">
-            <div class="split-left">
-                <ul class="cat-list" id="catList">
-                    {% for cat in grouped_categories %}
-                    <li class="cat-item" data-index="{{ loop.index0 }}">
-                        {{ cat.name }} <span class="cat-count">{{ cat.count }}</span>
-                    </li>
-                    {% endfor %}
-                </ul>
-            </div>
-            <div class="split-right" id="groupDetail">
-                <!-- Заполняется JS -->
-            </div>
-        </div>
         {% else %}
         <p class="empty-state">Модули не найдены.</p>
         {% endif %}
@@ -230,90 +157,6 @@
         <p class="empty-state">Файлы не найдены.</p>
         {% endif %}
     </div>
-
-    <script>
-        const categories = {{ grouped_categories | tojson }};
-
-        function escapeHtml(str) {
-            if (!str) return '';
-            return str.replace(/[&<>]/g, function(m) {
-                if (m === '&') return '&amp;';
-                if (m === '<') return '&lt;';
-                if (m === '>') return '&gt;';
-                return m;
-            });
-        }
-
-        function showCategory(idx) {
-            const cat = categories[idx];
-            const container = document.getElementById('groupDetail');
-            if (!cat) { container.innerHTML = '<p class="group-empty">Выберите категорию из списка.</p>'; return; }
-            let html = '<h3 class="group-detail-title">' + escapeHtml(cat.name) +
-                       ' <span class="badge">' + cat.count + '</span></h3>';
-            if (cat.description) {
-                html += '<p class="group-detail-desc">' + escapeHtml(cat.description) + '</p>';
-            }
-            if (cat.modules && cat.modules.length) {
-                html += '<div class="grouped-list" style="margin-top:4px;">';
-                cat.modules.forEach(function(mod) {
-                    var tag = '';
-                    if (mod.tag === 'импортирована') {
-                        tag = '<span class="mod-tag mod-tag-imported">импортирована</span>';
-                    } else if (mod.tag === 'собственный') {
-                        tag = '<span class="mod-tag mod-tag-own">собственный</span>';
-                    } else if (mod.tag === 'внутренняя') {
-                        tag = '<span class="mod-tag mod-tag-own">внутренняя</span>';
-                    } else if (mod.tag === 'системная') {
-                        tag = '<span class="mod-tag mod-tag-system">системная</span>';
-                    }
-                    var sections = mod.sections || [];
-                    if (sections.length) {
-                        sections.forEach(function(sec) {
-                            tag += '<span class="mod-tag mod-tag-section">' +
-                                   escapeHtml(sec) + '</span>';
-                        });
-                        tag += '<span class="mod-tag mod-tag-nosection">' +
-                               'секций: ' + sections.length + '</span>';
-                    } else {
-                        tag += '<span class="mod-tag mod-tag-nosection">' +
-                               'нет man-страниц</span>';
-                    }
-                    html += '<div class="mod-entry">' +
-                            '<span class="mod-name">' + escapeHtml(mod.name) + tag + '</span>' +
-                            '<span class="mod-desc">' + escapeHtml(mod.desc) + '</span>' +
-                            '</div>';
-                });
-                html += '</div>';
-            }
-            container.innerHTML = html;
-
-            // Подсветка активного пункта
-            document.querySelectorAll('#catList .cat-item').forEach(function(li) {
-                li.classList.remove('active');
-            });
-            var items = document.querySelectorAll('#catList .cat-item');
-            if (items[idx]) items[idx].classList.add('active');
-        }
-
-        // Привязываем клики
-        document.querySelectorAll('#catList .cat-item').forEach(function(li) {
-            li.addEventListener('click', function() {
-                showCategory(parseInt(this.getAttribute('data-index'), 10));
-            });
-        });
-
-        // По умолчанию - самая многочисленная группа
-        if (categories.length) {
-            var largestIdx = 0, largestCount = categories[0].count;
-            for (var i = 1; i < categories.length; i++) {
-                if (categories[i].count > largestCount) {
-                    largestCount = categories[i].count;
-                    largestIdx = i;
-                }
-            }
-            showCategory(largestIdx);
-        }
-    </script>
 
 </body>
 </html>

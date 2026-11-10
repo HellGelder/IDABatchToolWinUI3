@@ -77,7 +77,13 @@ public static class GitDiffReportService
     /// перегенерации отчётов после перезапуска приложения.</summary>
     public static void WriteManifest(string outDir, IReadOnlyList<ModuleManifestEntry> entries)
     {
-        var json = JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = true });
+        // Манифест - по путям модулей: перегенерация отчётов после перезапуска
+        // даёт тот же порядок строк, что и исходный прогон.
+        var ordered = entries
+            .OrderBy(e => e.Module, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(e => e.Module, StringComparer.Ordinal)
+            .ToList();
+        var json = JsonSerializer.Serialize(ordered, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(Path.Combine(outDir, ManifestFileName), json, new UTF8Encoding(false));
     }
 
@@ -106,6 +112,13 @@ public static class GitDiffReportService
     {
         var root = AppConstants.WinUiDir;
         var template = File.ReadAllText(Path.Combine(root, "_python", "templates", "git_diff_index.html"));
+
+        // Модули в индексе - по путям (регистронезависимо): порядок итогов
+        // анализа не должен зависеть от порядка завершения потоков.
+        entries = entries
+            .OrderBy(e => e.Module, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(e => e.Module, StringComparer.Ordinal)
+            .ToList();
 
         // Метаданные заменяем ДО подстановки строк таблицы: имена модулей не должны
         // участвовать в последующих заменах

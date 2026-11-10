@@ -589,7 +589,7 @@ public sealed partial class DiffPage : Page
         DiffProgressRing.Visibility = Visibility.Collapsed;
         if (result.IndexPath != null)
         {
-            await UiDialogs.InfoAsync("Готово", $"Отчёт сгенерирован:\n{result.IndexPath}");
+            await UiDialogs.InfoAsync("Готово", $"Отчёт сформирован:\n{result.IndexPath}");
             Windows.System.Launcher.LaunchUriAsync(new Uri(result.IndexPath))
                 .AsTask().SafeFireAndForget("Diff.LaunchReport");
         }
@@ -957,7 +957,7 @@ public sealed partial class DiffPage : Page
             var indexPath = await Task.Run(() =>
                 GitDiffReportService.GenerateIndex(moduleDir, oldDir, newDir, entries));
             GitStatusText.Text = $"Индекс: {indexPath}";
-            AppendGitLog($"HTML-индекс сгенерирован: {indexPath} (частных отчётов: {withDiff.Count})");
+            AppendGitLog($"HTML-индекс сформирован: {indexPath} (частных отчётов: {withDiff.Count})");
 
             var choice = await UiDialogs.AskButtonsAsync("HTML-отчёты готовы", indexPath,
                 new[] { "Открыть индекс", "Открыть папку", "ОК" }, defaultIndex: 0);
@@ -976,7 +976,7 @@ public sealed partial class DiffPage : Page
         {
             GitStatusText.Text = "Ошибка генерации отчётов";
             AppendGitLog($"ОШИБКА отчёта: {ex.GetType().Name}: {ex.Message} (HResult 0x{ex.HResult:X8})");
-            await UiDialogs.WarnAsync("Ошибка", $"Не удалось сгенерировать HTML-отчёты:\n{ex.GetType().Name}: {ex.Message}");
+            await UiDialogs.WarnAsync("Ошибка", $"Не удалось сформировать HTML-отчёты:\n{ex.GetType().Name}: {ex.Message}");
         }
         finally
         {
@@ -1004,7 +1004,7 @@ public sealed partial class DiffPage : Page
         if (diffPath == null)
         {
             await UiDialogs.WarnAsync("Нет диффа",
-                "changes.diff не найден.\nСначала сгенерируйте дифф кнопкой «Сгенерировать дифф».");
+                "changes.diff не найден.\nСначала рассчитайте дифф кнопкой «Рассчитать».");
             return;
         }
 
@@ -1018,7 +1018,7 @@ public sealed partial class DiffPage : Page
             var newDir = GitNewDirTextBox.Text.Trim();
             var reportPath = await Task.Run(() => GitDiffReportService.Generate(diffPath, oldDir, newDir));
             GitStatusText.Text = $"Отчёт: {reportPath}";
-            AppendGitLog("HTML-отчёт сгенерирован: " + reportPath);
+            AppendGitLog("HTML-отчёт сформирован: " + reportPath);
 
             // По образцу AnalysisPage: диалог «Открыть…» после готовности отчёта
             var choice = await UiDialogs.AskButtonsAsync("HTML-отчёт готов", reportPath,
@@ -1038,7 +1038,7 @@ public sealed partial class DiffPage : Page
         {
             GitStatusText.Text = "Ошибка генерации отчёта";
             AppendGitLog($"ОШИБКА отчёта: {ex.GetType().Name}: {ex.Message} (HResult 0x{ex.HResult:X8})");
-            await UiDialogs.WarnAsync("Ошибка", $"Не удалось сгенерировать HTML-отчёт:\n{ex.GetType().Name}: {ex.Message}");
+            await UiDialogs.WarnAsync("Ошибка", $"Не удалось сформировать HTML-отчёт:\n{ex.GetType().Name}: {ex.Message}");
         }
         finally
         {

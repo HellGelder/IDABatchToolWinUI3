@@ -181,8 +181,11 @@ class LinuxReportsTest(unittest.TestCase):
             ("libcrypto.so.1.1", False),
         ):
             with self.subTest(name=name):
-                around = html.split(name, 1)[1][:160]
-                self.assertEqual("системная" in around, expected)
+                # Тег теперь в отдельной ПЕРВОЙ колонке строки, поэтому
+                # проверяем всю строку модуля, а не текст после имени.
+                pos = html.index(name)
+                row = html[html.rfind("<tr>", 0, pos):html.index("</tr>", pos)]
+                self.assertEqual("системная" in row, expected)
 
 
 class DescriptionCoverageTest(unittest.TestCase):

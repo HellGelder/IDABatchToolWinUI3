@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using IDABatchToolWinUI.Services;
 using Xunit;
 
 namespace IDABatchToolWinUI.Tests;
@@ -72,5 +73,16 @@ public sealed class VersionConsistencyTests
         var raw = File.ReadAllText(Path.Combine(root, "version.txt"));
         var top = Regex.Match(raw, @"(?m)^(\d+\.\d+\.\d+\.\d+)\s*/\s*\d{4}-\d{2}-\d{2}").Groups[1].Value;
         Assert.Equal(version, top);
+    }
+
+    /// <summary>Строка «АКТУАЛЬНАЯ ВЕРСИЯ» - источник онлайн-проверки обновлений.</summary>
+    [Fact]
+    public void VersionTxtActualVersionLineMatchesProps()
+    {
+        var root = RepoRoot();
+        var version = VersionFromProps(root);
+        var raw = File.ReadAllText(Path.Combine(root, "version.txt"));
+        var actual = VersionCheckService.ParseLatestVersion(raw);
+        Assert.Equal(version, actual);
     }
 }

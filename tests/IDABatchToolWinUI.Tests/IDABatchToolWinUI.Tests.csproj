@@ -45,6 +45,7 @@
     <Compile Include="..\..\Services\ExecutableFinder.cs" Link="Linked\ExecutableFinder.cs" />
     <Compile Include="..\..\Services\ArchiveHandler.cs" Link="Linked\ArchiveHandler.cs" />
     <Compile Include="..\..\Services\InputScanner.cs" Link="Linked\InputScanner.cs" />
+    <Compile Include="..\..\Services\VersionCheckService.cs" Link="Linked\VersionCheckService.cs" />
     <Compile Include="..\..\Diff\BinDiffParser.cs" Link="Linked\BinDiffParser.cs" />
     <Compile Include="..\..\Diff\DiaphoraParser.cs" Link="Linked\DiaphoraParser.cs" />
     <Compile Include="..\..\Diff\DiffJsonEnricher.cs" Link="Linked\DiffJsonEnricher.cs" />

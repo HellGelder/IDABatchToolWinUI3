@@ -457,6 +457,19 @@ def _module_section_tags(module_name, library_sections):
             for sec in _mp_sort_sections(library_sections.get(key, ()))]
 
 
+def _module_status_tags(is_system, is_internal):
+    """Теги колонки «Тег» индекса анализа ПО (Linux/Android).
+
+    Правило владельца 2026-11-10: системная библиотека вне исследуемой папки
+    получает только «системная»; системная, чей файл лежит в папке, - два тега
+    («системная», «собственная»); несистемная в папке - «собственная»;
+    несистемная вне папки (только DT_NEEDED) - «импортирована».
+    """
+    if is_system:
+        return ["системная", "собственная"] if is_internal else ["системная"]
+    return ["собственная"] if is_internal else ["импортирована"]
+
+
 def generate_analysis_report(json_path, output_html, internal_set, reports_dir=None):
     """Генерирует индивидуальный HTML-отчёт «Общий анализ»."""
     with open(json_path, "r", encoding="utf-8") as f:
@@ -497,7 +510,7 @@ def generate_analysis_report(json_path, output_html, internal_set, reports_dir=N
                     "name": name, "count": 0, "category": "",
                     "description": _classify_with_context(name, internal_set),
                     "sections": [t["name"] for t in tags],
-                    "section_tags": tags, "section_count": len(tags),
+                    "section_tags": tags,
                     "internal": is_internal, "color": color,
                 })
             else:
@@ -627,8 +640,8 @@ def generate_analysis_index(reports_dir, input_dir, report_links, global_modules
     сумма по группам может быть больше (двойной учёт осознанный).
 
     Windows и прочие платформы: прежние словарные категории классификатора
-    (man-страниц для них нет, секций не существует). У каждого модуля -
-    теги секций man-страниц и число секций.
+    (man-страниц для них нет, секций не существует). Для Windows используется
+    отдельный шаблон windows_index.html - без меток и тегов секций.
     """
     categories = {}
     # Секции man-страниц по библиотекам: у каждого модуля в индексе - теги
@@ -640,16 +653,20 @@ def generate_analysis_index(reports_dir, input_dir, report_links, global_modules
         key = _mp_module_library_key(mod)
         return _mp_sort_sections(library_sections.get(key, ())) if key else []
 
-    def _place(mod, cat, desc, cat_desc, tag):
+    def _place(mod, cat, desc, cat_desc):
         info = categories.setdefault(
             cat, {"name": cat, "description": cat_desc, "count": 0, "modules": []})
         info["count"] += 1
         sections = _sections_for(mod)
         info["modules"].append({
-            "name": mod, "desc": desc, "tag": tag,
+            "name": mod, "desc": desc,
             "sections": [_mp_section_category(s) for s in sections],
-            "section_count": len(sections),
         })
+
+    # «Исследованные файлы» - по путям (регистронезависимо): порядок не должен
+    # зависеть от обхода rglob/файловой системы.
+    report_links = sorted(
+        report_links, key=lambda r: str(r.get("display_name", "")).lower())
 
     # Собственные библиотеки ОС, которые никто не импортирует, в
     # global_modules не попадают (нет ни одного DT_NEEDED на них). Добавляем
@@ -664,7 +681,6 @@ def generate_analysis_index(reports_dir, input_dir, report_links, global_modules
 
     for mod in sorted(modules_all, key=str.lower):
         is_internal = _is_internal_module(mod, internal_set)
-        tag = "собственный" if is_internal else "импортирована"
         cat, desc = _classify_module(mod)
 
         if use_sections:
@@ -675,33 +691,29 @@ def generate_analysis_index(reports_dir, input_dir, report_links, global_modules
             # а не словарная категория ОС.
             is_system = _mp_module_library_key(mod) in _manpages_man2_libraries()
             module_rows.append({
-                "name": mod, "tag": tag, "system": is_system,
+                "name": mod,
+                "status_tags": _module_status_tags(is_system, is_internal),
                 "description": desc,
-                "sections": [_mp_section_category(s) for s in sections],
                 "section_tags": _module_section_tags(mod, library_sections),
-                "section_count": len(sections),
             })
             if sections:
                 for sec in sections:
                     _place(mod, _mp_section_category(sec), desc,
-                           _mp_section_description(sec), tag)
+                           _mp_section_description(sec))
             else:
-                _place(mod, _MP_NO_MANPAGES, desc, _MP_NO_MANPAGES_DESC, tag)
+                _place(mod, _MP_NO_MANPAGES, desc, _MP_NO_MANPAGES_DESC)
             continue
 
         # Windows и прочие: словарные категории классификатора (прежнее поведение).
-        is_system = bool(_classifier_is_system(mod, platform)) if platform \
-            else bool(_classifier_is_system(mod))
         if is_internal:
             _place(mod,
                    "Внутренние модули проекта",
                    "Собственный модуль проекта (внутренняя библиотека)",
-                   "Библиотеки и исполняемые файлы из исследуемой директории.",
-                   "системная" if is_system else "")
+                   "Библиотеки и исполняемые файлы из исследуемой директории.")
         # Свои модули вне словарей остаются только в «Внутренних модулях».
         if is_internal and cat == "Неопознанные модули":
             continue
-        _place(mod, cat, desc, _category_description(cat), tag)
+        _place(mod, cat, desc, _category_description(cat))
 
     if use_sections:
         # Порядок групп: системные вызовы → библиотечные → остальные по номеру,
@@ -733,14 +745,15 @@ def generate_analysis_index(reports_dir, input_dir, report_links, global_modules
         "generation_time": generation_time,
         "ida_info": ida_info or {},
         "grouped_categories": grouped,
-        # Linux/Android: таблица «библиотека → секции man» (module_rows);
-        # Windows - прежний split-view по словарным категориям.
+        # Linux/Android: таблица «тег → библиотека → секции man» (module_rows);
+        # Windows - отдельный шаблон windows_index.html без меток.
         "sections_mode": use_sections,
         "module_rows": module_rows,
         "reports": report_links,
     }
     index_path = os.path.join(reports_dir, "index.html")
-    text = render_template("index.html", **ctx)
+    template_name = "index.html" if use_sections else "windows_index.html"
+    text = render_template(template_name, **ctx)
     with open(index_path, "w", encoding="utf-8") as f:
         f.write(text)
     return index_path
@@ -2211,7 +2224,10 @@ def generate_sfa_index(reports_dir, input_dir, report_links, ida_info,
         "total_system_functions": total_system_functions,
         "total_system_notfound": total_system_notfound,
         "total_imports": total_imports,
-        "reports": report_links,
+        # «Исследованные файлы» - по путям (регистронезависимо), как в индексе
+        # анализа ПО: порядок не должен зависеть от обхода файловой системы.
+        "reports": sorted(
+            report_links, key=lambda r: str(r.get("display_name", "")).lower()),
         "module_rows": module_rows,
     }
     index_path = os.path.join(reports_dir, "index.html")
@@ -2285,6 +2301,10 @@ def generate_diff_index(reports_dir, json_files, left_dir, right_dir,
     count = 0
     has_bindiff = False
     has_diaphora = False
+
+    # Пары в индексе - по путям файлов diff.json (регистронезависимо):
+    # порядок обхода папки не должен влиять на вид отчёта.
+    json_files = sorted(json_files, key=lambda p: str(p).lower())
 
     for jf in json_files:
         stem = os.path.basename(jf).replace(".diff.json", "")

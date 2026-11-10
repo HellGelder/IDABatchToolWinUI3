@@ -75,6 +75,15 @@
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE713;" />
                     </NavigationViewItem.Icon>
+                    <!-- Значок «непрочитанное сообщение»: ПО не актуально.
+                         Гаснет, когда пользователь открыл «Конфигурацию». -->
+                    <NavigationViewItem.InfoBadge>
+                        <InfoBadge x:Name="NavSettingsBadge" Visibility="Collapsed">
+                            <InfoBadge.IconSource>
+                                <FontIconSource Glyph="!" FontFamily="Segoe UI" />
+                            </InfoBadge.IconSource>
+                        </InfoBadge>
+                    </NavigationViewItem.InfoBadge>
                 </NavigationViewItem>
             </NavigationView.FooterMenuItems>
 

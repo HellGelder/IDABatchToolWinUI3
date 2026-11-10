@@ -143,6 +143,26 @@ public sealed partial class MainWindow : Window
         _envCheckStarted = true;
         Activated -= OnFirstActivated;
         PythonEnvironmentUi.EnsureEnvironmentAsync().SafeFireAndForget("Startup.PythonEnv");
+
+        // Актуальность версии: один фоновый запрос к version.txt в репозитории.
+        // Результат показывается в «Конфигурации», значок на вкладке - только
+        // если ПО не актуально.
+        VersionCheckState.Changed += OnVersionCheckChanged;
+        VersionCheckState.Start();
+    }
+
+    private void OnVersionCheckChanged()
+    {
+        // Событие приходит из фонового потока - значок меняем в UI-потоке.
+        DispatcherQueue.TryEnqueue(UpdateVersionBadge);
+    }
+
+    private void UpdateVersionBadge()
+    {
+        var outdated = VersionCheckState.Result is { Succeeded: true, IsOutdated: true };
+        NavSettingsBadge.Visibility = outdated && !VersionCheckState.NoticeRead
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -183,6 +203,9 @@ public sealed partial class MainWindow : Window
                     NavFrame.Content = _sfaPage;
                 break;
             case "settings":
+                // Сообщение о версии считается прочитанным при открытии вкладки.
+                VersionCheckState.MarkRead();
+                UpdateVersionBadge();
                 // SettingsPage не кэшируется (как и раньше: Navigate создавал
                 // новый экземпляр на каждый показ) - читает актуальный конфиг.
                 if (NavFrame.Content is not SettingsPage)

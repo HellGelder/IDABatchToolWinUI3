@@ -345,7 +345,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Button x:Name="GitStartButton" Grid.Column="0" Content="Сгенерировать дифф"
+                                <Button x:Name="GitStartButton" Grid.Column="0" Content="Рассчитать"
                                         Height="34" Width="160" Padding="12,6" />
                                 <Button x:Name="GitCancelButton" Grid.Column="1" Content="Отмена"
                                         Height="34" Width="80" Padding="12,6" IsEnabled="False" />
