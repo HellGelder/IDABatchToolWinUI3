@@ -12,6 +12,10 @@
                             родительскому каталогу app\)
         app\                вся publish-папка: exe приложения, все DLL,
                             _python\, scripts\, config.yaml, Assets\, ...
+        tools\ossl-whitelist\
+                            утилита «ViPNet OSSL — белый перечень по импортам»:
+                            отдельный скрипт с GUI, работает по базам .i64/.idb
+                            независимо от приложения
 
     Дополнительно создаётся dist\IDABatchToolWinUI-<версия>-<rid>.zip.
 
@@ -164,6 +168,24 @@ if (Test-Path (Join-Path $docsSrc "manpages.db")) {
 }
 else {
     Write-Warning "docs\manpages.db не собрана - поставка без встроенной документации (см. scripts\build-manpages.ps1)"
+}
+
+# ── 3.8. Утилита «белый перечень OSSL»: tools\ossl-whitelist ───────────────
+$osslSrc = Join-Path $root "tools\ossl-whitelist"
+if (Test-Path (Join-Path $osslSrc "vipnet_ossl_whitelist.py")) {
+    $osslDst = Join-Path $staging "tools\ossl-whitelist"
+    if (Test-Path $osslDst) { Remove-Item $osslDst -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path (Split-Path $osslDst) | Out-Null
+    Copy-Item $osslSrc $osslDst -Recurse -Force
+    # Кэш байткода в поставку не нужен
+    Get-ChildItem $osslDst -Directory -Filter "__pycache__" -Recurse -ErrorAction SilentlyContinue |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    Get-ChildItem $osslDst -File -Filter "*.pyc" -Recurse -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+    Write-Host "Утилита OSSL-перечня встроена (tools\ossl-whitelist)"
+}
+else {
+    Write-Warning "tools\ossl-whitelist не найден - утилита OSSL-перечня в поставку не попала"
 }
 
 # ── 4. Лончер ───────────────────────────────────────────────────────────────

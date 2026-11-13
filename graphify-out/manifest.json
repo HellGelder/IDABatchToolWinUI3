@@ -288,9 +288,9 @@
     "semantic_hash": ""
   },
   "make-portable.ps1": {
-    "mtime": 1793340647.642576,
-    "seen": 1793625065.5094564,
-    "ast_hash": "45ac1a354f4c92aebf75753e70786541",
+    "mtime": 1794574148.3137949,
+    "seen": 1794574363.5526242,
+    "ast_hash": "5a51ba647dc155dcc076d776e11c6c45",
     "semantic_hash": ""
   },
   "scripts/export_data.py": {
@@ -378,9 +378,9 @@
     "semantic_hash": ""
   },
   "version.txt": {
-    "mtime": 1794570183.9458678,
-    "seen": 1794570448.6168628,
-    "ast_hash": "2fd26f4f4990e374bac9e79f028b6ecc",
+    "mtime": 1794574159.787804,
+    "seen": 1794574363.5530815,
+    "ast_hash": "1b6ec807b05a262b1427377b7e216de6",
     "semantic_hash": ""
   },
   "sfb-logo.png": {
@@ -705,6 +705,18 @@
     "mtime": 1794297448.3612845,
     "seen": 1794298170.3554826,
     "ast_hash": "30f0325b428f924eac64c30471d5c310",
+    "semantic_hash": ""
+  },
+  "tools/ossl-whitelist/vipnet_ossl_whitelist.py": {
+    "mtime": 1794574089.8226585,
+    "seen": 1794574363.5529718,
+    "ast_hash": "c56f339b88bfdf0735282c5728ecc1c7",
+    "semantic_hash": ""
+  },
+  "tools/ossl-whitelist/README.txt": {
+    "mtime": 1794574135.4668393,
+    "seen": 1794574363.5530784,
+    "ast_hash": "4e97e69adaf4b3083dffb05b797f2815",
     "semantic_hash": ""
   }
 }
