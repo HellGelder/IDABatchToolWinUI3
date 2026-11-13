@@ -1,7 +1,7 @@
-# Graph Report - IDABatchToolWinUI3  (2026-11-10)
+# Graph Report - IDABatchToolWinUI3  (2026-11-13)
 
 ## Corpus Check
-- 102 files · ~121,112 words
+- 102 files · ~121,275 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 8 file(s) not represented in the graph (top: (none) 3, .props 1, .appxmanifest 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `841d5adc`
+- Built from commit: `7e4d9126`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 

@@ -294,10 +294,10 @@
     "semantic_hash": ""
   },
   "scripts/export_data.py": {
-    "mtime": 1793025996.702552,
-    "seen": 1793026571.838538,
-    "ast_hash": "705892103471c830b0ad61041086560c",
-    "semantic_hash": "705892103471c830b0ad61041086560c"
+    "mtime": 1794570470.961581,
+    "seen": 1794570616.8513465,
+    "ast_hash": "804058d81b09b53372946fd18fead74d",
+    "semantic_hash": ""
   },
   "AGENTS.md": {
     "mtime": 1793340647.4325962,
@@ -378,9 +378,9 @@
     "semantic_hash": ""
   },
   "version.txt": {
-    "mtime": 1794297655.2848983,
-    "seen": 1794298170.3554914,
-    "ast_hash": "bf77c1e7ce23273564ede415be540b08",
+    "mtime": 1794570183.9458678,
+    "seen": 1794570448.6168628,
+    "ast_hash": "2fd26f4f4990e374bac9e79f028b6ecc",
     "semantic_hash": ""
   },
   "sfb-logo.png": {

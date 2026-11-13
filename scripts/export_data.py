@@ -1012,18 +1012,31 @@ def export_to_json(output_path: Optional[str] = None) -> None:
         hx = _try_init_hexrays()
 
     # --- Экспорты ---
+    # ВАЖНО: idc.get_entry_name() принимает ORDINAL, а не адрес. При передаче
+    # EA API возвращает None для всех реальных экспортов, и в отчёт попадала
+    # одна лишь точка входа (у неё ordinal совпадает с EA) — из-за этого
+    # псевдокод не генерировался ни для одной экспортной функции.
     exports: List[Dict[str, Any]] = []
+    is_pe = not is_elf and not is_macho
     for i in range(idc.get_entry_qty()):
         entry = idc.get_entry_ordinal(i)
-        if entry != -1:
-            addr = idc.get_entry(entry)
-            name = idc.get_entry_name(addr)
-            if name:
-                if is_elf:
-                    name = _strip_symbol_version(name)
-                name = _normalize_func_name(name)
-                exports.append({"name": name, "address": f"0x{addr:X}", "ordinal": entry})
-    if not exports:
+        if entry == -1:
+            continue
+        # PE: точка входа регистрируется с ordinal == EA (больше 0xFFFF) и
+        # в таблицу экспорта не входит — пропускаем.
+        if is_pe and not (0 < entry <= 0xFFFF):
+            continue
+        addr = idc.get_entry(entry)
+        name = idc.get_entry_name(entry)
+        if name:
+            if is_elf:
+                name = _strip_symbol_version(name)
+            name = _normalize_func_name(name)
+            exports.append({"name": name, "address": f"0x{addr:X}", "ordinal": entry})
+    # Резервный путь — для ELF/Mach-O: у PE отсутствие экспортов означает
+    # именно их отсутствие, а не сбой чтения списка (раньше сюда попадали
+    # все именованные функции, и псевдокод строился бы для всего бинарника).
+    if not exports and not is_pe:
         for ea in idautils.Functions():
             name = idc.get_func_name(ea)
             if name and not name.startswith(("sub_", "j_", "def_", "nullsub_")):
